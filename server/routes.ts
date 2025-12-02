@@ -7,6 +7,7 @@ import { technicalIndicators } from "./technical-indicators";
 import { wsService } from "./websocket";
 import { backtestingEngine, type BacktestConfig } from "./backtesting";
 import { authenticateUser, seedSuperadmin, findUserById, type SafeUser } from "./auth";
+import { predictionEngine } from "./prediction-engine";
 
 const DEFAULT_SYMBOL = marketDataService.getSymbol();
 
@@ -274,6 +275,41 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching accuracy stats:", error);
       res.status(500).json({ error: "Failed to fetch accuracy stats" });
+    }
+  });
+
+  app.get("/api/predictions/multifactor", async (req, res) => {
+    try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
+      const limit = parseInt(req.query.limit as string) || 200;
+      
+      const marketData = await storage.getRecentMarketData(symbol, limit);
+      
+      if (marketData.length < 20) {
+        return res.json({
+          analysis: {
+            factors: [],
+            overallSignal: "HOLD",
+            bullishCount: 0,
+            bearishCount: 0,
+            neutralCount: 0,
+            signalStrength: 0,
+          },
+          message: "Insufficient data for multi-factor analysis",
+        });
+      }
+
+      const analysis = predictionEngine.performMultiFactorAnalysis(marketData);
+      
+      res.json({
+        analysis,
+        symbol,
+        dataPoints: marketData.length,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Error performing multi-factor analysis:", error);
+      res.status(500).json({ error: "Failed to perform multi-factor analysis" });
     }
   });
 
