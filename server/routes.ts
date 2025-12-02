@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { scheduler } from "./scheduler";
 import { marketDataService } from "./market-data-service";
 import { technicalIndicators } from "./technical-indicators";
+import { wsService } from "./websocket";
 
 const DEFAULT_SYMBOL = marketDataService.getSymbol();
 
@@ -281,6 +282,15 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to stop scheduler" });
     }
   });
+
+  app.get("/api/websocket/status", (req, res) => {
+    res.json({
+      connected: wsService.getClientCount(),
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  wsService.initialize(httpServer);
 
   scheduler.start().catch(console.error);
 

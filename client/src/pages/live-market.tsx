@@ -6,9 +6,12 @@ import { PriceDisplay } from "@/components/price-display";
 import { MarketChart } from "@/components/market-chart";
 import { StatCard } from "@/components/stat-card";
 import { StatusIndicator } from "@/components/status-indicator";
-import { Activity, Volume2, TrendingUp, TrendingDown, Clock, BarChart3, Gauge } from "lucide-react";
+import { Activity, Volume2, TrendingUp, TrendingDown, Clock, BarChart3, Gauge, Wifi, WifiOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useSymbol } from "@/lib/symbol-context";
+import { useWebSocket, type WSMessage, type WSConnectionStatus } from "@/hooks/use-websocket";
+import { queryClient } from "@/lib/queryClient";
+import { useCallback } from "react";
 import type { MarketData, MarketStats } from "@shared/schema";
 
 interface IndicatorData {
@@ -33,23 +36,56 @@ interface IndicatorsResponse {
   latest: IndicatorData | null;
 }
 
+function getConnectionStatusColor(status: WSConnectionStatus): "online" | "offline" | "warning" {
+  switch (status) {
+    case "connected":
+      return "online";
+    case "connecting":
+      return "warning";
+    default:
+      return "offline";
+  }
+}
+
 export default function LiveMarket() {
   const { currentSymbol } = useSymbol();
   const symbol = currentSymbol.symbol;
 
+  const handleWSMessage = useCallback((message: WSMessage) => {
+    const matchesSymbol = !message.symbol || message.symbol === symbol;
+    
+    if (message.type === "market_update" && matchesSymbol) {
+      queryClient.invalidateQueries({ queryKey: ["/api/market/recent", { symbol }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/market/stats", { symbol }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/market/indicators", { symbol }] });
+    } else if (message.type === "prediction_update" && matchesSymbol) {
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/recent", { symbol }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/accuracy", { symbol }] });
+    } else if (message.type === "accuracy_update" && matchesSymbol) {
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/accuracy", { symbol }] });
+    }
+  }, [symbol]);
+
+  const { status: wsStatus, reconnect } = useWebSocket({
+    symbol,
+    onMessage: handleWSMessage,
+  });
+
+  const isConnected = wsStatus === "connected";
+
   const { data: marketData, isLoading: isLoadingMarket } = useQuery<MarketData[]>({
     queryKey: ["/api/market/recent", { symbol }],
-    refetchInterval: 30000,
+    refetchInterval: isConnected ? false : 30000,
   });
 
   const { data: stats, isLoading: isLoadingStats } = useQuery<MarketStats>({
     queryKey: ["/api/market/stats", { symbol }],
-    refetchInterval: 30000,
+    refetchInterval: isConnected ? false : 30000,
   });
 
   const { data: indicatorsData, isLoading: isLoadingIndicators } = useQuery<IndicatorsResponse>({
     queryKey: ["/api/market/indicators", { symbol }],
-    refetchInterval: 30000,
+    refetchInterval: isConnected ? false : 30000,
   });
 
   const lastUpdate = marketData?.[marketData.length - 1]?.timestamp;
@@ -65,14 +101,30 @@ export default function LiveMarket() {
             Real-time price monitoring and market analysis
           </p>
         </div>
-        <div className="flex items-center gap-3 rounded-md bg-card px-3 py-2 border border-card-border">
-          <StatusIndicator status="online" size="sm" />
+        <div 
+          className="flex items-center gap-3 rounded-md bg-card px-3 py-2 border border-card-border cursor-pointer hover-elevate"
+          onClick={wsStatus !== "connected" ? reconnect : undefined}
+          data-testid="status-websocket"
+        >
+          {wsStatus === "connected" ? (
+            <Wifi className="h-4 w-4 text-profit" />
+          ) : wsStatus === "connecting" ? (
+            <Wifi className="h-4 w-4 text-yellow-500 animate-pulse" />
+          ) : (
+            <WifiOff className="h-4 w-4 text-loss" />
+          )}
+          <StatusIndicator status={getConnectionStatusColor(wsStatus)} size="sm" />
           <div className="flex flex-col">
-            <span className="text-xs font-medium">Live Data</span>
-            {lastUpdate && (
+            <span className="text-xs font-medium">
+              {wsStatus === "connected" ? "Live" : wsStatus === "connecting" ? "Connecting..." : "Offline"}
+            </span>
+            {lastUpdate && wsStatus === "connected" && (
               <span className="text-xs text-muted-foreground">
                 Updated {formatDistanceToNow(new Date(lastUpdate), { addSuffix: true })}
               </span>
+            )}
+            {wsStatus !== "connected" && wsStatus !== "connecting" && (
+              <span className="text-xs text-muted-foreground">Click to reconnect</span>
             )}
           </div>
         </div>

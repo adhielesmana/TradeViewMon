@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PredictionChart } from "@/components/prediction-chart";
 import { PredictionTable } from "@/components/prediction-table";
@@ -8,6 +8,8 @@ import { ExportDropdown } from "@/components/export-dropdown";
 import { TimeframeSelector } from "@/components/timeframe-selector";
 import { Target, TrendingUp, Clock, BarChart2 } from "lucide-react";
 import { useSymbol } from "@/lib/symbol-context";
+import { useWebSocket, type WSMessage } from "@/hooks/use-websocket";
+import { queryClient } from "@/lib/queryClient";
 import type { PredictionWithResult, AccuracyStats } from "@shared/schema";
 
 export default function Predictions() {
@@ -17,14 +19,32 @@ export default function Predictions() {
 
   const timeframeParam = timeframe === "all" ? undefined : timeframe;
 
+  const handleWSMessage = useCallback((message: WSMessage) => {
+    const matchesSymbol = !message.symbol || message.symbol === symbol;
+    
+    if (message.type === "prediction_update" && matchesSymbol) {
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/recent", { symbol, timeframe: timeframeParam }] });
+    } else if (message.type === "accuracy_update" && matchesSymbol) {
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/accuracy", { symbol, timeframe: timeframeParam }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/predictions/recent", { symbol, timeframe: timeframeParam }] });
+    }
+  }, [symbol, timeframeParam]);
+
+  const { status: wsStatus } = useWebSocket({
+    symbol,
+    onMessage: handleWSMessage,
+  });
+
+  const isConnected = wsStatus === "connected";
+
   const { data: predictions, isLoading: isLoadingPredictions } = useQuery<PredictionWithResult[]>({
     queryKey: ["/api/predictions/recent", { symbol, timeframe: timeframeParam }],
-    refetchInterval: 30000,
+    refetchInterval: isConnected ? false : 30000,
   });
 
   const { data: stats, isLoading: isLoadingStats } = useQuery<AccuracyStats>({
     queryKey: ["/api/predictions/accuracy", { symbol, timeframe: timeframeParam }],
-    refetchInterval: 30000,
+    refetchInterval: isConnected ? false : 30000,
   });
 
   const defaultStats: AccuracyStats = {

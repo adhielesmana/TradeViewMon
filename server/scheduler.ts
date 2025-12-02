@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { storage } from "./storage";
 import { predictionEngine } from "./prediction-engine";
 import { marketDataService } from "./market-data-service";
+import { wsService } from "./websocket";
 
 const TIMEFRAMES = [
   { name: "1min", minutes: 1 },
@@ -85,9 +86,22 @@ class Scheduler {
       await storage.insertMarketData(candle);
 
       const recentData = await storage.getRecentMarketData(symbol, 60);
+      const stats = await storage.getMarketStats(symbol);
+
+      wsService.broadcastMarketUpdate(symbol, {
+        candle,
+        stats,
+        recentCount: recentData.length,
+      });
       
       if (recentData.length >= 15) {
         const now = new Date();
+        const newPredictions: Array<{
+          timeframe: string;
+          predictedPrice: number;
+          predictedDirection: string;
+          confidence: number;
+        }> = [];
 
         for (const timeframe of TIMEFRAMES) {
           const prediction = predictionEngine.predict(recentData, timeframe.minutes);
@@ -105,7 +119,16 @@ class Scheduler {
             confidence: prediction.confidence,
             timeframe: timeframe.name,
           });
+
+          newPredictions.push({
+            timeframe: timeframe.name,
+            predictedPrice: prediction.predictedPrice,
+            predictedDirection: prediction.predictedDirection,
+            confidence: prediction.confidence,
+          });
         }
+
+        wsService.broadcastPredictionUpdate(symbol, { predictions: newPredictions });
 
         await this.evaluatePastPredictions(symbol);
         await this.updatePredictionEngineStatus("healthy");
@@ -122,6 +145,7 @@ class Scheduler {
   private async evaluatePastPredictions(symbol: string): Promise<void> {
     try {
       const now = new Date();
+      let evaluatedCount = 0;
 
       for (const timeframe of TIMEFRAMES) {
         const predictions = await storage.getRecentPredictions(symbol, 20, timeframe.name);
@@ -161,7 +185,17 @@ class Scheduler {
             isMatch: comparison.isMatch,
             matchThreshold: 0.5,
           });
+          
+          evaluatedCount++;
         }
+      }
+      
+      if (evaluatedCount > 0) {
+        const accuracy = await storage.getAccuracyStats(symbol);
+        wsService.broadcastAccuracyUpdate(symbol, {
+          evaluatedCount,
+          accuracy,
+        });
       }
     } catch (error) {
       console.error("[Scheduler] Error evaluating predictions:", error);
