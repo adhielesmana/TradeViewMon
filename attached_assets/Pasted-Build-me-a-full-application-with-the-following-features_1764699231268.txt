@@ -1,0 +1,116 @@
+Build me a full application with the following features and architecture:
+
+1. Purpose of the App
+I want an application that:
+* Fetches stock market data from an external API
+* Stores historical data for at least 1 year
+* Continuously updates real-time prices every 30 seconds or 1 minute
+* Generates market projections/predictions using machine learning
+* Compares the prediction vs actual price
+* Shows the accuracy, match vs not match
+* Displays clear charts and tables
+
+2. Data Source (API Integration)
+Use a cheap/free market data API such as:
+* AllTick API or
+* StockData.org API or
+* Alpha Vantage API
+The app should:
+* Pull 1-year historical data (OHLCV if possible)
+* Store it in the database
+* Run an automatic scheduler to fetch new data every 30 seconds or 1 minute
+* Update the database with the new candle
+
+3. Backend Requirements
+Backend should include:
+* API integration module
+* Data ingestion system (scheduled jobs / cron)
+* Data cleaner (normalize missing candles, format OHLC)
+* Prediction engine (AI/ML model)
+* Logging and error handling
+Prediction engine should:
+* Use a simple but effective model:
+    * LSTM
+    * GRU
+    * Prophet
+    * or a regression model
+* Predict short-term movement:
+    * Next 1 minute
+    * Next 5 minutes
+* Output:
+    * Predicted direction
+    * Predicted price
+Accuracy comparison system:
+Every time the actual price comes in:
+* Compare predicted price vs actual price
+* Mark:
+    * "MATCH" if within threshold (configurable)
+    * "NOT MATCH" otherwise
+* Store the results for accuracy statistics
+
+4. Database Requirements
+You may use:
+* PostgreSQL with timestampDB
+Must store:
+1. Historical market data (1 year)
+    * timestamp
+    * open, high, low, close
+    * volume
+2. Real-time update records
+3. Predicted values per timestamp
+4. Accuracy results comparison
+Additional features:
+* Auto-merge historical + real-time
+* Deduplicate candles
+* Keep clean time intervals
+
+5. Frontend Requirements
+Web dashboard or mobile app that includes:
+Main Screens
+1. Live Market Screen
+    * Real-time price
+    * 1m chart
+    * Indicators (EMA, RSI, MACD optional)
+2. Prediction Dashboard
+    * Prediction chart (line or candle overlay)
+    * Table: Timestamp / Predicted / Actual / Result (Match/Not Match)
+    * Accuracy percentage
+3. Historical Data View
+    * 1-year price chart
+    * Filters (1D / 1W / 1M / 3M / 6M / 1Y)
+4. System Status
+    * API health
+    * Last update time
+    * Scheduler status
+
+6. Scheduler/Daemon
+The app must include an automatic updater:
+* Runs every 30 seconds or 1 minute
+* Fetches latest price candle
+* Stores it
+* Runs prediction model
+* Compares prediction vs actual
+* Updates accuracy table
+
+7. Technology Preference
+Use any of the following:
+* Node.js + Express
+* Python FastAPI
+* Django + Celery
+* React / Next.js
+* Flutter for mobile
+Prediction model can be built using:
+* Python (TensorFlow, PyTorch, scikit-learn)
+* OR a built-in ML module
+
+8. Output I Expect
+The AI should deliver:
+* Backend source code
+* Frontend source code
+* Database schema
+* API integration code
+* Scheduler/cron logic
+* Prediction model code
+* Accuracy comparison logic
+* Example .env configuration
+* Setup and deployment instructions
