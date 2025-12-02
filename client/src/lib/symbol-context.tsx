@@ -1,21 +1,22 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 
 const SUPPORTED_SYMBOLS = [
-  { symbol: "AAPL", name: "Apple Inc." },
-  { symbol: "GOOGL", name: "Alphabet Inc." },
-  { symbol: "MSFT", name: "Microsoft Corp." },
-  { symbol: "AMZN", name: "Amazon.com Inc." },
-  { symbol: "TSLA", name: "Tesla Inc." },
-  { symbol: "META", name: "Meta Platforms Inc." },
-  { symbol: "NVDA", name: "NVIDIA Corp." },
-  { symbol: "JPM", name: "JPMorgan Chase" },
-  { symbol: "V", name: "Visa Inc." },
-  { symbol: "JNJ", name: "Johnson & Johnson" },
+  { symbol: "XAUUSD", name: "Gold Spot", category: "commodities" },
+  { symbol: "DXY", name: "Dollar Index", category: "indices" },
+  { symbol: "XAGUSD", name: "Silver Spot", category: "commodities" },
+  { symbol: "US10Y", name: "Treasury Yield 10Y", category: "bonds" },
+  { symbol: "GDX", name: "Gold Miners ETF", category: "etf" },
+  { symbol: "GDXJ", name: "Junior Gold Miners ETF", category: "etf" },
+  { symbol: "NEM", name: "Newmont Corp", category: "stocks" },
+  { symbol: "SPX", name: "S&P 500 Index", category: "indices" },
+  { symbol: "BTCUSD", name: "Bitcoin", category: "crypto" },
+  { symbol: "USOIL", name: "Crude Oil WTI", category: "commodities" },
 ];
 
 export type SymbolInfo = {
   symbol: string;
   name: string;
+  category?: string;
 };
 
 type SymbolContextType = {
