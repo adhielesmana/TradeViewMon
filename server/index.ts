@@ -1,5 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import { Pool } from "@neondatabase/serverless";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -23,16 +25,24 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+const PgSession = connectPgSimple(session);
+const sessionPool = new Pool({ connectionString: process.env.DATABASE_URL });
+
 app.use(
   session({
+    store: new PgSession({
+      pool: sessionPool,
+      tableName: "session",
+      createTableIfMissing: true,
+    }),
     secret: process.env.SESSION_SECRET || "tradeviewmon-secret-key-change-in-production",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       sameSite: "lax",
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days for persistent login
     },
   })
 );

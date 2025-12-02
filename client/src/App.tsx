@@ -19,10 +19,14 @@ import Predictions from "@/pages/predictions";
 import Historical from "@/pages/historical";
 import Backtesting from "@/pages/backtesting";
 import SystemStatus from "@/pages/system-status";
+import UserManagement from "@/pages/user-management";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoutes() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "superadmin" || user?.role === "admin";
+  
   return (
     <Switch>
       <Route path="/" component={LiveMarket} />
@@ -30,6 +34,7 @@ function ProtectedRoutes() {
       <Route path="/historical" component={Historical} />
       <Route path="/backtesting" component={Backtesting} />
       <Route path="/status" component={SystemStatus} />
+      {isAdmin && <Route path="/users" component={UserManagement} />}
       <Route component={NotFound} />
     </Switch>
   );

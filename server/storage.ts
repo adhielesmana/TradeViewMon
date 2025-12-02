@@ -1,13 +1,15 @@
 import { 
-  marketData, predictions, accuracyResults, systemStatus,
+  marketData, predictions, accuracyResults, systemStatus, users, userInvites,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
   type SystemStatus, type InsertSystemStatus,
-  type MarketStats, type AccuracyStats, type PredictionWithResult
+  type MarketStats, type AccuracyStats, type PredictionWithResult,
+  type User, type SafeUser, type InsertUser, type UpdateUser,
+  type UserInvite, type InsertUserInvite
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, gte, lte, and, sql, inArray } from "drizzle-orm";
+import { eq, desc, gte, lte, and, sql, inArray, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // Market Data
@@ -37,6 +39,20 @@ export interface IStorage {
     lastSchedulerRun: string | null;
     uptime: number;
   }>;
+
+  // User Management
+  getAllUsers(): Promise<SafeUser[]>;
+  getUserById(id: string): Promise<SafeUser | null>;
+  createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, data: UpdateUser): Promise<SafeUser | null>;
+  deleteUser(id: string): Promise<boolean>;
+  
+  // User Invites
+  createInvite(email: string, role: string, invitedById: string): Promise<UserInvite>;
+  getInviteByToken(token: string): Promise<UserInvite | null>;
+  getPendingInvites(): Promise<UserInvite[]>;
+  acceptInvite(token: string): Promise<UserInvite | null>;
+  deleteInvite(id: string): Promise<boolean>;
 }
 
 const startTime = Date.now();
@@ -257,6 +273,125 @@ export class DatabaseStorage implements IStorage {
       lastSchedulerRun: schedulerStatus?.lastSuccess?.toISOString() || null,
       uptime: Math.floor((Date.now() - startTime) / 1000),
     };
+  }
+
+  // User Management
+  async getAllUsers(): Promise<SafeUser[]> {
+    const allUsers = await db.select({
+      id: users.id,
+      username: users.username,
+      email: users.email,
+      displayName: users.displayName,
+      role: users.role,
+      isActive: users.isActive,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+      lastLogin: users.lastLogin,
+    }).from(users).orderBy(users.createdAt);
+    return allUsers;
+  }
+
+  async getUserById(id: string): Promise<SafeUser | null> {
+    const [user] = await db.select({
+      id: users.id,
+      username: users.username,
+      email: users.email,
+      displayName: users.displayName,
+      role: users.role,
+      isActive: users.isActive,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+      lastLogin: users.lastLogin,
+    }).from(users).where(eq(users.id, id)).limit(1);
+    return user || null;
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const [result] = await db.insert(users).values({
+      ...user,
+      updatedAt: new Date(),
+    }).returning();
+    return result;
+  }
+
+  async updateUser(id: string, data: UpdateUser): Promise<SafeUser | null> {
+    const [result] = await db.update(users)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        displayName: users.displayName,
+        role: users.role,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        lastLogin: users.lastLogin,
+      });
+    return result || null;
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    const result = await db.delete(users).where(eq(users.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // User Invites
+  async createInvite(email: string, role: string, invitedById: string): Promise<UserInvite> {
+    const token = crypto.randomUUID() + crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    
+    const [result] = await db.insert(userInvites).values({
+      email,
+      token,
+      role,
+      invitedById,
+      expiresAt,
+    }).returning();
+    return result;
+  }
+
+  async getInviteByToken(token: string): Promise<UserInvite | null> {
+    const [result] = await db.select()
+      .from(userInvites)
+      .where(and(
+        eq(userInvites.token, token),
+        isNull(userInvites.acceptedAt),
+        gte(userInvites.expiresAt, new Date())
+      ))
+      .limit(1);
+    return result || null;
+  }
+
+  async getPendingInvites(): Promise<UserInvite[]> {
+    return db.select()
+      .from(userInvites)
+      .where(and(
+        isNull(userInvites.acceptedAt),
+        gte(userInvites.expiresAt, new Date())
+      ))
+      .orderBy(desc(userInvites.createdAt));
+  }
+
+  async acceptInvite(token: string): Promise<UserInvite | null> {
+    const [result] = await db.update(userInvites)
+      .set({ acceptedAt: new Date() })
+      .where(and(
+        eq(userInvites.token, token),
+        isNull(userInvites.acceptedAt),
+        gte(userInvites.expiresAt, new Date())
+      ))
+      .returning();
+    return result || null;
+  }
+
+  async deleteInvite(id: string): Promise<boolean> {
+    const result = await db.delete(userInvites).where(eq(userInvites.id, id)).returning();
+    return result.length > 0;
   }
 }
 

@@ -59,7 +59,7 @@ export function MultiFactorAnalysis({ symbol }: MultiFactorAnalysisProps) {
     );
   }
 
-  if (!data || data.factors.length === 0) {
+  if (!data || !data.factors || data.factors.length === 0) {
     return (
       <Card>
         <CardHeader className="pb-3">

@@ -127,21 +127,55 @@ export type PredictionWithResult = Prediction & {
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
+  email: text("email").unique(),
+  displayName: text("display_name"),
   password: text("password").notNull(), // Always stored as bcrypt hash
   role: varchar("role", { length: 20 }).notNull().default("user"), // 'superadmin', 'admin', 'user'
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
   lastLogin: timestamp("last_login"),
+});
+
+// User Invites - for inviting new users
+export const userInvites = pgTable("user_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(),
+  token: text("token").notNull().unique(),
+  role: varchar("role", { length: 20 }).notNull().default("user"),
+  invitedById: varchar("invited_by_id").references(() => users.id),
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
+  email: true,
+  displayName: true,
   password: true,
+  role: true,
+  isActive: true,
+});
+
+export const updateUserSchema = createInsertSchema(users).pick({
+  email: true,
+  displayName: true,
+  role: true,
+  isActive: true,
+}).partial();
+
+export const insertUserInviteSchema = createInsertSchema(userInvites).pick({
+  email: true,
   role: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type UpdateUser = z.infer<typeof updateUserSchema>;
 export type User = typeof users.$inferSelect;
 export type SafeUser = Omit<User, "password">; // User without password for API responses
+export type UserInvite = typeof userInvites.$inferSelect;
+export type InsertUserInvite = z.infer<typeof insertUserInviteSchema>;
 
 // Monitored Symbols - configurable list of financial instruments
 export const monitoredSymbols = pgTable("monitored_symbols", {

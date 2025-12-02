@@ -5,7 +5,8 @@ import {
   History, 
   Activity,
   BarChart3,
-  FlaskConical
+  FlaskConical,
+  Users
 } from "lucide-react";
 import {
   Sidebar,
@@ -19,6 +20,7 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/lib/auth-context";
 
 const menuItems = [
   {
@@ -26,35 +28,52 @@ const menuItems = [
     url: "/",
     icon: LineChart,
     description: "Real-time prices",
+    adminOnly: false,
   },
   {
     title: "Predictions",
     url: "/predictions",
     icon: TrendingUp,
     description: "AI predictions",
+    adminOnly: false,
   },
   {
     title: "Historical",
     url: "/historical",
     icon: History,
     description: "1-year data",
+    adminOnly: false,
   },
   {
     title: "Backtesting",
     url: "/backtesting",
     icon: FlaskConical,
     description: "Model testing",
+    adminOnly: false,
   },
   {
     title: "System Status",
     url: "/status",
     icon: Activity,
     description: "Health checks",
+    adminOnly: false,
+  },
+  {
+    title: "User Management",
+    url: "/users",
+    icon: Users,
+    description: "Manage users",
+    adminOnly: true,
   },
 ];
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { user } = useAuth();
+  
+  const isAdmin = user?.role === "superadmin" || user?.role === "admin";
+  
+  const visibleMenuItems = menuItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <Sidebar>
@@ -76,7 +95,7 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => {
+              {visibleMenuItems.map((item) => {
                 const isActive = location === item.url;
                 return (
                   <SidebarMenuItem key={item.title}>

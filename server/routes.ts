@@ -8,6 +8,19 @@ import { wsService } from "./websocket";
 import { backtestingEngine, type BacktestConfig } from "./backtesting";
 import { authenticateUser, seedSuperadmin, findUserById, type SafeUser } from "./auth";
 import { predictionEngine } from "./prediction-engine";
+import { z } from "zod";
+
+const updateUserSchema = z.object({
+  email: z.string().email().optional().nullable(),
+  displayName: z.string().max(100).optional().nullable(),
+  role: z.enum(["user", "admin"]).optional(),
+  isActive: z.boolean().optional(),
+}).strict();
+
+const createInviteSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(["user", "admin"]).optional().default("user"),
+});
 
 const DEFAULT_SYMBOL = marketDataService.getSymbol();
 
@@ -149,6 +162,160 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
+  // User Management Routes (Admin only)
+  app.get("/api/users", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  app.get("/api/users/:id", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.params.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
+  app.patch("/api/users/:id", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const currentUser = req.session.user!;
+      
+      // Validate request body
+      const parseResult = updateUserSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ 
+          error: "Invalid request data", 
+          details: parseResult.error.errors 
+        });
+      }
+      const validatedData = parseResult.data;
+      
+      // Check if trying to modify superadmin
+      const targetUser = await storage.getUserById(id);
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Only superadmin can modify other superadmins
+      if (targetUser.role === "superadmin" && currentUser.role !== "superadmin") {
+        return res.status(403).json({ error: "Cannot modify superadmin account" });
+      }
+      
+      // Prevent self-demotion
+      if (id === currentUser.id && validatedData.role && validatedData.role !== currentUser.role) {
+        return res.status(400).json({ error: "Cannot change your own role" });
+      }
+      
+      // Prevent self-deactivation
+      if (id === currentUser.id && validatedData.isActive === false) {
+        return res.status(400).json({ error: "Cannot deactivate your own account" });
+      }
+      
+      // Only superadmin can change roles
+      if (validatedData.role && currentUser.role !== "superadmin") {
+        return res.status(403).json({ error: "Only superadmin can change user roles" });
+      }
+
+      const updated = await storage.updateUser(id, validatedData);
+      if (!updated) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  app.delete("/api/users/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const currentUser = req.session.user!;
+      
+      // Cannot delete yourself
+      if (id === currentUser.id) {
+        return res.status(400).json({ error: "Cannot delete your own account" });
+      }
+      
+      // Check if trying to delete superadmin
+      const targetUser = await storage.getUserById(id);
+      if (targetUser?.role === "superadmin") {
+        return res.status(403).json({ error: "Cannot delete superadmin account" });
+      }
+
+      const deleted = await storage.deleteUser(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ error: "Failed to delete user" });
+    }
+  });
+
+  // User Invites Routes
+  app.get("/api/invites", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const invites = await storage.getPendingInvites();
+      res.json(invites);
+    } catch (error) {
+      console.error("Error fetching invites:", error);
+      res.status(500).json({ error: "Failed to fetch invites" });
+    }
+  });
+
+  app.post("/api/invites", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const currentUser = req.session.user!;
+      
+      // Validate request body
+      const parseResult = createInviteSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ 
+          error: "Invalid request data", 
+          details: parseResult.error.errors 
+        });
+      }
+      const { email, role } = parseResult.data;
+      
+      // Only superadmin can invite admins
+      if (role === "admin" && currentUser.role !== "superadmin") {
+        return res.status(403).json({ error: "Only superadmin can invite admins" });
+      }
+
+      const invite = await storage.createInvite(email, role, currentUser.id);
+      res.json(invite);
+    } catch (error) {
+      console.error("Error creating invite:", error);
+      res.status(500).json({ error: "Failed to create invite" });
+    }
+  });
+
+  app.delete("/api/invites/:id", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const deleted = await storage.deleteInvite(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Invite not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting invite:", error);
+      res.status(500).json({ error: "Failed to delete invite" });
     }
   });
 

@@ -5,10 +5,81 @@ import { marketDataService } from "./market-data-service";
 import { wsService } from "./websocket";
 
 const TIMEFRAMES = [
-  { name: "1min", minutes: 1 },
-  { name: "5min", minutes: 5 },
-  { name: "15min", minutes: 15 },
+  { name: "1min", minutes: 1, dataPoints: 60, stepsAhead: 1 },
+  { name: "5min", minutes: 5, dataPoints: 100, stepsAhead: 1 },
+  { name: "15min", minutes: 15, dataPoints: 200, stepsAhead: 1 },
 ];
+
+interface AggregatedCandle {
+  timestamp: Date;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+function aggregateCandles(candles: any[], intervalMinutes: number): AggregatedCandle[] {
+  if (candles.length === 0 || intervalMinutes <= 1) {
+    return candles.map(c => ({
+      timestamp: new Date(c.timestamp),
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+      volume: c.volume,
+    }));
+  }
+
+  const sortedCandles = [...candles].sort((a, b) => 
+    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+  
+  const aggregated: AggregatedCandle[] = [];
+  const intervalMs = intervalMinutes * 60 * 1000;
+  
+  let currentBucket: any[] = [];
+  let bucketStart: number | null = null;
+  
+  for (const candle of sortedCandles) {
+    const candleTime = new Date(candle.timestamp).getTime();
+    const candleBucket = Math.floor(candleTime / intervalMs) * intervalMs;
+    
+    if (bucketStart === null) {
+      bucketStart = candleBucket;
+    }
+    
+    if (candleBucket === bucketStart) {
+      currentBucket.push(candle);
+    } else {
+      if (currentBucket.length > 0) {
+        aggregated.push({
+          timestamp: new Date(bucketStart),
+          open: currentBucket[0].open,
+          high: Math.max(...currentBucket.map(c => c.high)),
+          low: Math.min(...currentBucket.map(c => c.low)),
+          close: currentBucket[currentBucket.length - 1].close,
+          volume: currentBucket.reduce((sum, c) => sum + c.volume, 0),
+        });
+      }
+      bucketStart = candleBucket;
+      currentBucket = [candle];
+    }
+  }
+  
+  if (currentBucket.length > 0 && bucketStart !== null) {
+    aggregated.push({
+      timestamp: new Date(bucketStart),
+      open: currentBucket[0].open,
+      high: Math.max(...currentBucket.map(c => c.high)),
+      low: Math.min(...currentBucket.map(c => c.low)),
+      close: currentBucket[currentBucket.length - 1].close,
+      volume: currentBucket.reduce((sum, c) => sum + c.volume, 0),
+    });
+  }
+  
+  return aggregated;
+}
 
 class Scheduler {
   private isRunning: boolean = false;
@@ -104,7 +175,16 @@ class Scheduler {
         }> = [];
 
         for (const timeframe of TIMEFRAMES) {
-          const prediction = predictionEngine.predict(recentData, timeframe.minutes);
+          const dataNeeded = timeframe.dataPoints;
+          const timeframeData = await storage.getRecentMarketData(symbol, dataNeeded);
+          
+          const aggregatedData = aggregateCandles(timeframeData, timeframe.minutes);
+          
+          if (aggregatedData.length < 10) {
+            continue;
+          }
+          
+          const prediction = predictionEngine.predict(aggregatedData as any, timeframe.stepsAhead);
           
           const targetTime = new Date(now.getTime() + timeframe.minutes * 60000);
           targetTime.setSeconds(0, 0);
@@ -128,7 +208,9 @@ class Scheduler {
           });
         }
 
-        wsService.broadcastPredictionUpdate(symbol, { predictions: newPredictions });
+        if (newPredictions.length > 0) {
+          wsService.broadcastPredictionUpdate(symbol, { predictions: newPredictions });
+        }
 
         await this.evaluatePastPredictions(symbol);
         await this.updatePredictionEngineStatus("healthy");
