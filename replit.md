@@ -58,10 +58,16 @@ Preferred communication style: Simple, everyday language.
 4. Compare predictions against actual prices
 5. Calculate and store accuracy metrics
 
-**Prediction Engine**: Ensemble approach combining:
-- Moving Average predictions for trend analysis
+**Prediction Engine**: Enhanced ensemble approach with multi-factor analysis:
+- Moving Average predictions for trend analysis (MA7/20/50/200 crossover signals)
 - Linear Regression for price trajectory
-- Outputs: predicted price, direction (UP/DOWN/NEUTRAL), and confidence score
+- Multi-factor technical analysis:
+  - RSI (14-period) overbought/oversold detection
+  - MACD (12, 26, 9) signal line crossovers
+  - Stochastic oscillator (14-period) momentum analysis
+  - Volume analysis for trend confirmation
+- Weighted scoring system with normalized factor contributions
+- Outputs: predicted price, direction (UP/DOWN/NEUTRAL), confidence score, and multi-factor analysis breakdown
 - Configurable match threshold (default 0.5%) for accuracy determination
 
 **Market Data Service**: Abstracted service layer supporting:
@@ -100,9 +106,22 @@ Preferred communication style: Simple, everyday language.
 
 ### Session & Authentication
 
-Currently uses in-memory session storage via express-session. The infrastructure supports PostgreSQL session storage via connect-pg-simple for production deployments requiring persistent sessions.
+**Session Management**: Uses in-memory session storage via express-session with memorystore for leak-free operation. The infrastructure supports PostgreSQL session storage via connect-pg-simple for production deployments requiring persistent sessions.
 
-No authentication system implemented - designed for single-user or trusted network deployment.
+**Authentication**: Passport.js with local strategy for username/password authentication:
+- Bcrypt-hashed passwords stored in the users table
+- Superadmin account (username: adhielesmana) seeded on startup
+- Protected routes requiring authentication for all pages except login
+- Session-based authentication with 24-hour expiry
+
+**Supported Instruments** (10 financial instruments):
+- Precious Metals: XAUUSD (Gold), XAGUSD (Silver)
+- Currency Indices: DXY (Dollar Index)
+- Treasury: US10Y (10-Year Treasury Yield)
+- Mining Stocks: GDX, GDXJ, NEM
+- Market Indices: SPX (S&P 500)
+- Cryptocurrency: BTCUSD (Bitcoin)
+- Energy: USOIL (Crude Oil)
 
 ## External Dependencies
 
