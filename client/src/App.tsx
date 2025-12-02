@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -10,15 +10,19 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { StatusIndicator } from "@/components/status-indicator";
 import { SymbolProvider } from "@/lib/symbol-context";
 import { SymbolSelector } from "@/components/symbol-selector";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { Button } from "@/components/ui/button";
+import { LogOut } from "lucide-react";
 
 import LiveMarket from "@/pages/live-market";
 import Predictions from "@/pages/predictions";
 import Historical from "@/pages/historical";
 import Backtesting from "@/pages/backtesting";
 import SystemStatus from "@/pages/system-status";
+import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 
-function Router() {
+function ProtectedRoutes() {
   return (
     <Switch>
       <Route path="/" component={LiveMarket} />
@@ -31,41 +35,99 @@ function Router() {
   );
 }
 
-function App() {
+function UserMenu() {
+  const { user, logout } = useAuth();
+  
+  if (!user) return null;
+  
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-sm text-muted-foreground">
+        {user.username}
+        {user.role === "superadmin" && (
+          <span className="ml-1 text-xs text-primary">(Admin)</span>
+        )}
+      </span>
+      <Button 
+        variant="ghost" 
+        size="icon" 
+        onClick={logout}
+        data-testid="button-logout"
+      >
+        <LogOut className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+function AuthenticatedApp() {
+  const { isAuthenticated, isLoading } = useAuth();
+  const [location] = useLocation();
+
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3.5rem",
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated && location !== "/login") {
+    return <Redirect to="/login" />;
+  }
+
+  if (location === "/login") {
+    if (isAuthenticated) {
+      return <Redirect to="/" />;
+    }
+    return <LoginPage />;
+  }
+
+  return (
+    <SymbolProvider>
+      <SidebarProvider style={style as React.CSSProperties}>
+        <div className="flex h-screen w-full">
+          <AppSidebar />
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <header className="flex h-14 items-center justify-between gap-4 border-b border-border bg-background px-4">
+              <div className="flex items-center gap-4">
+                <SidebarTrigger data-testid="button-sidebar-toggle" />
+                <SymbolSelector />
+                <div className="flex items-center gap-2">
+                  <StatusIndicator status="online" size="sm" />
+                  <span className="text-sm font-medium">Live</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <UserMenu />
+                <ThemeToggle />
+              </div>
+            </header>
+            <main className="flex-1 overflow-auto bg-background">
+              <ProtectedRoutes />
+            </main>
+          </div>
+        </div>
+      </SidebarProvider>
+    </SymbolProvider>
+  );
+}
+
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="dark" storageKey="tradeviewmon-theme">
-        <SymbolProvider>
-          <TooltipProvider>
-            <SidebarProvider style={style as React.CSSProperties}>
-              <div className="flex h-screen w-full">
-                <AppSidebar />
-                <div className="flex flex-1 flex-col overflow-hidden">
-                  <header className="flex h-14 items-center justify-between gap-4 border-b border-border bg-background px-4">
-                    <div className="flex items-center gap-4">
-                      <SidebarTrigger data-testid="button-sidebar-toggle" />
-                      <SymbolSelector />
-                      <div className="flex items-center gap-2">
-                        <StatusIndicator status="online" size="sm" />
-                        <span className="text-sm font-medium">Live</span>
-                      </div>
-                    </div>
-                    <ThemeToggle />
-                  </header>
-                  <main className="flex-1 overflow-auto bg-background">
-                    <Router />
-                  </main>
-                </div>
-              </div>
-            </SidebarProvider>
-            <Toaster />
-          </TooltipProvider>
-        </SymbolProvider>
+        <TooltipProvider>
+          <AuthProvider>
+            <AuthenticatedApp />
+          </AuthProvider>
+          <Toaster />
+        </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { scheduler } from "./scheduler";
@@ -6,8 +6,35 @@ import { marketDataService } from "./market-data-service";
 import { technicalIndicators } from "./technical-indicators";
 import { wsService } from "./websocket";
 import { backtestingEngine, type BacktestConfig } from "./backtesting";
+import { authenticateUser, seedSuperadmin, findUserById, type SafeUser } from "./auth";
 
 const DEFAULT_SYMBOL = marketDataService.getSymbol();
+
+declare module "express-session" {
+  interface SessionData {
+    userId?: string;
+    user?: SafeUser;
+  }
+}
+
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session?.userId) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+  next();
+}
+
+function requireRole(roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session?.user) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    if (!roles.includes(req.session.user.role)) {
+      return res.status(403).json({ error: "Insufficient permissions" });
+    }
+    next();
+  };
+}
 
 function convertToCSV(data: any[], fields: string[]): string {
   if (data.length === 0) return fields.join(",") + "\n";
@@ -61,6 +88,69 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  await seedSuperadmin();
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      
+      if (!username || !password) {
+        return res.status(400).json({ error: "Username and password are required" });
+      }
+
+      const user = await authenticateUser(username, password);
+      if (!user) {
+        return res.status(401).json({ error: "Invalid username or password" });
+      }
+
+      req.session.userId = user.id;
+      req.session.user = user;
+
+      res.json({ 
+        message: "Login successful", 
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+        }
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Logout failed" });
+      }
+      res.json({ message: "Logout successful" });
+    });
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    try {
+      const user = await findUserById(req.session.userId);
+      if (!user) {
+        return res.status(401).json({ error: "User not found" });
+      }
+
+      res.json({
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      });
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
   app.get("/api/market/recent", async (req, res) => {
     try {
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;

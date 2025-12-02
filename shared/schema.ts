@@ -123,17 +123,36 @@ export type PredictionWithResult = Prediction & {
   percentageDifference?: number;
 };
 
-// Legacy user schema (kept for compatibility)
+// Users - authentication with roles
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password").notNull(), // Always stored as bcrypt hash
+  role: varchar("role", { length: 20 }).notNull().default("user"), // 'superadmin', 'admin', 'user'
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  lastLogin: timestamp("last_login"),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  role: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+export type SafeUser = Omit<User, "password">; // User without password for API responses
+
+// Monitored Symbols - configurable list of financial instruments
+export const monitoredSymbols = pgTable("monitored_symbols", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  symbol: varchar("symbol", { length: 20 }).notNull().unique(),
+  displayName: varchar("display_name", { length: 100 }).notNull(),
+  category: varchar("category", { length: 50 }).notNull(), // 'commodities', 'indices', 'crypto', 'bonds'
+  isActive: boolean("is_active").notNull().default(true),
+  priority: integer("priority").notNull().default(0), // Higher = more important
+});
+
+export const insertMonitoredSymbolSchema = createInsertSchema(monitoredSymbols).omit({ id: true });
+export type MonitoredSymbol = typeof monitoredSymbols.$inferSelect;
+export type InsertMonitoredSymbol = z.infer<typeof insertMonitoredSymbolSchema>;
