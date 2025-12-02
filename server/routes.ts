@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { scheduler } from "./scheduler";
 import { marketDataService } from "./market-data-service";
+import { technicalIndicators } from "./technical-indicators";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -76,6 +77,34 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching historical data:", error);
       res.status(500).json({ error: "Failed to fetch historical data" });
+    }
+  });
+
+  app.get("/api/market/indicators", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const data = await storage.getRecentMarketData(symbol, limit);
+      
+      if (data.length === 0) {
+        return res.json({
+          indicators: [],
+          signal: { signal: "HOLD", strength: 0, reasons: [] },
+          latest: null,
+        });
+      }
+
+      const indicators = technicalIndicators.calculateAll(data);
+      const latest = indicators[indicators.length - 1];
+      const signal = technicalIndicators.generateSignal(latest);
+
+      res.json({
+        indicators,
+        signal,
+        latest,
+      });
+    } catch (error) {
+      console.error("Error calculating indicators:", error);
+      res.status(500).json({ error: "Failed to calculate indicators" });
     }
   });
 

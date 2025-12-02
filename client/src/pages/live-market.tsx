@@ -1,13 +1,36 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { PriceDisplay } from "@/components/price-display";
 import { MarketChart } from "@/components/market-chart";
 import { StatCard } from "@/components/stat-card";
 import { StatusIndicator } from "@/components/status-indicator";
-import { Activity, Volume2, TrendingUp, TrendingDown, Clock } from "lucide-react";
+import { Activity, Volume2, TrendingUp, TrendingDown, Clock, BarChart3, Gauge, LineChart } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import type { MarketData, MarketStats } from "@shared/schema";
+
+interface IndicatorData {
+  timestamp: string;
+  ema12?: number;
+  ema26?: number;
+  rsi14?: number;
+  macdLine?: number;
+  macdSignal?: number;
+  macdHistogram?: number;
+}
+
+interface TradingSignal {
+  signal: "BUY" | "SELL" | "HOLD";
+  strength: number;
+  reasons: string[];
+}
+
+interface IndicatorsResponse {
+  indicators: IndicatorData[];
+  signal: TradingSignal;
+  latest: IndicatorData | null;
+}
 
 export default function LiveMarket() {
   const { data: marketData, isLoading: isLoadingMarket } = useQuery<MarketData[]>({
@@ -20,7 +43,14 @@ export default function LiveMarket() {
     refetchInterval: 30000,
   });
 
+  const { data: indicatorsData, isLoading: isLoadingIndicators } = useQuery<IndicatorsResponse>({
+    queryKey: ["/api/market/indicators"],
+    refetchInterval: 30000,
+  });
+
   const lastUpdate = marketData?.[marketData.length - 1]?.timestamp;
+  const signal = indicatorsData?.signal;
+  const latest = indicatorsData?.latest;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -125,6 +155,103 @@ export default function LiveMarket() {
           </div>
         )}
       </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-lg font-medium">Technical Indicators</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoadingIndicators ? (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : latest ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3 pb-2 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Signal:</span>
+                  <Badge
+                    variant={signal?.signal === "BUY" ? "default" : signal?.signal === "SELL" ? "destructive" : "secondary"}
+                    className={signal?.signal === "BUY" ? "bg-profit text-profit-foreground" : ""}
+                    data-testid="badge-signal"
+                  >
+                    {signal?.signal || "HOLD"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Gauge className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Strength: {signal?.strength || 0}%</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground">EMA (12)</span>
+                  <span className="font-mono text-sm font-medium" data-testid="text-ema12">
+                    {latest.ema12 !== undefined ? `$${latest.ema12.toFixed(2)}` : "--"}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground">EMA (26)</span>
+                  <span className="font-mono text-sm font-medium" data-testid="text-ema26">
+                    {latest.ema26 !== undefined ? `$${latest.ema26.toFixed(2)}` : "--"}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground">RSI (14)</span>
+                  <span 
+                    className={`font-mono text-sm font-medium ${
+                      latest.rsi14 !== undefined
+                        ? latest.rsi14 > 70 ? "text-loss" : latest.rsi14 < 30 ? "text-profit" : ""
+                        : ""
+                    }`}
+                    data-testid="text-rsi14"
+                  >
+                    {latest.rsi14 !== undefined ? latest.rsi14.toFixed(2) : "--"}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground">MACD Line</span>
+                  <span className="font-mono text-sm font-medium" data-testid="text-macd-line">
+                    {latest.macdLine !== undefined ? latest.macdLine.toFixed(4) : "--"}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground">MACD Signal</span>
+                  <span className="font-mono text-sm font-medium" data-testid="text-macd-signal">
+                    {latest.macdSignal !== undefined ? latest.macdSignal.toFixed(4) : "--"}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground">MACD Histogram</span>
+                  <span 
+                    className={`font-mono text-sm font-medium ${
+                      latest.macdHistogram !== undefined
+                        ? latest.macdHistogram > 0 ? "text-profit" : latest.macdHistogram < 0 ? "text-loss" : ""
+                        : ""
+                    }`}
+                    data-testid="text-macd-histogram"
+                  >
+                    {latest.macdHistogram !== undefined ? latest.macdHistogram.toFixed(4) : "--"}
+                  </span>
+                </div>
+              </div>
+              {signal?.reasons && signal.reasons.length > 0 && (
+                <div className="pt-2 border-t border-border">
+                  <span className="text-xs text-muted-foreground">Analysis: </span>
+                  <span className="text-xs">{signal.reasons.join(" • ")}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">No indicator data available</div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-2">
