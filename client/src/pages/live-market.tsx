@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { PriceDisplay } from "@/components/price-display";
 import { MarketChart } from "@/components/market-chart";
+import { CandlestickChart } from "@/components/candlestick-chart";
 import { StatCard } from "@/components/stat-card";
 import { StatusIndicator } from "@/components/status-indicator";
 import { Activity, Volume2, TrendingUp, TrendingDown, Clock, BarChart3, Gauge, Wifi, WifiOff } from "lucide-react";
@@ -158,6 +159,13 @@ export default function LiveMarket() {
         data={marketData || []}
         isLoading={isLoadingMarket}
         title="1-Minute Price Chart"
+        height={350}
+      />
+
+      <CandlestickChart
+        data={marketData || []}
+        isLoading={isLoadingMarket}
+        title="Candlestick Chart"
         height={350}
       />
 
