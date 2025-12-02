@@ -91,8 +91,8 @@ export function PredictionTable({
                       <span className="text-xs font-medium">
                         {format(new Date(prediction.targetTimestamp), "MMM dd")}
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {format(new Date(prediction.targetTimestamp), "HH:mm")}
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {format(new Date(prediction.targetTimestamp), "HH:mm:ss")}
                       </span>
                     </div>
                   </TableCell>

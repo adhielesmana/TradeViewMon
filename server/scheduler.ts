@@ -98,11 +98,12 @@ class Scheduler {
 
     await this.initializeData();
 
-    this.task = cron.schedule("* * * * *", async () => {
+    // Run at exactly :00 seconds of each minute (6-field cron format: second minute hour day month weekday)
+    this.task = cron.schedule("0 * * * * *", async () => {
       await this.runCycle();
     });
 
-    console.log("[Scheduler] Scheduler started - running every minute");
+    console.log("[Scheduler] Scheduler started - running every minute at :00 seconds");
   }
 
   async stop(): Promise<void> {
