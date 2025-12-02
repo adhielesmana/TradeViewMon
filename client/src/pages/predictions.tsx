@@ -3,6 +3,7 @@ import { PredictionChart } from "@/components/prediction-chart";
 import { PredictionTable } from "@/components/prediction-table";
 import { AccuracyDisplay } from "@/components/accuracy-display";
 import { StatCard } from "@/components/stat-card";
+import { ExportDropdown } from "@/components/export-dropdown";
 import { Target, TrendingUp, Clock, BarChart2 } from "lucide-react";
 import { useSymbol } from "@/lib/symbol-context";
 import type { PredictionWithResult, AccuracyStats } from "@shared/schema";
@@ -31,11 +32,18 @@ export default function Predictions() {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Predictions</h1>
-        <p className="text-sm text-muted-foreground">
-          AI-powered price predictions with accuracy tracking
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Predictions</h1>
+          <p className="text-sm text-muted-foreground">
+            AI-powered price predictions with accuracy tracking
+          </p>
+        </div>
+        <ExportDropdown 
+          endpoint="/api/export/predictions"
+          filename={`${symbol}_predictions`}
+          params={{ symbol }}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

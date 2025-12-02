@@ -7,6 +7,54 @@ import { technicalIndicators } from "./technical-indicators";
 
 const DEFAULT_SYMBOL = marketDataService.getSymbol();
 
+function convertToCSV(data: any[], fields: string[]): string {
+  if (data.length === 0) return fields.join(",") + "\n";
+  
+  const header = fields.join(",");
+  const rows = data.map(item => 
+    fields.map(field => {
+      const value = item[field];
+      if (value === null || value === undefined) return "";
+      if (typeof value === "string" && (value.includes(",") || value.includes('"') || value.includes("\n"))) {
+        return `"${value.replace(/"/g, '""')}"`;
+      }
+      return String(value);
+    }).join(",")
+  );
+  
+  return header + "\n" + rows.join("\n");
+}
+
+function getDateRange(period: string): { startDate: Date; endDate: Date } {
+  const endDate = new Date();
+  let startDate: Date;
+
+  switch (period) {
+    case "1D":
+      startDate = new Date(endDate.getTime() - 24 * 60 * 60 * 1000);
+      break;
+    case "1W":
+      startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+      break;
+    case "1M":
+      startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+      break;
+    case "3M":
+      startDate = new Date(endDate.getTime() - 90 * 24 * 60 * 60 * 1000);
+      break;
+    case "6M":
+      startDate = new Date(endDate.getTime() - 180 * 24 * 60 * 60 * 1000);
+      break;
+    case "1Y":
+      startDate = new Date(endDate.getTime() - 365 * 24 * 60 * 60 * 1000);
+      break;
+    default:
+      startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+  }
+
+  return { startDate, endDate };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -152,6 +200,61 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching system stats:", error);
       res.status(500).json({ error: "Failed to fetch system stats" });
+    }
+  });
+
+  app.get("/api/export/market", async (req, res) => {
+    try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
+      const format = (req.query.format as string) || "json";
+      const period = (req.query.period as string) || "1M";
+      
+      const { startDate, endDate } = getDateRange(period);
+      const data = await storage.getMarketDataByTimeRange(symbol, startDate, endDate);
+
+      if (format === "csv") {
+        const fields = ["id", "symbol", "timestamp", "open", "high", "low", "close", "volume", "interval"];
+        const csv = convertToCSV(data, fields);
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename="${symbol}_market_data_${period}.csv"`);
+        res.send(csv);
+      } else {
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Content-Disposition", `attachment; filename="${symbol}_market_data_${period}.json"`);
+        res.json(data);
+      }
+    } catch (error) {
+      console.error("Error exporting market data:", error);
+      res.status(500).json({ error: "Failed to export market data" });
+    }
+  });
+
+  app.get("/api/export/predictions", async (req, res) => {
+    try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
+      const format = (req.query.format as string) || "json";
+      const limit = parseInt(req.query.limit as string) || 1000;
+      
+      const predictions = await storage.getRecentPredictions(symbol, limit);
+
+      if (format === "csv") {
+        const fields = [
+          "id", "symbol", "predictionTimestamp", "targetTimestamp", 
+          "predictedPrice", "predictedDirection", "modelType", "confidence",
+          "actualPrice", "isMatch", "percentageDifference"
+        ];
+        const csv = convertToCSV(predictions, fields);
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename="${symbol}_predictions.csv"`);
+        res.send(csv);
+      } else {
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Content-Disposition", `attachment; filename="${symbol}_predictions.json"`);
+        res.json(predictions);
+      }
+    } catch (error) {
+      console.error("Error exporting predictions:", error);
+      res.status(500).json({ error: "Failed to export predictions" });
     }
   });
 

@@ -4,6 +4,7 @@ import { MarketChart } from "@/components/market-chart";
 import { OHLCVTable } from "@/components/ohlcv-table";
 import { TimeFilter } from "@/components/time-filter";
 import { StatCard } from "@/components/stat-card";
+import { ExportDropdown } from "@/components/export-dropdown";
 import { TrendingUp, TrendingDown, BarChart2, Calendar } from "lucide-react";
 import { useSymbol } from "@/lib/symbol-context";
 import type { MarketData } from "@shared/schema";
@@ -37,7 +38,14 @@ export default function Historical() {
             Explore past market performance and trends
           </p>
         </div>
-        <TimeFilter value={timeFilter} onChange={setTimeFilter} />
+        <div className="flex items-center gap-2">
+          <TimeFilter value={timeFilter} onChange={setTimeFilter} />
+          <ExportDropdown 
+            endpoint="/api/export/market"
+            filename={`${symbol}_market_data_${timeFilter}`}
+            params={{ symbol, period: timeFilter }}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
