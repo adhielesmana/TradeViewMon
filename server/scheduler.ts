@@ -3,6 +3,12 @@ import { storage } from "./storage";
 import { predictionEngine } from "./prediction-engine";
 import { marketDataService } from "./market-data-service";
 
+const TIMEFRAMES = [
+  { name: "1min", minutes: 1 },
+  { name: "5min", minutes: 5 },
+  { name: "15min", minutes: 15 },
+];
+
 class Scheduler {
   private isRunning: boolean = false;
   private task: cron.ScheduledTask | null = null;
@@ -78,27 +84,30 @@ class Scheduler {
       const candle = await marketDataService.fetchLatestCandle();
       await storage.insertMarketData(candle);
 
-      const recentData = await storage.getRecentMarketData(symbol, 30);
+      const recentData = await storage.getRecentMarketData(symbol, 60);
       
-      if (recentData.length >= 5) {
-        const prediction = predictionEngine.predict(recentData);
-        
+      if (recentData.length >= 15) {
         const now = new Date();
-        const targetTime = new Date(now.getTime() + 60000);
-        targetTime.setSeconds(0, 0);
 
-        const savedPrediction = await storage.insertPrediction({
-          symbol,
-          predictionTimestamp: now,
-          targetTimestamp: targetTime,
-          predictedPrice: prediction.predictedPrice,
-          predictedDirection: prediction.predictedDirection,
-          modelType: prediction.modelType,
-          confidence: prediction.confidence,
-        });
+        for (const timeframe of TIMEFRAMES) {
+          const prediction = predictionEngine.predict(recentData, timeframe.minutes);
+          
+          const targetTime = new Date(now.getTime() + timeframe.minutes * 60000);
+          targetTime.setSeconds(0, 0);
+
+          await storage.insertPrediction({
+            symbol,
+            predictionTimestamp: now,
+            targetTimestamp: targetTime,
+            predictedPrice: prediction.predictedPrice,
+            predictedDirection: prediction.predictedDirection,
+            modelType: prediction.modelType,
+            confidence: prediction.confidence,
+            timeframe: timeframe.name,
+          });
+        }
 
         await this.evaluatePastPredictions(symbol);
-
         await this.updatePredictionEngineStatus("healthy");
       }
 
@@ -112,40 +121,47 @@ class Scheduler {
 
   private async evaluatePastPredictions(symbol: string): Promise<void> {
     try {
-      const predictions = await storage.getRecentPredictions(symbol, 20);
       const now = new Date();
 
-      for (const pred of predictions) {
-        if (pred.actualPrice !== undefined) continue;
+      for (const timeframe of TIMEFRAMES) {
+        const predictions = await storage.getRecentPredictions(symbol, 20, timeframe.name);
 
-        const targetTime = new Date(pred.targetTimestamp);
-        if (targetTime > now) continue;
+        for (const pred of predictions) {
+          if (pred.actualPrice !== undefined) continue;
 
-        const actualData = await storage.getRecentMarketData(symbol, 5);
-        if (actualData.length === 0) continue;
+          const targetTime = new Date(pred.targetTimestamp);
+          if (targetTime > now) continue;
 
-        const closest = actualData.reduce((prev, curr) => {
-          const prevDiff = Math.abs(new Date(prev.timestamp).getTime() - targetTime.getTime());
-          const currDiff = Math.abs(new Date(curr.timestamp).getTime() - targetTime.getTime());
-          return currDiff < prevDiff ? curr : prev;
-        });
+          const windowMinutes = timeframe.minutes + 2;
+          const startTime = new Date(targetTime.getTime() - windowMinutes * 60000);
+          const endTime = new Date(targetTime.getTime() + windowMinutes * 60000);
+          const actualData = await storage.getMarketDataByTimeRange(symbol, startTime, endTime);
+          
+          if (actualData.length === 0) continue;
 
-        const comparison = predictionEngine.compareWithActual(
-          pred.predictedPrice,
-          closest.close
-        );
+          const closest = actualData.reduce((prev, curr) => {
+            const prevDiff = Math.abs(new Date(prev.timestamp).getTime() - targetTime.getTime());
+            const currDiff = Math.abs(new Date(curr.timestamp).getTime() - targetTime.getTime());
+            return currDiff < prevDiff ? curr : prev;
+          });
 
-        await storage.insertAccuracyResult({
-          predictionId: pred.id,
-          symbol,
-          timestamp: new Date(pred.targetTimestamp),
-          predictedPrice: pred.predictedPrice,
-          actualPrice: closest.close,
-          priceDifference: comparison.priceDifference,
-          percentageDifference: comparison.percentageDifference,
-          isMatch: comparison.isMatch,
-          matchThreshold: 0.5,
-        });
+          const comparison = predictionEngine.compareWithActual(
+            pred.predictedPrice,
+            closest.close
+          );
+
+          await storage.insertAccuracyResult({
+            predictionId: pred.id,
+            symbol,
+            timestamp: new Date(pred.targetTimestamp),
+            predictedPrice: pred.predictedPrice,
+            actualPrice: closest.close,
+            priceDifference: comparison.priceDifference,
+            percentageDifference: comparison.percentageDifference,
+            isMatch: comparison.isMatch,
+            matchThreshold: 0.5,
+          });
+        }
       }
     } catch (error) {
       console.error("[Scheduler] Error evaluating predictions:", error);

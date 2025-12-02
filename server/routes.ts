@@ -164,7 +164,8 @@ export async function registerRoutes(
     try {
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const limit = parseInt(req.query.limit as string) || 50;
-      const predictions = await storage.getRecentPredictions(symbol, limit);
+      const timeframe = req.query.timeframe as string | undefined;
+      const predictions = await storage.getRecentPredictions(symbol, limit, timeframe);
       res.json(predictions);
     } catch (error) {
       console.error("Error fetching predictions:", error);
@@ -175,7 +176,8 @@ export async function registerRoutes(
   app.get("/api/predictions/accuracy", async (req, res) => {
     try {
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
-      const stats = await storage.getAccuracyStats(symbol);
+      const timeframe = req.query.timeframe as string | undefined;
+      const stats = await storage.getAccuracyStats(symbol, timeframe);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching accuracy stats:", error);
@@ -234,22 +236,24 @@ export async function registerRoutes(
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const format = (req.query.format as string) || "json";
       const limit = parseInt(req.query.limit as string) || 1000;
+      const timeframe = req.query.timeframe as string | undefined;
       
-      const predictions = await storage.getRecentPredictions(symbol, limit);
+      const predictions = await storage.getRecentPredictions(symbol, limit, timeframe);
+      const filenameSuffix = timeframe ? `_${timeframe}` : "";
 
       if (format === "csv") {
         const fields = [
           "id", "symbol", "predictionTimestamp", "targetTimestamp", 
-          "predictedPrice", "predictedDirection", "modelType", "confidence",
+          "predictedPrice", "predictedDirection", "modelType", "confidence", "timeframe",
           "actualPrice", "isMatch", "percentageDifference"
         ];
         const csv = convertToCSV(predictions, fields);
         res.setHeader("Content-Type", "text/csv");
-        res.setHeader("Content-Disposition", `attachment; filename="${symbol}_predictions.csv"`);
+        res.setHeader("Content-Disposition", `attachment; filename="${symbol}_predictions${filenameSuffix}.csv"`);
         res.send(csv);
       } else {
         res.setHeader("Content-Type", "application/json");
-        res.setHeader("Content-Disposition", `attachment; filename="${symbol}_predictions.json"`);
+        res.setHeader("Content-Disposition", `attachment; filename="${symbol}_predictions${filenameSuffix}.json"`);
         res.json(predictions);
       }
     } catch (error) {

@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PredictionChart } from "@/components/prediction-chart";
 import { PredictionTable } from "@/components/prediction-table";
 import { AccuracyDisplay } from "@/components/accuracy-display";
 import { StatCard } from "@/components/stat-card";
 import { ExportDropdown } from "@/components/export-dropdown";
+import { TimeframeSelector } from "@/components/timeframe-selector";
 import { Target, TrendingUp, Clock, BarChart2 } from "lucide-react";
 import { useSymbol } from "@/lib/symbol-context";
 import type { PredictionWithResult, AccuracyStats } from "@shared/schema";
@@ -11,14 +13,17 @@ import type { PredictionWithResult, AccuracyStats } from "@shared/schema";
 export default function Predictions() {
   const { currentSymbol } = useSymbol();
   const symbol = currentSymbol.symbol;
+  const [timeframe, setTimeframe] = useState("all");
+
+  const timeframeParam = timeframe === "all" ? undefined : timeframe;
 
   const { data: predictions, isLoading: isLoadingPredictions } = useQuery<PredictionWithResult[]>({
-    queryKey: ["/api/predictions/recent", { symbol }],
+    queryKey: ["/api/predictions/recent", { symbol, timeframe: timeframeParam }],
     refetchInterval: 30000,
   });
 
   const { data: stats, isLoading: isLoadingStats } = useQuery<AccuracyStats>({
-    queryKey: ["/api/predictions/accuracy", { symbol }],
+    queryKey: ["/api/predictions/accuracy", { symbol, timeframe: timeframeParam }],
     refetchInterval: 30000,
   });
 
@@ -39,11 +44,14 @@ export default function Predictions() {
             AI-powered price predictions with accuracy tracking
           </p>
         </div>
-        <ExportDropdown 
-          endpoint="/api/export/predictions"
-          filename={`${symbol}_predictions`}
-          params={{ symbol }}
-        />
+        <div className="flex items-center gap-2">
+          <TimeframeSelector value={timeframe} onChange={setTimeframe} />
+          <ExportDropdown 
+            endpoint="/api/export/predictions"
+            filename={`${symbol}_predictions_${timeframe}`}
+            params={{ symbol, ...(timeframeParam && { timeframe: timeframeParam }) }}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

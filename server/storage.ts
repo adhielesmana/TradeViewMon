@@ -7,7 +7,7 @@ import {
   type MarketStats, type AccuracyStats, type PredictionWithResult
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, gte, lte, and, sql } from "drizzle-orm";
+import { eq, desc, gte, lte, and, sql, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Market Data
@@ -19,12 +19,12 @@ export interface IStorage {
   getLatestMarketData(symbol: string): Promise<MarketData | null>;
 
   // Predictions
-  getRecentPredictions(symbol: string, limit?: number): Promise<PredictionWithResult[]>;
+  getRecentPredictions(symbol: string, limit?: number, timeframe?: string): Promise<PredictionWithResult[]>;
   insertPrediction(prediction: InsertPrediction): Promise<Prediction>;
   getPredictionById(id: number): Promise<Prediction | null>;
 
   // Accuracy Results
-  getAccuracyStats(symbol: string): Promise<AccuracyStats>;
+  getAccuracyStats(symbol: string, timeframe?: string): Promise<AccuracyStats>;
   insertAccuracyResult(result: InsertAccuracyResult): Promise<AccuracyResult>;
 
   // System Status
@@ -104,11 +104,16 @@ export class DatabaseStorage implements IStorage {
     return result || null;
   }
 
-  async getRecentPredictions(symbol: string, limit: number = 50): Promise<PredictionWithResult[]> {
+  async getRecentPredictions(symbol: string, limit: number = 50, timeframe?: string): Promise<PredictionWithResult[]> {
+    const conditions = [eq(predictions.symbol, symbol)];
+    if (timeframe) {
+      conditions.push(eq(predictions.timeframe, timeframe));
+    }
+
     const preds = await db
       .select()
       .from(predictions)
-      .where(eq(predictions.symbol, symbol))
+      .where(and(...conditions))
       .orderBy(desc(predictions.targetTimestamp))
       .limit(limit);
 
@@ -145,11 +150,39 @@ export class DatabaseStorage implements IStorage {
     return result || null;
   }
 
-  async getAccuracyStats(symbol: string): Promise<AccuracyStats> {
-    const results = await db
-      .select()
-      .from(accuracyResults)
-      .where(eq(accuracyResults.symbol, symbol));
+  async getAccuracyStats(symbol: string, timeframe?: string): Promise<AccuracyStats> {
+    let results: AccuracyResult[];
+    
+    if (timeframe) {
+      const predIds = await db
+        .select({ id: predictions.id })
+        .from(predictions)
+        .where(and(eq(predictions.symbol, symbol), eq(predictions.timeframe, timeframe)));
+      
+      if (predIds.length === 0) {
+        return {
+          totalPredictions: 0,
+          matchCount: 0,
+          notMatchCount: 0,
+          accuracyPercent: 0,
+          averageError: 0,
+        };
+      }
+
+      const ids = predIds.map(p => p.id);
+      results = await db
+        .select()
+        .from(accuracyResults)
+        .where(and(
+          eq(accuracyResults.symbol, symbol),
+          inArray(accuracyResults.predictionId, ids)
+        ));
+    } else {
+      results = await db
+        .select()
+        .from(accuracyResults)
+        .where(eq(accuracyResults.symbol, symbol));
+    }
 
     if (results.length === 0) {
       return {

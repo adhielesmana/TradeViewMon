@@ -15,32 +15,31 @@ export class PredictionEngine {
     this.matchThreshold = matchThreshold;
   }
 
-  predict(historicalData: MarketData[]): PredictionResult {
+  predict(historicalData: MarketData[], stepsAhead: number = 1): PredictionResult {
     if (historicalData.length < 5) {
       return this.fallbackPrediction(historicalData);
     }
 
-    const movingAvgResult = this.movingAveragePrediction(historicalData);
-    const regressionResult = this.linearRegressionPrediction(historicalData);
+    const movingAvgResult = this.movingAveragePrediction(historicalData, stepsAhead);
+    const regressionResult = this.linearRegressionPrediction(historicalData, stepsAhead);
 
     const avgPredictedPrice = (movingAvgResult.predictedPrice + regressionResult.predictedPrice) / 2;
     const lastPrice = historicalData[historicalData.length - 1].close;
     const priceChange = avgPredictedPrice - lastPrice;
-    const changePercent = Math.abs((priceChange / lastPrice) * 100);
 
     let direction: "UP" | "DOWN" | "NEUTRAL";
-    if (priceChange > lastPrice * 0.001) {
+    const threshold = lastPrice * 0.001 * stepsAhead;
+    if (priceChange > threshold) {
       direction = "UP";
-    } else if (priceChange < -lastPrice * 0.001) {
+    } else if (priceChange < -threshold) {
       direction = "DOWN";
     } else {
       direction = "NEUTRAL";
     }
 
-    const confidence = Math.min(
-      (movingAvgResult.confidence + regressionResult.confidence) / 2,
-      95
-    );
+    const baseConfidence = (movingAvgResult.confidence + regressionResult.confidence) / 2;
+    const decayFactor = 1 - (stepsAhead - 1) * 0.05;
+    const confidence = Math.min(baseConfidence * decayFactor, 95);
 
     return {
       predictedPrice: Math.round(avgPredictedPrice * 100) / 100,
@@ -50,7 +49,7 @@ export class PredictionEngine {
     };
   }
 
-  private movingAveragePrediction(data: MarketData[]): PredictionResult {
+  private movingAveragePrediction(data: MarketData[], stepsAhead: number = 1): PredictionResult {
     const shortPeriod = Math.min(5, data.length);
     const longPeriod = Math.min(20, data.length);
 
@@ -59,7 +58,7 @@ export class PredictionEngine {
 
     const lastPrice = data[data.length - 1].close;
     const trend = shortMA - longMA;
-    const predictedPrice = lastPrice + trend * 0.5;
+    const predictedPrice = lastPrice + trend * 0.5 * stepsAhead;
 
     const volatility = this.calculateVolatility(data.slice(-10));
     const confidence = Math.max(20, 80 - volatility * 10);
@@ -81,22 +80,23 @@ export class PredictionEngine {
     };
   }
 
-  private linearRegressionPrediction(data: MarketData[]): PredictionResult {
+  private linearRegressionPrediction(data: MarketData[], stepsAhead: number = 1): PredictionResult {
     const recentData = data.slice(-20);
     const points: [number, number][] = recentData.map((d, i) => [i, d.close]);
 
     try {
       const regression = linearRegression(points);
       const predict = linearRegressionLine(regression);
-      const predictedPrice = predict(recentData.length);
+      const predictedPrice = predict(recentData.length + stepsAhead - 1);
 
       const lastPrice = recentData[recentData.length - 1].close;
       const priceChange = predictedPrice - lastPrice;
 
       let direction: "UP" | "DOWN" | "NEUTRAL";
-      if (priceChange > lastPrice * 0.001) {
+      const threshold = lastPrice * 0.001 * stepsAhead;
+      if (priceChange > threshold) {
         direction = "UP";
-      } else if (priceChange < -lastPrice * 0.001) {
+      } else if (priceChange < -threshold) {
         direction = "DOWN";
       } else {
         direction = "NEUTRAL";

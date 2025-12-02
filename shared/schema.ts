@@ -30,8 +30,10 @@ export const predictions = pgTable("predictions", {
   predictedDirection: varchar("predicted_direction", { length: 10 }).notNull(), // 'UP', 'DOWN', 'NEUTRAL'
   modelType: varchar("model_type", { length: 50 }).notNull().default("moving_average"),
   confidence: real("confidence"),
+  timeframe: varchar("timeframe", { length: 10 }).notNull().default("1min"), // '1min', '5min', '15min'
 }, (table) => [
   index("predictions_symbol_target_idx").on(table.symbol, table.targetTimestamp),
+  index("predictions_timeframe_idx").on(table.timeframe),
 ]);
 
 // Accuracy Results - comparison of predictions vs actual
