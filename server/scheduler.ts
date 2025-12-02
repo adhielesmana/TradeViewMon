@@ -7,7 +7,6 @@ import { wsService } from "./websocket";
 const TIMEFRAMES = [
   { name: "1min", minutes: 1, dataPoints: 60, stepsAhead: 1 },
   { name: "5min", minutes: 5, dataPoints: 100, stepsAhead: 1 },
-  { name: "15min", minutes: 15, dataPoints: 200, stepsAhead: 1 },
 ];
 
 interface AggregatedCandle {

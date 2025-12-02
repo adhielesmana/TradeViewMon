@@ -103,7 +103,7 @@ export default function Backtesting() {
   const { currentSymbol } = useSymbol();
   const symbol = currentSymbol.symbol;
   
-  const [timeframe, setTimeframe] = useState<"1min" | "5min" | "15min">("1min");
+  const [timeframe, setTimeframe] = useState<"1min" | "5min">("1min");
   const [period, setPeriod] = useState("7d");
   const [result, setResult] = useState<BacktestResult | null>(null);
 
@@ -190,14 +190,13 @@ export default function Backtesting() {
             
             <div className="space-y-2">
               <Label>Timeframe</Label>
-              <Select value={timeframe} onValueChange={(v) => setTimeframe(v as "1min" | "5min" | "15min")}>
+              <Select value={timeframe} onValueChange={(v) => setTimeframe(v as "1min" | "5min")}>
                 <SelectTrigger data-testid="select-backtest-timeframe">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="1min">1 Minute</SelectItem>
                   <SelectItem value="5min">5 Minutes</SelectItem>
-                  <SelectItem value="15min">15 Minutes</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -9,7 +9,6 @@ interface TimeframeSelectorProps {
 const TIMEFRAMES = [
   { value: "1min", label: "1 Min" },
   { value: "5min", label: "5 Min" },
-  { value: "15min", label: "15 Min" },
   { value: "all", label: "All" },
 ];
 

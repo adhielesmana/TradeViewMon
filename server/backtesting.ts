@@ -6,7 +6,7 @@ export interface BacktestConfig {
   symbol: string;
   startDate: Date;
   endDate: Date;
-  timeframe: "1min" | "5min" | "15min";
+  timeframe: "1min" | "5min";
   lookbackPeriod?: number;
 }
 
@@ -135,7 +135,6 @@ export class BacktestingEngine {
     switch (timeframe) {
       case "1min": return 1;
       case "5min": return 5;
-      case "15min": return 15;
       default: return 1;
     }
   }
@@ -276,7 +275,6 @@ export class BacktestingEngine {
     switch (timeframe) {
       case "1min": return 390;
       case "5min": return 78;
-      case "15min": return 26;
       default: return 390;
     }
   }
