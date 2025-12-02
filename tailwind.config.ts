@@ -11,6 +11,19 @@ export default {
         sm: ".1875rem", /* 3px */
       },
       colors: {
+        // Financial specific colors
+        profit: {
+          DEFAULT: "rgb(34 197 94)",
+          muted: "rgb(34 197 94 / 0.2)",
+        },
+        loss: {
+          DEFAULT: "rgb(239 68 68)",
+          muted: "rgb(239 68 68 / 0.2)",
+        },
+        neutral: {
+          DEFAULT: "rgb(156 163 175)",
+          muted: "rgb(156 163 175 / 0.2)",
+        },
         // Flat / base colors (regular buttons)
         background: "hsl(var(--background) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
@@ -83,9 +96,9 @@ export default {
         },
       },
       fontFamily: {
-        sans: ["var(--font-sans)"],
+        sans: ["Inter", "var(--font-sans)", "system-ui", "sans-serif"],
         serif: ["var(--font-serif)"],
-        mono: ["var(--font-mono)"],
+        mono: ["JetBrains Mono", "Roboto Mono", "var(--font-mono)", "monospace"],
       },
       keyframes: {
         "accordion-down": {
@@ -96,10 +109,20 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "pulse-dot": {
+          "0%, 100%": { opacity: "1", transform: "scale(1)" },
+          "50%": { opacity: "0.5", transform: "scale(1.1)" },
+        },
+        "flash": {
+          "0%": { backgroundColor: "rgb(34 197 94 / 0.3)" },
+          "100%": { backgroundColor: "transparent" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "pulse-dot": "pulse-dot 2s ease-in-out infinite",
+        "flash": "flash 0.3s ease-out",
       },
     },
   },

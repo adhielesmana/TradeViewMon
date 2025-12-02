@@ -1,38 +1,230 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { 
+  marketData, predictions, accuracyResults, systemStatus,
+  type MarketData, type InsertMarketData,
+  type Prediction, type InsertPrediction,
+  type AccuracyResult, type InsertAccuracyResult,
+  type SystemStatus, type InsertSystemStatus,
+  type MarketStats, type AccuracyStats, type PredictionWithResult
+} from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, gte, lte, and, sql } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  // Market Data
+  getRecentMarketData(symbol: string, limit?: number): Promise<MarketData[]>;
+  getMarketDataByTimeRange(symbol: string, startTime: Date, endTime: Date): Promise<MarketData[]>;
+  getMarketStats(symbol: string): Promise<MarketStats | null>;
+  insertMarketData(data: InsertMarketData): Promise<MarketData>;
+  insertMarketDataBatch(data: InsertMarketData[]): Promise<MarketData[]>;
+  getLatestMarketData(symbol: string): Promise<MarketData | null>;
+
+  // Predictions
+  getRecentPredictions(symbol: string, limit?: number): Promise<PredictionWithResult[]>;
+  insertPrediction(prediction: InsertPrediction): Promise<Prediction>;
+  getPredictionById(id: number): Promise<Prediction | null>;
+
+  // Accuracy Results
+  getAccuracyStats(symbol: string): Promise<AccuracyStats>;
+  insertAccuracyResult(result: InsertAccuracyResult): Promise<AccuracyResult>;
+
+  // System Status
+  getSystemStatus(): Promise<SystemStatus[]>;
+  upsertSystemStatus(status: InsertSystemStatus): Promise<SystemStatus>;
+  getSystemStats(): Promise<{
+    totalRecords: number;
+    totalPredictions: number;
+    schedulerStatus: string;
+    lastSchedulerRun: string | null;
+    uptime: number;
+  }>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
+const startTime = Date.now();
 
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  async getRecentMarketData(symbol: string, limit: number = 60): Promise<MarketData[]> {
+    const data = await db
+      .select()
+      .from(marketData)
+      .where(eq(marketData.symbol, symbol))
+      .orderBy(desc(marketData.timestamp))
+      .limit(limit);
+    return data.reverse();
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getMarketDataByTimeRange(symbol: string, startTime: Date, endTime: Date): Promise<MarketData[]> {
+    return db
+      .select()
+      .from(marketData)
+      .where(
+        and(
+          eq(marketData.symbol, symbol),
+          gte(marketData.timestamp, startTime),
+          lte(marketData.timestamp, endTime)
+        )
+      )
+      .orderBy(marketData.timestamp);
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async getMarketStats(symbol: string): Promise<MarketStats | null> {
+    const recentData = await this.getRecentMarketData(symbol, 60);
+    if (recentData.length === 0) return null;
+
+    const latest = recentData[recentData.length - 1];
+    const first = recentData[0];
+
+    return {
+      currentPrice: latest.close,
+      change: latest.close - first.open,
+      changePercent: ((latest.close - first.open) / first.open) * 100,
+      high: Math.max(...recentData.map(d => d.high)),
+      low: Math.min(...recentData.map(d => d.low)),
+      volume: recentData.reduce((sum, d) => sum + d.volume, 0),
+      lastUpdate: latest.timestamp.toISOString(),
+    };
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async insertMarketData(data: InsertMarketData): Promise<MarketData> {
+    const [result] = await db.insert(marketData).values(data).returning();
+    return result;
+  }
+
+  async insertMarketDataBatch(data: InsertMarketData[]): Promise<MarketData[]> {
+    if (data.length === 0) return [];
+    return db.insert(marketData).values(data).returning();
+  }
+
+  async getLatestMarketData(symbol: string): Promise<MarketData | null> {
+    const [result] = await db
+      .select()
+      .from(marketData)
+      .where(eq(marketData.symbol, symbol))
+      .orderBy(desc(marketData.timestamp))
+      .limit(1);
+    return result || null;
+  }
+
+  async getRecentPredictions(symbol: string, limit: number = 50): Promise<PredictionWithResult[]> {
+    const preds = await db
+      .select()
+      .from(predictions)
+      .where(eq(predictions.symbol, symbol))
+      .orderBy(desc(predictions.targetTimestamp))
+      .limit(limit);
+
+    const result: PredictionWithResult[] = [];
+    for (const pred of preds) {
+      const [accuracy] = await db
+        .select()
+        .from(accuracyResults)
+        .where(eq(accuracyResults.predictionId, pred.id))
+        .limit(1);
+
+      result.push({
+        ...pred,
+        actualPrice: accuracy?.actualPrice,
+        isMatch: accuracy?.isMatch,
+        percentageDifference: accuracy?.percentageDifference,
+      });
+    }
+
+    return result.reverse();
+  }
+
+  async insertPrediction(prediction: InsertPrediction): Promise<Prediction> {
+    const [result] = await db.insert(predictions).values(prediction).returning();
+    return result;
+  }
+
+  async getPredictionById(id: number): Promise<Prediction | null> {
+    const [result] = await db
+      .select()
+      .from(predictions)
+      .where(eq(predictions.id, id))
+      .limit(1);
+    return result || null;
+  }
+
+  async getAccuracyStats(symbol: string): Promise<AccuracyStats> {
+    const results = await db
+      .select()
+      .from(accuracyResults)
+      .where(eq(accuracyResults.symbol, symbol));
+
+    if (results.length === 0) {
+      return {
+        totalPredictions: 0,
+        matchCount: 0,
+        notMatchCount: 0,
+        accuracyPercent: 0,
+        averageError: 0,
+      };
+    }
+
+    const matchCount = results.filter(r => r.isMatch).length;
+    const notMatchCount = results.length - matchCount;
+    const avgError = results.reduce((sum, r) => sum + Math.abs(r.percentageDifference), 0) / results.length;
+
+    return {
+      totalPredictions: results.length,
+      matchCount,
+      notMatchCount,
+      accuracyPercent: (matchCount / results.length) * 100,
+      averageError: avgError,
+    };
+  }
+
+  async insertAccuracyResult(result: InsertAccuracyResult): Promise<AccuracyResult> {
+    const [inserted] = await db.insert(accuracyResults).values(result).returning();
+    return inserted;
+  }
+
+  async getSystemStatus(): Promise<SystemStatus[]> {
+    return db.select().from(systemStatus).orderBy(systemStatus.component);
+  }
+
+  async upsertSystemStatus(status: InsertSystemStatus): Promise<SystemStatus> {
+    const [result] = await db
+      .insert(systemStatus)
+      .values(status)
+      .onConflictDoUpdate({
+        target: systemStatus.component,
+        set: {
+          status: status.status,
+          lastCheck: status.lastCheck,
+          lastSuccess: status.lastSuccess,
+          errorMessage: status.errorMessage,
+          metadata: status.metadata,
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async getSystemStats(): Promise<{
+    totalRecords: number;
+    totalPredictions: number;
+    schedulerStatus: string;
+    lastSchedulerRun: string | null;
+    uptime: number;
+  }> {
+    const [recordCount] = await db.select({ count: sql<number>`count(*)` }).from(marketData);
+    const [predictionCount] = await db.select({ count: sql<number>`count(*)` }).from(predictions);
+    
+    const [schedulerStatus] = await db
+      .select()
+      .from(systemStatus)
+      .where(eq(systemStatus.component, "scheduler"))
+      .limit(1);
+
+    return {
+      totalRecords: Number(recordCount?.count || 0),
+      totalPredictions: Number(predictionCount?.count || 0),
+      schedulerStatus: schedulerStatus?.status || "stopped",
+      lastSchedulerRun: schedulerStatus?.lastSuccess?.toISOString() || null,
+      uptime: Math.floor((Date.now() - startTime) / 1000),
+    };
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
