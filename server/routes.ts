@@ -620,6 +620,58 @@ export async function registerRoutes(
     }
   });
 
+  // Backfill historical data endpoint (admin only)
+  app.post("/api/system/backfill", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const days = parseInt(req.body.days as string) || 90;
+      const symbol = marketDataService.getSymbol();
+      
+      console.log(`[Backfill] Generating ${days} days of historical data for ${symbol}...`);
+      
+      const existingData = await storage.getRecentMarketData(symbol, 1);
+      const oldestExisting = existingData.length > 0 
+        ? (await storage.getMarketDataByTimeRange(
+            symbol, 
+            new Date(Date.now() - days * 24 * 60 * 60 * 1000), 
+            new Date()
+          ))[0]?.timestamp
+        : null;
+      
+      const historicalData = await marketDataService.generateHistoricalData(days);
+      
+      // Filter out data that already exists (compare by timestamp rounded to minute)
+      const existingTimestamps = new Set(
+        (await storage.getMarketDataByTimeRange(
+          symbol, 
+          new Date(Date.now() - days * 24 * 60 * 60 * 1000), 
+          new Date()
+        )).map(d => new Date(d.timestamp).toISOString().slice(0, 16))
+      );
+      
+      const newData = historicalData.filter(d => 
+        !existingTimestamps.has(new Date(d.timestamp).toISOString().slice(0, 16))
+      );
+      
+      if (newData.length > 0) {
+        const batchSize = 100;
+        for (let i = 0; i < newData.length; i += batchSize) {
+          const batch = newData.slice(i, i + batchSize);
+          await storage.insertMarketDataBatch(batch);
+        }
+        console.log(`[Backfill] Generated ${newData.length} new data points`);
+      }
+      
+      res.json({ 
+        success: true, 
+        generated: newData.length,
+        message: `Generated ${newData.length} new data points for ${days} days`
+      });
+    } catch (error) {
+      console.error("Error backfilling data:", error);
+      res.status(500).json({ error: "Failed to backfill data" });
+    }
+  });
+
   wsService.initialize(httpServer);
 
   scheduler.start().catch(console.error);
