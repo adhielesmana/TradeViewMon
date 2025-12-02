@@ -5,13 +5,16 @@ import { OHLCVTable } from "@/components/ohlcv-table";
 import { TimeFilter } from "@/components/time-filter";
 import { StatCard } from "@/components/stat-card";
 import { TrendingUp, TrendingDown, BarChart2, Calendar } from "lucide-react";
+import { useSymbol } from "@/lib/symbol-context";
 import type { MarketData } from "@shared/schema";
 
 export default function Historical() {
+  const { currentSymbol } = useSymbol();
+  const symbol = currentSymbol.symbol;
   const [timeFilter, setTimeFilter] = useState("1M");
 
   const { data: historicalData, isLoading } = useQuery<MarketData[]>({
-    queryKey: ["/api/market/historical", timeFilter],
+    queryKey: ["/api/market/historical", { symbol, period: timeFilter }],
     refetchInterval: 60000,
   });
 

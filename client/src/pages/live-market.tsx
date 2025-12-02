@@ -6,8 +6,9 @@ import { PriceDisplay } from "@/components/price-display";
 import { MarketChart } from "@/components/market-chart";
 import { StatCard } from "@/components/stat-card";
 import { StatusIndicator } from "@/components/status-indicator";
-import { Activity, Volume2, TrendingUp, TrendingDown, Clock, BarChart3, Gauge, LineChart } from "lucide-react";
+import { Activity, Volume2, TrendingUp, TrendingDown, Clock, BarChart3, Gauge } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { useSymbol } from "@/lib/symbol-context";
 import type { MarketData, MarketStats } from "@shared/schema";
 
 interface IndicatorData {
@@ -33,18 +34,21 @@ interface IndicatorsResponse {
 }
 
 export default function LiveMarket() {
+  const { currentSymbol } = useSymbol();
+  const symbol = currentSymbol.symbol;
+
   const { data: marketData, isLoading: isLoadingMarket } = useQuery<MarketData[]>({
-    queryKey: ["/api/market/recent"],
+    queryKey: ["/api/market/recent", { symbol }],
     refetchInterval: 30000,
   });
 
   const { data: stats, isLoading: isLoadingStats } = useQuery<MarketStats>({
-    queryKey: ["/api/market/stats"],
+    queryKey: ["/api/market/stats", { symbol }],
     refetchInterval: 30000,
   });
 
   const { data: indicatorsData, isLoading: isLoadingIndicators } = useQuery<IndicatorsResponse>({
-    queryKey: ["/api/market/indicators"],
+    queryKey: ["/api/market/indicators", { symbol }],
     refetchInterval: 30000,
   });
 
@@ -89,7 +93,7 @@ export default function LiveMarket() {
               price={stats.currentPrice}
               change={stats.change}
               changePercent={stats.changePercent}
-              symbol="AAPL"
+              symbol={symbol}
               size="lg"
             />
           ) : (
@@ -274,7 +278,7 @@ export default function LiveMarket() {
             </div>
             <div className="flex flex-col">
               <span className="text-sm text-muted-foreground">Symbol</span>
-              <span className="text-lg font-medium">AAPL</span>
+              <span className="font-mono text-lg font-medium">{symbol}</span>
             </div>
             <div className="flex flex-col">
               <span className="text-sm text-muted-foreground">Data Points</span>

@@ -4,16 +4,20 @@ import { PredictionTable } from "@/components/prediction-table";
 import { AccuracyDisplay } from "@/components/accuracy-display";
 import { StatCard } from "@/components/stat-card";
 import { Target, TrendingUp, Clock, BarChart2 } from "lucide-react";
+import { useSymbol } from "@/lib/symbol-context";
 import type { PredictionWithResult, AccuracyStats } from "@shared/schema";
 
 export default function Predictions() {
+  const { currentSymbol } = useSymbol();
+  const symbol = currentSymbol.symbol;
+
   const { data: predictions, isLoading: isLoadingPredictions } = useQuery<PredictionWithResult[]>({
-    queryKey: ["/api/predictions/recent"],
+    queryKey: ["/api/predictions/recent", { symbol }],
     refetchInterval: 30000,
   });
 
   const { data: stats, isLoading: isLoadingStats } = useQuery<AccuracyStats>({
-    queryKey: ["/api/predictions/accuracy"],
+    queryKey: ["/api/predictions/accuracy", { symbol }],
     refetchInterval: 30000,
   });
 

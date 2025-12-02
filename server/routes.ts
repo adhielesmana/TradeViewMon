@@ -5,14 +5,15 @@ import { scheduler } from "./scheduler";
 import { marketDataService } from "./market-data-service";
 import { technicalIndicators } from "./technical-indicators";
 
+const DEFAULT_SYMBOL = marketDataService.getSymbol();
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  const symbol = marketDataService.getSymbol();
-
   app.get("/api/market/recent", async (req, res) => {
     try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const limit = parseInt(req.query.limit as string) || 60;
       const data = await storage.getRecentMarketData(symbol, limit);
       res.json(data);
@@ -24,6 +25,7 @@ export async function registerRoutes(
 
   app.get("/api/market/stats", async (req, res) => {
     try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const stats = await storage.getMarketStats(symbol);
       if (!stats) {
         return res.status(404).json({ error: "No market data available" });
@@ -37,6 +39,7 @@ export async function registerRoutes(
 
   app.get("/api/market/historical", async (req, res) => {
     try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const period = (req.query.period as string) || "1M";
       
       const now = new Date();
@@ -82,6 +85,7 @@ export async function registerRoutes(
 
   app.get("/api/market/indicators", async (req, res) => {
     try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const limit = parseInt(req.query.limit as string) || 100;
       const data = await storage.getRecentMarketData(symbol, limit);
       
@@ -110,6 +114,7 @@ export async function registerRoutes(
 
   app.get("/api/predictions/recent", async (req, res) => {
     try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const limit = parseInt(req.query.limit as string) || 50;
       const predictions = await storage.getRecentPredictions(symbol, limit);
       res.json(predictions);
@@ -121,6 +126,7 @@ export async function registerRoutes(
 
   app.get("/api/predictions/accuracy", async (req, res) => {
     try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const stats = await storage.getAccuracyStats(symbol);
       res.json(stats);
     } catch (error) {
