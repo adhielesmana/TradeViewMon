@@ -20,10 +20,11 @@ Preferred communication style: Simple, everyday language.
 
 **State Management**: TanStack Query (React Query) for server state management with aggressive caching strategies. No global client state management - components fetch data independently with 30-60 second refetch intervals for real-time updates.
 
-**Routing**: Wouter for lightweight client-side routing with four main pages:
+**Routing**: Wouter for lightweight client-side routing with five main pages:
 - Live Market: Real-time price monitoring and current market statistics
 - Predictions: AI prediction visualization with accuracy tracking
 - Historical: Historical data analysis with configurable time ranges
+- Backtesting: Historical model performance evaluation and analysis
 - System Status: Health monitoring and system metrics
 
 **Design System**: 
@@ -37,9 +38,18 @@ Preferred communication style: Simple, everyday language.
 **Runtime**: Node.js with Express.js HTTP server
 
 **API Design**: RESTful endpoints with JSON responses:
-- `/api/market/*`: Market data queries (recent, historical, stats)
+- `/api/market/*`: Market data queries (recent, historical, stats, indicators)
 - `/api/predictions/*`: Prediction data and accuracy metrics
+- `/api/export/*`: CSV/JSON data export for market data and predictions
+- `/api/backtest/*`: Backtesting simulation endpoints
 - `/api/system/*`: System health and status information
+- `/api/websocket/*`: WebSocket connection status
+
+**WebSocket Real-Time Updates**: Server pushes updates for connected clients with per-symbol subscriptions:
+- `market_update`: New candle data
+- `prediction_update`: New predictions generated
+- `accuracy_update`: Prediction evaluation results
+- Clients subscribe to specific symbols and only receive relevant updates
 
 **Scheduler System**: Node-cron based job scheduler that runs every minute to:
 1. Fetch latest market data from external API or generate simulated data

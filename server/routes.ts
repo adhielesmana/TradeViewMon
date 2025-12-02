@@ -5,6 +5,7 @@ import { scheduler } from "./scheduler";
 import { marketDataService } from "./market-data-service";
 import { technicalIndicators } from "./technical-indicators";
 import { wsService } from "./websocket";
+import { backtestingEngine, type BacktestConfig } from "./backtesting";
 
 const DEFAULT_SYMBOL = marketDataService.getSymbol();
 
@@ -288,6 +289,42 @@ export async function registerRoutes(
       connected: wsService.getClientCount(),
       timestamp: new Date().toISOString(),
     });
+  });
+
+  app.post("/api/backtest/run", async (req, res) => {
+    try {
+      const { symbol, startDate, endDate, timeframe, lookbackPeriod } = req.body;
+
+      if (!symbol || !startDate || !endDate) {
+        return res.status(400).json({ error: "Missing required fields: symbol, startDate, endDate" });
+      }
+
+      const config: BacktestConfig = {
+        symbol,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        timeframe: timeframe || "1min",
+        lookbackPeriod: lookbackPeriod || 20,
+      };
+
+      const result = await backtestingEngine.runBacktest(config);
+      
+      const limitedTrades = result.trades.slice(-500);
+      const limitedEquityCurve = result.equityCurve.length > 500 
+        ? result.equityCurve.filter((_, i) => i % Math.ceil(result.equityCurve.length / 500) === 0)
+        : result.equityCurve;
+
+      res.json({
+        ...result,
+        trades: limitedTrades,
+        equityCurve: limitedEquityCurve,
+        totalTradesInBacktest: result.trades.length,
+      });
+    } catch (error) {
+      console.error("Error running backtest:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to run backtest";
+      res.status(500).json({ error: errorMessage });
+    }
   });
 
   wsService.initialize(httpServer);

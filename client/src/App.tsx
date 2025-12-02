@@ -14,6 +14,7 @@ import { SymbolSelector } from "@/components/symbol-selector";
 import LiveMarket from "@/pages/live-market";
 import Predictions from "@/pages/predictions";
 import Historical from "@/pages/historical";
+import Backtesting from "@/pages/backtesting";
 import SystemStatus from "@/pages/system-status";
 import NotFound from "@/pages/not-found";
 
@@ -23,6 +24,7 @@ function Router() {
       <Route path="/" component={LiveMarket} />
       <Route path="/predictions" component={Predictions} />
       <Route path="/historical" component={Historical} />
+      <Route path="/backtesting" component={Backtesting} />
       <Route path="/status" component={SystemStatus} />
       <Route component={NotFound} />
     </Switch>

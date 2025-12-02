@@ -4,7 +4,8 @@ import {
   TrendingUp, 
   History, 
   Activity,
-  BarChart3
+  BarChart3,
+  FlaskConical
 } from "lucide-react";
 import {
   Sidebar,
@@ -37,6 +38,12 @@ const menuItems = [
     url: "/historical",
     icon: History,
     description: "1-year data",
+  },
+  {
+    title: "Backtesting",
+    url: "/backtesting",
+    icon: FlaskConical,
+    description: "Model testing",
   },
   {
     title: "System Status",
