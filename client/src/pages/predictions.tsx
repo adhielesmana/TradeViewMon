@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PredictionChart } from "@/components/prediction-chart";
 import { PredictionTable } from "@/components/prediction-table";
 import { AccuracyDisplay } from "@/components/accuracy-display";
+import { MultiFactorAnalysis } from "@/components/multi-factor-analysis";
 import { StatCard } from "@/components/stat-card";
 import { ExportDropdown } from "@/components/export-dropdown";
 import { TimeframeSelector } from "@/components/timeframe-selector";
@@ -111,11 +112,12 @@ export default function Predictions() {
             height={350}
           />
         </div>
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1 space-y-6">
           <AccuracyDisplay
             stats={stats || defaultStats}
             isLoading={isLoadingStats}
           />
+          <MultiFactorAnalysis symbol={symbol} />
         </div>
       </div>
 
