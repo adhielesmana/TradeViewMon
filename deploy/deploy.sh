@@ -149,12 +149,10 @@ fi
 export APP_PORT
 
 log_info "Stopping existing containers..."
-docker compose -f deploy/docker-compose.yml down 2>/dev/null || \
-docker-compose -f deploy/docker-compose.yml down 2>/dev/null || true
+docker compose -f deploy/docker-compose.yml down 2>/dev/null || true
 
 log_info "Building and starting services..."
-docker compose -f deploy/docker-compose.yml up -d --build 2>/dev/null || \
-docker-compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/docker-compose.yml up -d --build
 
 # Wait for services to be healthy
 log_info "Waiting for services to start..."
@@ -271,8 +269,8 @@ echo ""
 log_info "Useful commands:"
 log_info "  View app logs:    docker logs -f tradeviewmon"
 log_info "  View db logs:     docker logs -f tradeviewmon-db"
-log_info "  Restart all:      docker compose -f deploy/docker-compose.yml restart"
-log_info "  Stop all:         docker compose -f deploy/docker-compose.yml down"
+log_info "  Restart all:      cd $(pwd) && docker compose -f deploy/docker-compose.yml restart"
+log_info "  Stop all:         cd $(pwd) && docker compose -f deploy/docker-compose.yml down"
 log_info "  Update & redeploy: git pull && ./deploy/deploy.sh"
 echo ""
 
