@@ -510,9 +510,16 @@ export default function LiveDemo() {
                       data-testid="input-trade-quantity"
                     />
                     {currentPrice && tradeQuantity && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Trade value: {formatCurrency(currentPrice.price * parseFloat(tradeQuantity || "0"))}
-                      </p>
+                      <>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Trade value: {formatCurrency(currentPrice.price * parseFloat(tradeQuantity || "0"))}
+                        </p>
+                        {currentPrice.price * parseFloat(tradeQuantity || "0") > (accountData?.stats?.balance || 0) && (
+                          <p className="text-sm text-red-500 mt-1" data-testid="text-insufficient-funds">
+                            Insufficient funds. Available: {formatCurrency(accountData?.stats?.balance || 0)}
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -543,7 +550,11 @@ export default function LiveDemo() {
                 <DialogFooter>
                   <Button
                     onClick={handleOpenTrade}
-                    disabled={openTradeMutation.isPending || !tradeQuantity}
+                    disabled={
+                      openTradeMutation.isPending || 
+                      !tradeQuantity || 
+                      (currentPrice && currentPrice.price * parseFloat(tradeQuantity || "0") > (accountData?.stats?.balance || 0))
+                    }
                     variant={tradeType === "BUY" ? "default" : "destructive"}
                     data-testid="button-confirm-trade"
                   >

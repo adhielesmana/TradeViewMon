@@ -820,7 +820,7 @@ export class DatabaseStorage implements IStorage {
     const tradeValue = exitPrice * position.quantity;
     const newBalance = account.balance + tradeValue;
 
-    const [updatedAccount] = await db.update(demoAccounts)
+    await db.update(demoAccounts)
       .set({
         balance: newBalance,
         totalProfit: profitLoss > 0 ? account.totalProfit + profitLoss : account.totalProfit,
