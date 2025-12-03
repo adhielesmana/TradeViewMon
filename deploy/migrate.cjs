@@ -236,6 +236,43 @@ async function runMigrations() {
         }
         console.log('[Migration] Indexes ready');
         
+        // Fix user_id column type in auto_trade_settings (critical!)
+        // The old schema had INTEGER, but new schema uses VARCHAR (UUID)
+        console.log('[Migration] Checking auto_trade_settings.user_id column type...');
+        try {
+            const colCheck = await pool.query(`
+                SELECT data_type FROM information_schema.columns 
+                WHERE table_name = 'auto_trade_settings' AND column_name = 'user_id'
+            `);
+            if (colCheck.rows.length > 0 && colCheck.rows[0].data_type === 'integer') {
+                console.log('[Migration] Fixing user_id column: INTEGER -> VARCHAR');
+                // Drop and recreate the table since column type change is complex
+                await pool.query('DROP TABLE IF EXISTS auto_trade_settings CASCADE');
+                await pool.query(`
+                    CREATE TABLE auto_trade_settings (
+                        id SERIAL PRIMARY KEY,
+                        user_id VARCHAR NOT NULL UNIQUE,
+                        is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                        trade_units REAL NOT NULL DEFAULT 0.01,
+                        symbol VARCHAR(20) NOT NULL DEFAULT 'XAUUSD',
+                        last_trade_at TIMESTAMP,
+                        last_decision VARCHAR(10),
+                        total_auto_trades INTEGER DEFAULT 0,
+                        closed_auto_trades INTEGER DEFAULT 0,
+                        total_auto_profit REAL DEFAULT 0,
+                        total_auto_loss REAL DEFAULT 0,
+                        winning_auto_trades INTEGER DEFAULT 0,
+                        losing_auto_trades INTEGER DEFAULT 0,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    )
+                `);
+                console.log('[Migration] Recreated auto_trade_settings with VARCHAR user_id');
+            }
+        } catch (err) {
+            console.log('[Migration] user_id check skipped:', err.message.split('\n')[0]);
+        }
+        
         // ADD COLUMNS to existing tables (the key fix!)
         console.log('[Migration] Adding new columns to existing tables...');
         
