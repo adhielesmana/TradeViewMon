@@ -8,7 +8,8 @@ import {
   FlaskConical,
   Users,
   Brain,
-  Wallet
+  Wallet,
+  Settings
 } from "lucide-react";
 import {
   Sidebar,
@@ -79,6 +80,13 @@ const menuItems = [
     url: "/users",
     icon: Users,
     description: "Manage users",
+    adminOnly: true,
+  },
+  {
+    title: "Settings",
+    url: "/settings",
+    icon: Settings,
+    description: "App settings",
     adminOnly: true,
   },
 ];

@@ -369,3 +369,15 @@ export type DemoAccountStats = {
   closedPositions: number;
   winRate: number;
 };
+
+// App Settings - stores application configuration
+export const appSettings = pgTable("app_settings", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  key: varchar("key", { length: 100 }).notNull().unique(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertAppSettingSchema = createInsertSchema(appSettings).omit({ id: true });
+export type AppSetting = typeof appSettings.$inferSelect;
+export type InsertAppSetting = z.infer<typeof insertAppSettingSchema>;

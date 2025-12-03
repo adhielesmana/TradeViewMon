@@ -143,6 +143,9 @@ export async function registerRoutes(
 ): Promise<Server> {
   await seedSuperadmin();
   await seedTestUsers();
+  
+  // Initialize market data service with database API key
+  await marketDataService.initializeFromDatabase(() => storage.getSetting("FINNHUB_API_KEY"));
 
   app.post("/api/auth/login", async (req, res) => {
     try {
@@ -1102,6 +1105,49 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error getting demo price:", error);
       res.status(500).json({ error: "Failed to get price data" });
+    }
+  });
+
+  // Settings Routes (Superadmin only)
+  app.get("/api/settings", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      // Get Finnhub API key status from service
+      const keyStatus = marketDataService.getFinnhubKeyStatus();
+      
+      res.json({
+        finnhubApiKey: keyStatus
+      });
+    } catch (error) {
+      console.error("Error getting settings:", error);
+      res.status(500).json({ error: "Failed to get settings" });
+    }
+  });
+
+  app.post("/api/settings/finnhub-key", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const { apiKey } = req.body;
+      
+      if (typeof apiKey !== "string") {
+        return res.status(400).json({ error: "API key must be a string" });
+      }
+      
+      const trimmedKey = apiKey.trim();
+      
+      // Save to database for persistence
+      await storage.setSetting("FINNHUB_API_KEY", trimmedKey || null);
+      
+      // Update the market data service
+      marketDataService.updateFinnhubApiKey(trimmedKey || undefined);
+      
+      res.json({ 
+        success: true, 
+        message: trimmedKey 
+          ? "Finnhub API key saved successfully" 
+          : "Finnhub API key removed. Stocks will use simulated data."
+      });
+    } catch (error) {
+      console.error("Error saving Finnhub API key:", error);
+      res.status(500).json({ error: "Failed to save API key" });
     }
   });
 

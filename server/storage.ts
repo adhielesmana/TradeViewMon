@@ -1,6 +1,6 @@
 import { 
   marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState, aiSuggestions,
-  demoAccounts, demoPositions, demoTransactions,
+  demoAccounts, demoPositions, demoTransactions, appSettings,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
@@ -13,7 +13,8 @@ import {
   type DemoAccount, type InsertDemoAccount,
   type DemoPosition, type InsertDemoPosition,
   type DemoTransaction, type InsertDemoTransaction,
-  type DemoAccountStats
+  type DemoAccountStats,
+  type AppSetting
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, gte, lte, and, sql, inArray, isNull } from "drizzle-orm";
@@ -96,6 +97,11 @@ export interface IStorage {
   openDemoTrade(userId: string, symbol: string, type: 'BUY' | 'SELL', entryPrice: number, quantity: number, stopLoss?: number, takeProfit?: number): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
   closeDemoTrade(userId: string, positionId: number, exitPrice: number, reason?: 'manual' | 'stop_loss' | 'take_profit' | 'liquidation'): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
   updateOpenPositionPrices(symbol: string, currentPrice: number): Promise<void>;
+
+  // App Settings
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string | null): Promise<AppSetting>;
+  getAllSettings(): Promise<AppSetting[]>;
 }
 
 const startTime = Date.now();
@@ -922,6 +928,39 @@ export class DatabaseStorage implements IStorage {
         await this.closeDemoTrade(position.userId, position.id, currentPrice, 'take_profit');
       }
     }
+  }
+
+  // App Settings Methods
+  async getSetting(key: string): Promise<string | null> {
+    const result = await db.select()
+      .from(appSettings)
+      .where(eq(appSettings.key, key))
+      .limit(1);
+    return result[0]?.value ?? null;
+  }
+
+  async setSetting(key: string, value: string | null): Promise<AppSetting> {
+    const existing = await db.select()
+      .from(appSettings)
+      .where(eq(appSettings.key, key))
+      .limit(1);
+
+    if (existing.length > 0) {
+      const [updated] = await db.update(appSettings)
+        .set({ value, updatedAt: new Date() })
+        .where(eq(appSettings.key, key))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(appSettings)
+        .values({ key, value, updatedAt: new Date() })
+        .returning();
+      return created;
+    }
+  }
+
+  async getAllSettings(): Promise<AppSetting[]> {
+    return db.select().from(appSettings);
   }
 }
 

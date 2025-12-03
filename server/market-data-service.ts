@@ -57,6 +57,7 @@ export class MarketDataService {
   private symbolPrices: Map<string, { base: number; last: number }>;
   private useRealApi: boolean;
   private finnhubApiKey: string | null;
+  private keySource: "none" | "environment" | "database" = "none";
 
   constructor(defaultSymbol: string = "XAUUSD") {
     this.currentSymbol = defaultSymbol;
@@ -65,14 +66,58 @@ export class MarketDataService {
     this.finnhubApiKey = process.env.FINNHUB_API_KEY || null;
     
     if (this.finnhubApiKey) {
-      console.log("[MarketData] Finnhub API key configured - real-time stock data enabled");
+      this.keySource = "environment";
+      console.log("[MarketData] Finnhub API key configured from environment - real-time stock data enabled");
     } else {
-      console.log("[MarketData] No Finnhub API key - stocks will use simulated data");
+      console.log("[MarketData] No Finnhub API key in environment - will check database on init");
     }
     
     for (const [symbol, config] of Object.entries(SYMBOL_CONFIGS)) {
       this.symbolPrices.set(symbol, { base: config.basePrice, last: config.basePrice });
     }
+  }
+
+  // Initialize with database key (called on server startup)
+  async initializeFromDatabase(getDbKey: () => Promise<string | null>): Promise<void> {
+    // Only load from database if env var is not set
+    if (!process.env.FINNHUB_API_KEY) {
+      const dbKey = await getDbKey();
+      if (dbKey) {
+        this.finnhubApiKey = dbKey;
+        this.keySource = "database";
+        console.log("[MarketData] Finnhub API key loaded from database - real-time stock data enabled");
+      } else {
+        console.log("[MarketData] No Finnhub API key in database - stocks will use simulated data");
+      }
+    }
+  }
+
+  // Update Finnhub API key (called when user saves from settings)
+  updateFinnhubApiKey(key: string | undefined): void {
+    if (key) {
+      this.finnhubApiKey = key;
+      this.keySource = "database";
+      console.log("[MarketData] Finnhub API key updated - real-time stock data enabled");
+    } else {
+      this.finnhubApiKey = process.env.FINNHUB_API_KEY || null;
+      this.keySource = this.finnhubApiKey ? "environment" : "none";
+      console.log("[MarketData] Finnhub API key cleared - reverting to env var or simulated data");
+    }
+  }
+
+  // Get current Finnhub API key status (for settings page)
+  getFinnhubKeyStatus(): { isConfigured: boolean; source: string; maskedValue: string | null } {
+    const key = this.finnhubApiKey;
+    const isConfigured = !!key;
+    
+    let maskedValue: string | null = null;
+    if (key && key.length > 4) {
+      maskedValue = `****${key.slice(-4)}`;
+    } else if (key) {
+      maskedValue = "****";
+    }
+    
+    return { isConfigured, source: this.keySource, maskedValue };
   }
 
   private getConfig(symbol: string): SymbolConfig {

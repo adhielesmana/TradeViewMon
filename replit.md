@@ -20,12 +20,16 @@ Preferred communication style: Simple, everyday language.
 
 **State Management**: TanStack Query (React Query) for server state management with aggressive caching strategies. No global client state management - components fetch data independently with 30-60 second refetch intervals for real-time updates.
 
-**Routing**: Wouter for lightweight client-side routing with five main pages:
+**Routing**: Wouter for lightweight client-side routing with multiple pages:
 - Live Market: Real-time price monitoring and current market statistics
 - Predictions: AI prediction visualization with accuracy tracking
+- AI Suggestions: Buy/Sell/Hold signals with target prices
 - Historical: Historical data analysis with configurable time ranges
 - Backtesting: Historical model performance evaluation and analysis
-- System Status: Health monitoring and system metrics
+- Live Demo: Paper trading with virtual currency
+- System Status: Health monitoring and system metrics (Admin only)
+- User Management: Manage user accounts and roles (Admin only)
+- Settings: Configure API keys and app settings (Admin only)
 
 **Design System**: 
 - Typography: Inter for UI, JetBrains Mono for numerical data
@@ -115,6 +119,11 @@ Preferred communication style: Simple, everyday language.
    - Stores: symbol, last open price, last close price, last timestamp
    - Ensures new candles continue from previous close price
    - Persists across server restarts for seamless price flow
+
+6. **app_settings**: Application configuration
+   - Stores: key-value pairs for app settings (e.g., FINNHUB_API_KEY)
+   - API keys saved here persist across server restarts
+   - Environment variables take precedence over database values
 
 **Query Patterns**:
 - Time-based range queries for charts (last hour, day, week, month, year)
