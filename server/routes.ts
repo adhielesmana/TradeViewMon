@@ -1186,6 +1186,55 @@ export async function registerRoutes(
     }
   });
 
+  // Auto-Trade Settings Routes
+  app.get("/api/demo/auto-trade", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      let settings = await storage.getAutoTradeSettings(userId);
+      
+      if (!settings) {
+        settings = await storage.createAutoTradeSettings(userId);
+      }
+      
+      res.json(settings);
+    } catch (error) {
+      console.error("Error getting auto-trade settings:", error);
+      res.status(500).json({ error: "Failed to get auto-trade settings" });
+    }
+  });
+
+  app.patch("/api/demo/auto-trade", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { isEnabled, tradeAmount, symbol } = req.body;
+      
+      const updateData: { isEnabled?: boolean; tradeAmount?: number; symbol?: string } = {};
+      
+      if (typeof isEnabled === "boolean") {
+        updateData.isEnabled = isEnabled;
+      }
+      
+      if (typeof tradeAmount === "number" && tradeAmount >= 0.01) {
+        updateData.tradeAmount = tradeAmount;
+      }
+      
+      if (typeof symbol === "string" && symbol.length > 0) {
+        updateData.symbol = symbol;
+      }
+      
+      const settings = await storage.updateAutoTradeSettings(userId, updateData);
+      
+      if (!settings) {
+        return res.status(404).json({ error: "Failed to update auto-trade settings" });
+      }
+      
+      res.json(settings);
+    } catch (error) {
+      console.error("Error updating auto-trade settings:", error);
+      res.status(500).json({ error: "Failed to update auto-trade settings" });
+    }
+  });
+
   // Currency Rates Routes
   app.get("/api/currency/rates", requireAuth, async (req, res) => {
     try {

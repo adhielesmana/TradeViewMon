@@ -476,6 +476,9 @@ class Scheduler {
         lastConfidence = suggestion.confidence;
       }
       
+      // Process auto-trades based on AI suggestions
+      await this.processAutoTrades();
+      
       // Evaluate past suggestions for all symbols
       await this.evaluateAiSuggestions();
       
@@ -503,6 +506,94 @@ class Scheduler {
         errorMessage: String(error),
         metadata: null,
       });
+    }
+  }
+
+  private async processAutoTrades(): Promise<void> {
+    try {
+      const enabledSettings = await storage.getAllEnabledAutoTradeSettings();
+      
+      for (const settings of enabledSettings) {
+        try {
+          // Get the latest AI suggestion for the configured symbol
+          const suggestion = await storage.getLatestAiSuggestion(settings.symbol);
+          
+          if (!suggestion) {
+            continue;
+          }
+          
+          // Only trade on BUY or SELL, HOLD does nothing
+          if (suggestion.decision === "HOLD") {
+            continue;
+          }
+          
+          // Check if we already traded on this suggestion (avoid duplicate trades)
+          if (settings.lastTradeAt && suggestion.createdAt) {
+            const suggestionTime = new Date(suggestion.createdAt).getTime();
+            const lastTradeTime = new Date(settings.lastTradeAt).getTime();
+            
+            // Skip if we already traded within the last 30 seconds after this suggestion
+            if (lastTradeTime >= suggestionTime - 30000) {
+              continue;
+            }
+          }
+          
+          // Get user's demo account
+          const account = await storage.getDemoAccount(settings.userId);
+          
+          if (!account) {
+            console.log(`[AutoTrade] No demo account for user ${settings.userId}`);
+            continue;
+          }
+          
+          // Calculate trade quantity based on trade amount in USD
+          const tradeAmountUsd = settings.tradeAmount;
+          const currentPrice = suggestion.currentPrice;
+          
+          // Check if user has sufficient balance
+          if (account.balance < tradeAmountUsd) {
+            console.log(`[AutoTrade] Insufficient balance for user ${settings.userId}: ${account.balance} < ${tradeAmountUsd}`);
+            continue;
+          }
+          
+          // Calculate quantity (amount / price = quantity)
+          const quantity = tradeAmountUsd / currentPrice;
+          
+          // Open the trade
+          const tradeType = suggestion.decision as 'BUY' | 'SELL';
+          const result = await storage.openDemoTrade(
+            settings.userId,
+            settings.symbol,
+            tradeType,
+            currentPrice,
+            quantity
+          );
+          
+          if (result) {
+            // Record the auto-trade
+            await storage.recordAutoTrade(settings.userId, suggestion.decision);
+            
+            console.log(`[AutoTrade] Executed ${tradeType} trade for user ${settings.userId}: ${quantity.toFixed(6)} ${settings.symbol} @ $${currentPrice.toFixed(2)}`);
+            
+            // Broadcast auto-trade event via WebSocket
+            wsService.broadcast({
+              type: "auto_trade_executed",
+              userId: settings.userId,
+              data: {
+                symbol: settings.symbol,
+                decision: suggestion.decision,
+                quantity,
+                price: currentPrice,
+                tradeAmountUsd,
+              },
+            });
+          }
+        } catch (userError) {
+          console.error(`[AutoTrade] Error processing auto-trade for user ${settings.userId}:`, userError);
+        }
+      }
+    } catch (error) {
+      console.error("[Scheduler] Error in auto-trade processing:", error);
     }
   }
 
