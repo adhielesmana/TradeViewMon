@@ -41,16 +41,28 @@ export function MarketChart({
     }));
   }, [data]);
 
-  const { minPrice, maxPrice, avgPrice } = useMemo(() => {
-    if (data.length === 0) return { minPrice: 0, maxPrice: 0, avgPrice: 0 };
-    const prices = data.map((d) => d.close);
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+  const { minPrice, maxPrice, avgPrice, yAxisTicks } = useMemo(() => {
+    if (data.length === 0) return { minPrice: 0, maxPrice: 0, avgPrice: 0, yAxisTicks: [] };
+    
+    const allLows = data.map((d) => d.low);
+    const allHighs = data.map((d) => d.high);
+    const minData = Math.min(...allLows);
+    const maxData = Math.max(...allHighs);
+    const avg = data.map(d => d.close).reduce((a, b) => a + b, 0) / data.length;
+    
+    const roundedMin = Math.floor(minData * 10) / 10 - 0.1;
+    const roundedMax = Math.ceil(maxData * 10) / 10 + 0.1;
+    
+    const ticks: number[] = [];
+    for (let tick = roundedMin; tick <= roundedMax; tick = Math.round((tick + 0.10) * 100) / 100) {
+      ticks.push(tick);
+    }
+    
     return { 
-      minPrice: min - (max - min) * 0.1, 
-      maxPrice: max + (max - min) * 0.1,
-      avgPrice: avg 
+      minPrice: roundedMin, 
+      maxPrice: roundedMax,
+      avgPrice: avg,
+      yAxisTicks: ticks
     };
   }, [data]);
 
@@ -118,12 +130,13 @@ export function MarketChart({
             />
             <YAxis
               domain={[minPrice, maxPrice]}
+              ticks={yAxisTicks}
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-              tickFormatter={(value) => `$${value.toFixed(0)}`}
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              tickFormatter={(value) => `$${value.toFixed(2)}`}
               dx={-5}
-              width={60}
+              width={70}
             />
             <Tooltip
               contentStyle={{
