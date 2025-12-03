@@ -71,11 +71,15 @@ Preferred communication style: Simple, everyday language.
 - Configurable match threshold (default 0.5%) for accuracy determination
 
 **Market Data Service**: Abstracted service layer supporting:
-- External API integration (designed for Alpha Vantage, AllTick, or similar)
-- Simulated data generation for development/testing
+- **Gold-API.com Integration**: Free real-time prices for XAU (Gold), XAG (Silver), BTC (Bitcoin)
+  - Endpoint: `https://api.gold-api.com/price/{symbol}`
+  - No authentication required for free tier
+  - Returns current spot price used as candle close
+- Simulated data generation for unsupported symbols (DXY, US10Y, GDX, GDXJ, NEM, SPX, USOIL)
 - Historical data backfill (generates 1 hour of 1-minute candles on startup)
 - Real-time data fetching with 1-minute intervals
 - Candlestick chart displays 1-hour range with 1-minute candles (~60 data points)
+- Price continuity: Open price = previous candle's close, stored in `price_state` table
 
 ### Database Architecture
 
@@ -133,11 +137,12 @@ Preferred communication style: Simple, everyday language.
 
 ### Third-Party APIs
 
-**Market Data Provider** (configurable):
-- Alpha Vantage API (primary option - requires API key in `ALPHA_VANTAGE_API_KEY`)
-- AllTick API (alternative)
-- StockData.org API (alternative)
-- Fallback: Built-in simulated data generator for development
+**Gold-API.com** (Primary - FREE, no authentication required):
+- Provides real-time spot prices for precious metals and crypto
+- Supported symbols: XAU (Gold → XAUUSD), XAG (Silver → XAGUSD), BTC (Bitcoin → BTCUSD)
+- Endpoint: `https://api.gold-api.com/price/{symbol}`
+- Response: `{ name, price, symbol, updatedAt, updatedAtReadable }`
+- Fallback: Built-in simulated data generator for unsupported symbols
 
 ### Database
 
