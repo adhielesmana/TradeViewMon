@@ -24,6 +24,7 @@ import SystemStatus from "@/pages/system-status";
 import UserManagement from "@/pages/user-management";
 import SettingsPage from "@/pages/settings";
 import LoginPage from "@/pages/login";
+import RegisterPage from "@/pages/register";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoutes() {
@@ -88,7 +89,10 @@ function AuthenticatedApp() {
     );
   }
 
-  if (!isAuthenticated && location !== "/login") {
+  // Allow access to public routes without authentication
+  const isPublicRoute = location === "/login" || location.startsWith("/register");
+  
+  if (!isAuthenticated && !isPublicRoute) {
     return <Redirect to="/login" />;
   }
 
@@ -97,6 +101,13 @@ function AuthenticatedApp() {
       return <Redirect to="/" />;
     }
     return <LoginPage />;
+  }
+
+  if (location.startsWith("/register")) {
+    if (isAuthenticated) {
+      return <Redirect to="/" />;
+    }
+    return <RegisterPage />;
   }
 
   return (

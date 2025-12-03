@@ -352,13 +352,15 @@ function InviteRow({
     },
   });
 
-  const copyToken = () => {
-    navigator.clipboard.writeText(invite.token);
+  const copyInviteLink = () => {
+    const baseUrl = window.location.origin;
+    const inviteLink = `${baseUrl}/register?token=${invite.token}`;
+    navigator.clipboard.writeText(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     toast({
-      title: "Token Copied",
-      description: "Invite token copied to clipboard",
+      title: "Invitation Link Copied",
+      description: "Share this link with the invited user",
     });
   };
 
@@ -392,8 +394,8 @@ function InviteRow({
           <Button
             variant="ghost"
             size="icon"
-            onClick={copyToken}
-            data-testid={`button-copy-token-${invite.id}`}
+            onClick={copyInviteLink}
+            data-testid={`button-copy-link-${invite.id}`}
           >
             {copied ? (
               <Check className="h-4 w-4 text-profit" />

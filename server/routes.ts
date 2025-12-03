@@ -6,7 +6,8 @@ import { marketDataService } from "./market-data-service";
 import { technicalIndicators } from "./technical-indicators";
 import { wsService } from "./websocket";
 import { backtestingEngine, type BacktestConfig } from "./backtesting";
-import { authenticateUser, seedSuperadmin, seedTestUsers, findUserById, type SafeUser } from "./auth";
+import { authenticateUser, seedSuperadmin, seedTestUsers, findUserById, findUserByUsername, createUser } from "./auth";
+import type { SafeUser } from "@shared/schema";
 import { predictionEngine } from "./prediction-engine";
 import { z } from "zod";
 
@@ -367,6 +368,75 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error deleting invite:", error);
       res.status(500).json({ error: "Failed to delete invite" });
+    }
+  });
+
+  // Validate invite token (public route for registration page)
+  app.get("/api/invites/validate", async (req, res) => {
+    try {
+      const token = req.query.token as string;
+      if (!token) {
+        return res.status(400).json({ error: "Token is required" });
+      }
+
+      const invite = await storage.getInviteByToken(token);
+      if (!invite) {
+        return res.status(404).json({ error: "Invalid or expired invitation" });
+      }
+
+      res.json({
+        email: invite.email,
+        role: invite.role,
+        expiresAt: invite.expiresAt,
+      });
+    } catch (error) {
+      console.error("Error validating invite:", error);
+      res.status(500).json({ error: "Failed to validate invite" });
+    }
+  });
+
+  // Register with invite token (public route)
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { username, password, token } = req.body;
+
+      if (!username || !password || !token) {
+        return res.status(400).json({ error: "Username, password, and invitation token are required" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+
+      // Validate the invite
+      const invite = await storage.getInviteByToken(token);
+      if (!invite) {
+        return res.status(400).json({ error: "Invalid or expired invitation" });
+      }
+
+      // Check if username already exists
+      const existingUser = await findUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ error: "Username already taken" });
+      }
+
+      // Create the user with the role from the invite
+      const user = await createUser(username, password, invite.role);
+
+      // Mark the invite as accepted
+      await storage.acceptInvite(token);
+
+      res.json({
+        message: "Registration successful",
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+        },
+      });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(500).json({ error: "Registration failed" });
     }
   });
 
