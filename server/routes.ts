@@ -875,6 +875,176 @@ export async function registerRoutes(
     }
   });
 
+  // Demo Trading Routes
+  // Get user's demo account and stats
+  app.get("/api/demo/account", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      let account = await storage.getDemoAccount(userId);
+      
+      if (!account) {
+        account = await storage.createDemoAccount(userId);
+      }
+      
+      const stats = await storage.getDemoAccountStats(userId);
+      res.json({ account, stats });
+    } catch (error) {
+      console.error("Error getting demo account:", error);
+      res.status(500).json({ error: "Failed to get demo account" });
+    }
+  });
+
+  // Deposit demo credits
+  app.post("/api/demo/deposit", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { amount } = req.body;
+      
+      if (!amount || typeof amount !== "number" || amount <= 0) {
+        return res.status(400).json({ error: "Invalid deposit amount" });
+      }
+      
+      const result = await storage.depositDemoCredits(userId, amount);
+      res.json(result);
+    } catch (error) {
+      console.error("Error depositing demo credits:", error);
+      res.status(500).json({ error: "Failed to deposit demo credits" });
+    }
+  });
+
+  // Withdraw demo credits
+  app.post("/api/demo/withdraw", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { amount } = req.body;
+      
+      if (!amount || typeof amount !== "number" || amount <= 0) {
+        return res.status(400).json({ error: "Invalid withdrawal amount" });
+      }
+      
+      const result = await storage.withdrawDemoCredits(userId, amount);
+      if (!result) {
+        return res.status(400).json({ error: "Insufficient balance" });
+      }
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error withdrawing demo credits:", error);
+      res.status(500).json({ error: "Failed to withdraw demo credits" });
+    }
+  });
+
+  // Get user's positions
+  app.get("/api/demo/positions", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const status = req.query.status as string | undefined;
+      
+      const positions = await storage.getDemoPositions(userId, status);
+      res.json(positions);
+    } catch (error) {
+      console.error("Error getting demo positions:", error);
+      res.status(500).json({ error: "Failed to get demo positions" });
+    }
+  });
+
+  // Open a new trade
+  app.post("/api/demo/trade/open", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { symbol, type, entryPrice, quantity, stopLoss, takeProfit } = req.body;
+      
+      if (!symbol || !type || !entryPrice || !quantity) {
+        return res.status(400).json({ error: "Missing required fields: symbol, type, entryPrice, quantity" });
+      }
+      
+      if (type !== "BUY" && type !== "SELL") {
+        return res.status(400).json({ error: "Type must be BUY or SELL" });
+      }
+      
+      if (quantity <= 0) {
+        return res.status(400).json({ error: "Quantity must be greater than 0" });
+      }
+      
+      const result = await storage.openDemoTrade(
+        userId, 
+        symbol, 
+        type as "BUY" | "SELL", 
+        entryPrice, 
+        quantity, 
+        stopLoss, 
+        takeProfit
+      );
+      
+      if (!result) {
+        return res.status(400).json({ error: "Failed to open trade. Check balance or account status." });
+      }
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error opening demo trade:", error);
+      res.status(500).json({ error: "Failed to open demo trade" });
+    }
+  });
+
+  // Close a trade
+  app.post("/api/demo/trade/close", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { positionId, exitPrice } = req.body;
+      
+      if (!positionId || !exitPrice) {
+        return res.status(400).json({ error: "Missing required fields: positionId, exitPrice" });
+      }
+      
+      const result = await storage.closeDemoTrade(userId, positionId, exitPrice);
+      
+      if (!result) {
+        return res.status(400).json({ error: "Failed to close trade. Position not found or not owned by user." });
+      }
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error closing demo trade:", error);
+      res.status(500).json({ error: "Failed to close demo trade" });
+    }
+  });
+
+  // Get user's transactions
+  app.get("/api/demo/transactions", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const transactions = await storage.getDemoTransactions(userId, limit);
+      res.json(transactions);
+    } catch (error) {
+      console.error("Error getting demo transactions:", error);
+      res.status(500).json({ error: "Failed to get demo transactions" });
+    }
+  });
+
+  // Get current market price for a symbol (for demo trading)
+  app.get("/api/demo/price/:symbol", requireAuth, async (req, res) => {
+    try {
+      const { symbol } = req.params;
+      const marketData = await storage.getLatestMarketData(symbol);
+      
+      if (!marketData) {
+        return res.status(404).json({ error: "No price data available for symbol" });
+      }
+      
+      res.json({ 
+        symbol, 
+        price: marketData.close, 
+        timestamp: marketData.timestamp 
+      });
+    } catch (error) {
+      console.error("Error getting demo price:", error);
+      res.status(500).json({ error: "Failed to get price data" });
+    }
+  });
+
   wsService.initialize(httpServer);
 
   scheduler.start().catch(console.error);
