@@ -1,5 +1,6 @@
 import { 
   marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState, aiSuggestions,
+  demoAccounts, demoPositions, demoTransactions,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
@@ -8,7 +9,11 @@ import {
   type User, type SafeUser, type InsertUser, type UpdateUser,
   type UserInvite, type InsertUserInvite,
   type PriceState, type InsertPriceState,
-  type AiSuggestion, type InsertAiSuggestion, type AiSuggestionAccuracyStats
+  type AiSuggestion, type InsertAiSuggestion, type AiSuggestionAccuracyStats,
+  type DemoAccount, type InsertDemoAccount,
+  type DemoPosition, type InsertDemoPosition,
+  type DemoTransaction, type InsertDemoTransaction,
+  type DemoAccountStats
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, gte, lte, and, sql, inArray, isNull } from "drizzle-orm";
@@ -67,6 +72,30 @@ export interface IStorage {
   getUnevaluatedSuggestions(olderThanMinutes?: number): Promise<AiSuggestion[]>;
   evaluateAiSuggestion(id: number, actualPrice: number, wasAccurate: boolean, profitLoss: number): Promise<AiSuggestion | null>;
   getAiSuggestionAccuracyStats(symbol: string): Promise<AiSuggestionAccuracyStats>;
+
+  // Demo Trading - Accounts
+  getDemoAccount(userId: string): Promise<DemoAccount | null>;
+  createDemoAccount(userId: string): Promise<DemoAccount>;
+  updateDemoAccountBalance(accountId: number, balance: number): Promise<DemoAccount | null>;
+  getDemoAccountStats(userId: string): Promise<DemoAccountStats | null>;
+
+  // Demo Trading - Positions
+  getDemoPositions(userId: string, status?: string): Promise<DemoPosition[]>;
+  getDemoPositionById(id: number): Promise<DemoPosition | null>;
+  createDemoPosition(position: InsertDemoPosition): Promise<DemoPosition>;
+  updateDemoPosition(id: number, updates: Partial<DemoPosition>): Promise<DemoPosition | null>;
+  closeDemoPosition(id: number, exitPrice: number, reason: string): Promise<DemoPosition | null>;
+
+  // Demo Trading - Transactions
+  getDemoTransactions(userId: string, limit?: number): Promise<DemoTransaction[]>;
+  createDemoTransaction(transaction: InsertDemoTransaction): Promise<DemoTransaction>;
+
+  // Demo Trading - Combined Operations
+  depositDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction }>;
+  withdrawDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction } | null>;
+  openDemoTrade(userId: string, symbol: string, type: 'BUY' | 'SELL', entryPrice: number, quantity: number, stopLoss?: number, takeProfit?: number): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
+  closeDemoTrade(userId: string, positionId: number, exitPrice: number): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
+  updateOpenPositionPrices(symbol: string, currentPrice: number): Promise<void>;
 }
 
 const startTime = Date.now();
@@ -528,6 +557,330 @@ export class DatabaseStorage implements IStorage {
       sellAccuracy: sellSuggestions.length > 0 ? (sellAccurate / sellSuggestions.length) * 100 : 0,
       holdAccuracy: holdSuggestions.length > 0 ? (holdAccurate / holdSuggestions.length) * 100 : 0,
     };
+  }
+
+  // Demo Trading - Accounts
+  async getDemoAccount(userId: string): Promise<DemoAccount | null> {
+    const [result] = await db.select()
+      .from(demoAccounts)
+      .where(eq(demoAccounts.userId, userId))
+      .limit(1);
+    return result || null;
+  }
+
+  async createDemoAccount(userId: string): Promise<DemoAccount> {
+    const [result] = await db.insert(demoAccounts)
+      .values({
+        userId,
+        balance: 0,
+        totalDeposited: 0,
+        totalWithdrawn: 0,
+        totalProfit: 0,
+        totalLoss: 0,
+      })
+      .returning();
+    return result;
+  }
+
+  async updateDemoAccountBalance(accountId: number, balance: number): Promise<DemoAccount | null> {
+    const [result] = await db.update(demoAccounts)
+      .set({ balance, updatedAt: new Date() })
+      .where(eq(demoAccounts.id, accountId))
+      .returning();
+    return result || null;
+  }
+
+  async getDemoAccountStats(userId: string): Promise<DemoAccountStats | null> {
+    const account = await this.getDemoAccount(userId);
+    if (!account) return null;
+
+    const openPositions = await db.select()
+      .from(demoPositions)
+      .where(and(
+        eq(demoPositions.userId, userId),
+        eq(demoPositions.status, 'open')
+      ));
+
+    const closedPositions = await db.select()
+      .from(demoPositions)
+      .where(and(
+        eq(demoPositions.userId, userId),
+        eq(demoPositions.status, 'closed')
+      ));
+
+    const winningTrades = closedPositions.filter(p => (p.profitLoss || 0) > 0);
+    const winRate = closedPositions.length > 0 
+      ? (winningTrades.length / closedPositions.length) * 100 
+      : 0;
+
+    return {
+      balance: account.balance,
+      totalDeposited: account.totalDeposited,
+      totalWithdrawn: account.totalWithdrawn,
+      totalProfit: account.totalProfit,
+      totalLoss: account.totalLoss,
+      netProfitLoss: account.totalProfit - account.totalLoss,
+      profitLossPercent: account.totalDeposited > 0 
+        ? ((account.totalProfit - account.totalLoss) / account.totalDeposited) * 100 
+        : 0,
+      openPositions: openPositions.length,
+      closedPositions: closedPositions.length,
+      winRate,
+    };
+  }
+
+  // Demo Trading - Positions
+  async getDemoPositions(userId: string, status?: string): Promise<DemoPosition[]> {
+    const conditions = [eq(demoPositions.userId, userId)];
+    if (status) {
+      conditions.push(eq(demoPositions.status, status));
+    }
+    
+    return db.select()
+      .from(demoPositions)
+      .where(and(...conditions))
+      .orderBy(desc(demoPositions.openedAt));
+  }
+
+  async getDemoPositionById(id: number): Promise<DemoPosition | null> {
+    const [result] = await db.select()
+      .from(demoPositions)
+      .where(eq(demoPositions.id, id))
+      .limit(1);
+    return result || null;
+  }
+
+  async createDemoPosition(position: InsertDemoPosition): Promise<DemoPosition> {
+    const [result] = await db.insert(demoPositions)
+      .values(position)
+      .returning();
+    return result;
+  }
+
+  async updateDemoPosition(id: number, updates: Partial<DemoPosition>): Promise<DemoPosition | null> {
+    const [result] = await db.update(demoPositions)
+      .set(updates)
+      .where(eq(demoPositions.id, id))
+      .returning();
+    return result || null;
+  }
+
+  async closeDemoPosition(id: number, exitPrice: number, reason: string): Promise<DemoPosition | null> {
+    const position = await this.getDemoPositionById(id);
+    if (!position) return null;
+
+    const profitLoss = position.type === 'BUY'
+      ? (exitPrice - position.entryPrice) * position.quantity
+      : (position.entryPrice - exitPrice) * position.quantity;
+    
+    const profitLossPercent = ((profitLoss) / (position.entryPrice * position.quantity)) * 100;
+
+    const [result] = await db.update(demoPositions)
+      .set({
+        exitPrice,
+        profitLoss,
+        profitLossPercent,
+        status: 'closed',
+        closedAt: new Date(),
+        closedReason: reason,
+      })
+      .where(eq(demoPositions.id, id))
+      .returning();
+    return result || null;
+  }
+
+  // Demo Trading - Transactions
+  async getDemoTransactions(userId: string, limit: number = 50): Promise<DemoTransaction[]> {
+    return db.select()
+      .from(demoTransactions)
+      .where(eq(demoTransactions.userId, userId))
+      .orderBy(desc(demoTransactions.createdAt))
+      .limit(limit);
+  }
+
+  async createDemoTransaction(transaction: InsertDemoTransaction): Promise<DemoTransaction> {
+    const [result] = await db.insert(demoTransactions)
+      .values(transaction)
+      .returning();
+    return result;
+  }
+
+  // Demo Trading - Combined Operations
+  async depositDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction }> {
+    let account = await this.getDemoAccount(userId);
+    if (!account) {
+      account = await this.createDemoAccount(userId);
+    }
+
+    const newBalance = account.balance + amount;
+    const [updatedAccount] = await db.update(demoAccounts)
+      .set({
+        balance: newBalance,
+        totalDeposited: account.totalDeposited + amount,
+        updatedAt: new Date(),
+      })
+      .where(eq(demoAccounts.id, account.id))
+      .returning();
+
+    const transaction = await this.createDemoTransaction({
+      accountId: account.id,
+      userId,
+      type: 'deposit',
+      amount,
+      balanceAfter: newBalance,
+      description: `Deposited $${amount.toFixed(2)} demo credits`,
+    });
+
+    return { account: updatedAccount, transaction };
+  }
+
+  async withdrawDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction } | null> {
+    const account = await this.getDemoAccount(userId);
+    if (!account || account.balance < amount) return null;
+
+    const newBalance = account.balance - amount;
+    const [updatedAccount] = await db.update(demoAccounts)
+      .set({
+        balance: newBalance,
+        totalWithdrawn: account.totalWithdrawn + amount,
+        updatedAt: new Date(),
+      })
+      .where(eq(demoAccounts.id, account.id))
+      .returning();
+
+    const transaction = await this.createDemoTransaction({
+      accountId: account.id,
+      userId,
+      type: 'withdraw',
+      amount: -amount,
+      balanceAfter: newBalance,
+      description: `Withdrew $${amount.toFixed(2)} demo credits`,
+    });
+
+    return { account: updatedAccount, transaction };
+  }
+
+  async openDemoTrade(
+    userId: string, 
+    symbol: string, 
+    type: 'BUY' | 'SELL', 
+    entryPrice: number, 
+    quantity: number, 
+    stopLoss?: number, 
+    takeProfit?: number
+  ): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null> {
+    const account = await this.getDemoAccount(userId);
+    if (!account) return null;
+
+    const tradeValue = entryPrice * quantity;
+    if (account.balance < tradeValue) return null;
+
+    const newBalance = account.balance - tradeValue;
+    await db.update(demoAccounts)
+      .set({ balance: newBalance, updatedAt: new Date() })
+      .where(eq(demoAccounts.id, account.id));
+
+    const position = await this.createDemoPosition({
+      accountId: account.id,
+      userId,
+      symbol,
+      type,
+      entryPrice,
+      quantity,
+      currentPrice: entryPrice,
+      stopLoss: stopLoss || null,
+      takeProfit: takeProfit || null,
+      status: 'open',
+    });
+
+    const transaction = await this.createDemoTransaction({
+      accountId: account.id,
+      userId,
+      type: 'trade_open',
+      amount: -tradeValue,
+      balanceAfter: newBalance,
+      description: `Opened ${type} position: ${quantity} ${symbol} @ $${entryPrice.toFixed(2)}`,
+      positionId: position.id,
+    });
+
+    return { position, transaction };
+  }
+
+  async closeDemoTrade(userId: string, positionId: number, exitPrice: number): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null> {
+    const position = await this.getDemoPositionById(positionId);
+    if (!position || position.userId !== userId || position.status !== 'open') return null;
+
+    const account = await this.getDemoAccount(userId);
+    if (!account) return null;
+
+    const profitLoss = position.type === 'BUY'
+      ? (exitPrice - position.entryPrice) * position.quantity
+      : (position.entryPrice - exitPrice) * position.quantity;
+
+    const tradeValue = exitPrice * position.quantity;
+    const newBalance = account.balance + tradeValue;
+
+    const [updatedAccount] = await db.update(demoAccounts)
+      .set({
+        balance: newBalance,
+        totalProfit: profitLoss > 0 ? account.totalProfit + profitLoss : account.totalProfit,
+        totalLoss: profitLoss < 0 ? account.totalLoss + Math.abs(profitLoss) : account.totalLoss,
+        updatedAt: new Date(),
+      })
+      .where(eq(demoAccounts.id, account.id));
+
+    const closedPosition = await this.closeDemoPosition(positionId, exitPrice, 'manual');
+    if (!closedPosition) return null;
+
+    const transaction = await this.createDemoTransaction({
+      accountId: account.id,
+      userId,
+      type: profitLoss >= 0 ? 'profit' : 'loss',
+      amount: tradeValue,
+      balanceAfter: newBalance,
+      description: `Closed ${position.type} position: ${position.quantity} ${position.symbol} @ $${exitPrice.toFixed(2)} (${profitLoss >= 0 ? '+' : ''}$${profitLoss.toFixed(2)})`,
+      positionId: position.id,
+    });
+
+    return { position: closedPosition, transaction };
+  }
+
+  async updateOpenPositionPrices(symbol: string, currentPrice: number): Promise<void> {
+    const openPositions = await db.select()
+      .from(demoPositions)
+      .where(and(
+        eq(demoPositions.symbol, symbol),
+        eq(demoPositions.status, 'open')
+      ));
+
+    for (const position of openPositions) {
+      const profitLoss = position.type === 'BUY'
+        ? (currentPrice - position.entryPrice) * position.quantity
+        : (position.entryPrice - currentPrice) * position.quantity;
+      
+      const profitLossPercent = ((profitLoss) / (position.entryPrice * position.quantity)) * 100;
+
+      await db.update(demoPositions)
+        .set({
+          currentPrice,
+          profitLoss,
+          profitLossPercent,
+        })
+        .where(eq(demoPositions.id, position.id));
+
+      // Check for stop loss / take profit triggers
+      if (position.stopLoss && (
+        (position.type === 'BUY' && currentPrice <= position.stopLoss) ||
+        (position.type === 'SELL' && currentPrice >= position.stopLoss)
+      )) {
+        await this.closeDemoTrade(position.userId, position.id, currentPrice);
+      } else if (position.takeProfit && (
+        (position.type === 'BUY' && currentPrice >= position.takeProfit) ||
+        (position.type === 'SELL' && currentPrice <= position.takeProfit)
+      )) {
+        await this.closeDemoTrade(position.userId, position.id, currentPrice);
+      }
+    }
   }
 }
 
