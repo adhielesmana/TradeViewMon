@@ -53,15 +53,28 @@ export class MarketDataService {
     prices.last = Math.max(prices.last, prices.base * 0.9);
     prices.last = Math.min(prices.last, prices.base * 1.1);
 
-    const priceScale = prices.base > 1000 ? 0.01 : prices.base > 100 ? 0.1 : 0.001;
-    const open = prices.last + (Math.random() - 0.5) * priceScale * prices.base;
-    const close = prices.last;
-    const high = Math.max(open, close) + Math.random() * priceScale * prices.base * 0.5;
-    const low = Math.min(open, close) - Math.random() * priceScale * prices.base * 0.5;
-    const volume = Math.floor(100000 + Math.random() * 500000);
-
     const decimals = prices.base > 100 ? 2 : prices.base > 10 ? 3 : 4;
     const factor = Math.pow(10, decimals);
+    
+    const bodySize = prices.base * 0.003 * (0.5 + Math.random());
+    const wickSize = prices.base * 0.002 * Math.random();
+    
+    const isBullish = Math.random() > 0.5;
+    
+    let open: number, close: number, high: number, low: number;
+    
+    if (isBullish) {
+      open = prices.last - bodySize / 2;
+      close = prices.last + bodySize / 2;
+    } else {
+      open = prices.last + bodySize / 2;
+      close = prices.last - bodySize / 2;
+    }
+    
+    high = Math.max(open, close) + wickSize;
+    low = Math.min(open, close) - wickSize;
+    
+    const volume = Math.floor(100000 + Math.random() * 500000);
 
     return {
       symbol: targetSymbol,
@@ -88,7 +101,6 @@ export class MarketDataService {
 
     const decimals = prices.base > 100 ? 2 : prices.base > 10 ? 3 : 4;
     const factor = Math.pow(10, decimals);
-    const priceScale = prices.base > 1000 ? 0.005 : prices.base > 100 ? 0.01 : 0.002;
 
     for (let i = totalMinutes; i >= 0; i--) {
       const timestamp = new Date(now.getTime() - i * 60 * 1000);
@@ -101,17 +113,31 @@ export class MarketDataService {
         if (dayOfWeek === 0 || dayOfWeek === 6) continue;
       }
 
-      const trend = Math.sin(i / 1000) * config.volatility;
+      const trend = Math.sin(i / 500) * config.volatility * 0.5;
       const noise = (Math.random() - 0.5) * config.volatility;
-      currentPrice += (trend * 0.01 + noise * 0.1) * priceScale * prices.base;
+      currentPrice += (trend + noise * 0.3) * prices.base * 0.001;
 
       currentPrice = Math.max(currentPrice, prices.base * 0.85);
       currentPrice = Math.min(currentPrice, prices.base * 1.15);
 
-      const open = currentPrice + (Math.random() - 0.5) * priceScale * prices.base;
-      const close = currentPrice;
-      const high = Math.max(open, close) + Math.random() * priceScale * prices.base * 0.5;
-      const low = Math.min(open, close) - Math.random() * priceScale * prices.base * 0.5;
+      const bodySize = prices.base * 0.003 * (0.5 + Math.random());
+      const wickSize = prices.base * 0.002 * Math.random();
+      
+      const isBullish = Math.random() > 0.5;
+      
+      let open: number, close: number, high: number, low: number;
+      
+      if (isBullish) {
+        open = currentPrice - bodySize / 2;
+        close = currentPrice + bodySize / 2;
+      } else {
+        open = currentPrice + bodySize / 2;
+        close = currentPrice - bodySize / 2;
+      }
+      
+      high = Math.max(open, close) + wickSize;
+      low = Math.min(open, close) - wickSize;
+      
       const volume = Math.floor(50000 + Math.random() * 300000);
 
       data.push({
