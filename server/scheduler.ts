@@ -3,6 +3,7 @@ import { storage } from "./storage";
 import { predictionEngine } from "./prediction-engine";
 import { marketDataService } from "./market-data-service";
 import { wsService } from "./websocket";
+import { generateAiSuggestion, toInsertSuggestion, evaluateSuggestion } from "./ai-suggestion-engine";
 
 const TIMEFRAMES = [
   { name: "1min", minutes: 1, dataPoints: 60, stepsAhead: 1 },
@@ -103,6 +104,7 @@ class Scheduler {
     this.predictionTask = cron.schedule("0 * * * * *", async () => {
       await this.runCycle();
       await this.runPredictionCycle();
+      await this.runAiSuggestionCycle();
     });
 
     console.log("[Scheduler] Scheduler started - running every 60 seconds for market data and predictions");
@@ -362,6 +364,103 @@ class Scheduler {
       });
     } catch (error) {
       console.error("[Scheduler] Error updating prediction engine status:", error);
+    }
+  }
+
+  private async runAiSuggestionCycle(): Promise<void> {
+    const symbol = marketDataService.getSymbol();
+
+    try {
+      const recentData = await storage.getRecentMarketData(symbol, 100);
+      
+      if (recentData.length >= 30) {
+        const suggestion = generateAiSuggestion(recentData, symbol);
+        const insertData = toInsertSuggestion(suggestion, symbol);
+        
+        const savedSuggestion = await storage.insertAiSuggestion(insertData);
+        
+        console.log(`[Scheduler] AI Suggestion: ${suggestion.decision} for ${symbol} (confidence: ${suggestion.confidence}%)`);
+
+        wsService.broadcast({
+          type: "suggestion_update",
+          symbol,
+          data: {
+            id: savedSuggestion.id,
+            decision: suggestion.decision,
+            confidence: suggestion.confidence,
+            buyTarget: suggestion.buyTarget,
+            sellTarget: suggestion.sellTarget,
+            currentPrice: suggestion.currentPrice,
+            reasoning: suggestion.reasoning,
+          },
+        });
+
+        await this.evaluateAiSuggestions();
+        
+        await storage.upsertSystemStatus({
+          component: "ai_suggestions",
+          status: "healthy",
+          lastCheck: new Date(),
+          lastSuccess: new Date(),
+          errorMessage: null,
+          metadata: JSON.stringify({ 
+            lastDecision: suggestion.decision,
+            confidence: suggestion.confidence 
+          }),
+        });
+      }
+    } catch (error) {
+      console.error("[Scheduler] Error in AI suggestion cycle:", error);
+      await storage.upsertSystemStatus({
+        component: "ai_suggestions",
+        status: "error",
+        lastCheck: new Date(),
+        lastSuccess: null,
+        errorMessage: String(error),
+        metadata: null,
+      });
+    }
+  }
+
+  private async evaluateAiSuggestions(): Promise<void> {
+    try {
+      const symbol = marketDataService.getSymbol();
+      const unevaluatedSuggestions = await storage.getUnevaluatedSuggestions(5);
+      
+      for (const suggestion of unevaluatedSuggestions) {
+        const latestData = await storage.getLatestMarketData(suggestion.symbol);
+        if (!latestData) continue;
+        
+        const evaluation = evaluateSuggestion(
+          {
+            decision: suggestion.decision,
+            currentPrice: suggestion.currentPrice,
+            buyTarget: suggestion.buyTarget,
+            sellTarget: suggestion.sellTarget,
+          },
+          latestData.close
+        );
+        
+        await storage.evaluateAiSuggestion(
+          suggestion.id,
+          latestData.close,
+          evaluation.wasAccurate,
+          evaluation.profitLoss
+        );
+        
+        console.log(`[Scheduler] Evaluated suggestion #${suggestion.id}: ${evaluation.wasAccurate ? 'Accurate' : 'Inaccurate'} (${evaluation.profitLoss.toFixed(2)}%)`);
+      }
+      
+      if (unevaluatedSuggestions.length > 0) {
+        const accuracy = await storage.getAiSuggestionAccuracyStats(symbol);
+        wsService.broadcast({
+          type: "suggestion_accuracy_update",
+          symbol,
+          data: accuracy,
+        });
+      }
+    } catch (error) {
+      console.error("[Scheduler] Error evaluating AI suggestions:", error);
     }
   }
 
