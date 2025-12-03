@@ -164,34 +164,44 @@ class Scheduler {
   }
 
   private async runCycle(): Promise<void> {
-    const symbol = marketDataService.getSymbol();
+    const allSymbols = marketDataService.getSupportedSymbols();
 
     try {
       await this.updateApiStatus("healthy");
 
-      const savedPriceState = await storage.getPriceState(symbol);
-      let lastClosePrice: number | undefined;
-      
-      if (savedPriceState) {
-        lastClosePrice = savedPriceState.lastClose;
-      } else {
-        const lastData = await storage.getRecentMarketData(symbol, 1);
-        lastClosePrice = lastData.length > 0 ? lastData[0].close : undefined;
+      // Process all symbols - fetch market data for each
+      for (const symbol of allSymbols) {
+        try {
+          const savedPriceState = await storage.getPriceState(symbol);
+          let lastClosePrice: number | undefined;
+          
+          if (savedPriceState) {
+            lastClosePrice = savedPriceState.lastClose;
+          } else {
+            const lastData = await storage.getRecentMarketData(symbol, 1);
+            lastClosePrice = lastData.length > 0 ? lastData[0].close : undefined;
+          }
+
+          const candle = await marketDataService.fetchLatestCandle(symbol, lastClosePrice);
+          await storage.insertMarketData(candle);
+          
+          await storage.upsertPriceState(symbol, candle.open, candle.close, candle.timestamp);
+
+          const recentData = await storage.getRecentMarketData(symbol, 60);
+          const stats = await storage.getMarketStats(symbol);
+
+          wsService.broadcastMarketUpdate(symbol, {
+            candle,
+            stats,
+            recentCount: recentData.length,
+          });
+          
+          // Small delay between API calls to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (symbolError) {
+          console.error(`[Scheduler] Error fetching ${symbol}:`, symbolError);
+        }
       }
-
-      const candle = await marketDataService.fetchLatestCandle(symbol, lastClosePrice);
-      await storage.insertMarketData(candle);
-      
-      await storage.upsertPriceState(symbol, candle.open, candle.close, candle.timestamp);
-
-      const recentData = await storage.getRecentMarketData(symbol, 60);
-      const stats = await storage.getMarketStats(symbol);
-
-      wsService.broadcastMarketUpdate(symbol, {
-        candle,
-        stats,
-        recentCount: recentData.length,
-      });
 
       await this.updateStatus("running", new Date());
       
@@ -202,12 +212,17 @@ class Scheduler {
   }
 
   private async runPredictionCycle(): Promise<void> {
-    const symbol = marketDataService.getSymbol();
+    const allSymbols = marketDataService.getSupportedSymbols();
 
     try {
-      const recentData = await storage.getRecentMarketData(symbol, 300);
-      
-      if (recentData.length >= 60) {
+      for (const symbol of allSymbols) {
+        const recentData = await storage.getRecentMarketData(symbol, 300);
+        
+        // Skip symbols with insufficient data
+        if (recentData.length < 60) {
+          continue;
+        }
+        
         const now = new Date();
         const newPredictions: Array<{
           timeframe: string;
@@ -255,8 +270,9 @@ class Scheduler {
         }
 
         await this.evaluatePastPredictions(symbol);
-        await this.updatePredictionEngineStatus("healthy");
       }
+      
+      await this.updatePredictionEngineStatus("healthy");
     } catch (error) {
       console.error("[Scheduler] Error in prediction cycle:", error);
     }
@@ -368,12 +384,20 @@ class Scheduler {
   }
 
   private async runAiSuggestionCycle(): Promise<void> {
-    const symbol = marketDataService.getSymbol();
+    const allSymbols = marketDataService.getSupportedSymbols();
+    let successCount = 0;
+    let lastDecision = "";
+    let lastConfidence = 0;
 
     try {
-      const recentData = await storage.getRecentMarketData(symbol, 100);
-      
-      if (recentData.length >= 30) {
+      for (const symbol of allSymbols) {
+        const recentData = await storage.getRecentMarketData(symbol, 100);
+        
+        // Skip symbols with insufficient data
+        if (recentData.length < 30) {
+          continue;
+        }
+        
         const suggestion = generateAiSuggestion(recentData, symbol);
         const insertData = toInsertSuggestion(suggestion, symbol);
         
@@ -395,8 +419,15 @@ class Scheduler {
           },
         });
 
-        await this.evaluateAiSuggestions();
-        
+        successCount++;
+        lastDecision = suggestion.decision;
+        lastConfidence = suggestion.confidence;
+      }
+      
+      // Evaluate past suggestions for all symbols
+      await this.evaluateAiSuggestions();
+      
+      if (successCount > 0) {
         await storage.upsertSystemStatus({
           component: "ai_suggestions",
           status: "healthy",
@@ -404,8 +435,9 @@ class Scheduler {
           lastSuccess: new Date(),
           errorMessage: null,
           metadata: JSON.stringify({ 
-            lastDecision: suggestion.decision,
-            confidence: suggestion.confidence 
+            symbolsProcessed: successCount,
+            lastDecision,
+            lastConfidence 
           }),
         });
       }
