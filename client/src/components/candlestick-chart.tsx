@@ -60,6 +60,8 @@ export function CandlestickChart({
       },
       width: chartContainerRef.current.clientWidth,
       height: height,
+      handleScroll: false,
+      handleScale: false,
       rightPriceScale: {
         borderColor: isDarkMode ? "#27272a" : "#e4e4e7",
         scaleMargins: {
