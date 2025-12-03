@@ -6,7 +6,6 @@ APP_NAME="tradeviewmon"
 DEFAULT_PORT=5000
 DOMAIN=""
 EMAIL=""
-INSTALL_DIR="/opt/$APP_NAME"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -24,17 +23,22 @@ show_usage() {
     echo "  -d, --domain DOMAIN     Domain name for the application (required for SSL)"
     echo "  -e, --email EMAIL       Email for Let's Encrypt SSL certificate"
     echo "  -p, --port PORT         Preferred port (default: 5000, auto-adjusted if in use)"
+    echo "  -k, --finnhub-key KEY   Finnhub API key (optional)"
     echo "  -h, --help              Show this help message"
     echo ""
     echo "Example:"
     echo "  $0 --domain tradeview.example.com --email admin@example.com"
+    echo "  $0 --domain tradeview.example.com --email admin@example.com --finnhub-key YOUR_KEY"
 }
+
+FINNHUB_KEY=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         -d|--domain) DOMAIN="$2"; shift 2 ;;
         -e|--email) EMAIL="$2"; shift 2 ;;
         -p|--port) DEFAULT_PORT="$2"; shift 2 ;;
+        -k|--finnhub-key) FINNHUB_KEY="$2"; shift 2 ;;
         -h|--help) show_usage; exit 0 ;;
         *) log_error "Unknown option: $1"; show_usage; exit 1 ;;
     esac
@@ -46,11 +50,10 @@ find_available_port() {
     local attempt=0
     
     while [ $attempt -lt $max_attempts ]; do
-        if ! ss -tuln | grep -q ":$port "; then
-            if ! docker ps --format '{{.Ports}}' 2>/dev/null | grep -q ":$port->"; then
-                echo $port
-                return 0
-            fi
+        if ! ss -tuln 2>/dev/null | grep -q ":$port " && \
+           ! docker ps --format '{{.Ports}}' 2>/dev/null | grep -q ":$port->"; then
+            echo $port
+            return 0
         fi
         echo -e "${YELLOW}[WARN]${NC} Port $port is in use, trying next port..." >&2
         port=$((port + 1))
@@ -61,178 +64,137 @@ find_available_port() {
     exit 1
 }
 
-check_nginx() {
-    if command -v nginx &> /dev/null; then
-        log_info "Nginx is already installed"
-        return 0
-    else
-        log_info "Nginx is not installed"
-        return 1
-    fi
-}
-
-install_nginx() {
-    log_info "Installing Nginx..."
-    if command -v apt-get &> /dev/null; then
-        apt-get update
-        apt-get install -y nginx
-    elif command -v yum &> /dev/null; then
-        yum install -y nginx
-    elif command -v dnf &> /dev/null; then
-        dnf install -y nginx
-    else
-        log_error "Could not detect package manager. Please install Nginx manually."
-        exit 1
-    fi
-}
-
 check_docker() {
-    if command -v docker &> /dev/null; then
-        log_info "Docker is already installed"
+    if command -v docker &> /dev/null && docker info &> /dev/null; then
+        log_info "Docker is available"
         return 0
     else
-        log_info "Docker is not installed"
+        log_error "Docker is not available or not running"
         return 1
-    fi
-}
-
-install_docker() {
-    log_info "Installing Docker..."
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    sh get-docker.sh
-    usermod -aG docker $USER
-    rm get-docker.sh
-    log_info "Docker installed. You may need to log out and back in for group changes to take effect."
-}
-
-check_certbot() {
-    if command -v certbot &> /dev/null; then
-        log_info "Certbot is already installed"
-        return 0
-    else
-        log_info "Certbot is not installed"
-        return 1
-    fi
-}
-
-install_certbot() {
-    log_info "Installing Certbot..."
-    if command -v apt-get &> /dev/null; then
-        apt-get install -y certbot python3-certbot-nginx
-    elif command -v yum &> /dev/null; then
-        yum install -y certbot python3-certbot-nginx
-    elif command -v dnf &> /dev/null; then
-        dnf install -y certbot python3-certbot-nginx
     fi
 }
 
 log_info "=========================================="
 log_info "  TradeViewMon Deployment Script"
 log_info "=========================================="
+echo ""
 
-# Check for .env.production file
-if [ ! -f ".env.production" ]; then
-    log_info "No .env.production found. Running setup..."
-    ./deploy/setup-env.sh
+# Check Docker first
+if ! check_docker; then
+    log_error "Please install Docker and ensure the Docker daemon is running"
+    log_info "Install Docker: curl -fsSL https://get.docker.com | sh"
+    exit 1
 fi
 
-# Source environment variables
-source .env.production
+# Auto-generate environment file if it doesn't exist
+ENV_FILE=".env"
+if [ ! -f "$ENV_FILE" ]; then
+    log_info "Creating environment configuration..."
+    
+    POSTGRES_PASSWORD=$(openssl rand -hex 16 2>/dev/null || head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
+    SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 64 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 64)
+    
+    cat > $ENV_FILE << EOF
+# TradeViewMon Production Environment
+# Auto-generated on $(date)
 
-log_info "Checking for port availability..."
+# Database Configuration
+POSTGRES_USER=tradeviewmon
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+POSTGRES_DB=tradeviewmon
+
+# Security
+SESSION_SECRET=$SESSION_SECRET
+
+# API Keys (optional - can be configured via Settings page)
+FINNHUB_API_KEY=${FINNHUB_KEY}
+
+# Application Port
+APP_PORT=$DEFAULT_PORT
+EOF
+    
+    chmod 600 $ENV_FILE
+    log_info "Environment file created with auto-generated credentials"
+else
+    log_info "Using existing environment file"
+    # Update FINNHUB_API_KEY if provided via command line
+    if [ -n "$FINNHUB_KEY" ]; then
+        if grep -q "^FINNHUB_API_KEY=" $ENV_FILE; then
+            sed -i "s/^FINNHUB_API_KEY=.*/FINNHUB_API_KEY=$FINNHUB_KEY/" $ENV_FILE
+        else
+            echo "FINNHUB_API_KEY=$FINNHUB_KEY" >> $ENV_FILE
+        fi
+        log_info "Updated Finnhub API key"
+    fi
+fi
+
+# Source the environment file
+set -a
+source $ENV_FILE
+set +a
+
+# Find available port
+log_info "Checking port availability..."
 APP_PORT=$(find_available_port $DEFAULT_PORT)
 log_info "Application will use port: $APP_PORT"
 
-# Update APP_PORT in env file
-sed -i "s/^PORT=.*/PORT=$APP_PORT/" .env.production
-
-if ! check_docker; then
-    install_docker
+# Update port in env file
+if grep -q "^APP_PORT=" $ENV_FILE; then
+    sed -i "s/^APP_PORT=.*/APP_PORT=$APP_PORT/" $ENV_FILE
+else
+    echo "APP_PORT=$APP_PORT" >> $ENV_FILE
 fi
 
-if ! check_nginx; then
-    install_nginx
-fi
+# Export APP_PORT for docker-compose
+export APP_PORT
 
-if [ -n "$DOMAIN" ] && [ -n "$EMAIL" ]; then
-    if ! check_certbot; then
-        install_certbot
-    fi
-fi
+log_info "Stopping existing containers..."
+docker compose -f deploy/docker-compose.yml down 2>/dev/null || \
+docker-compose -f deploy/docker-compose.yml down 2>/dev/null || true
 
-log_info "Creating application directory..."
-mkdir -p $INSTALL_DIR
-chown $USER:$USER $INSTALL_DIR
+log_info "Building and starting services..."
+docker compose -f deploy/docker-compose.yml up -d --build 2>/dev/null || \
+docker-compose -f deploy/docker-compose.yml up -d --build
 
-log_info "Copying application files..."
-cp -r . $INSTALL_DIR/
-cd $INSTALL_DIR
-
-# Create Docker network if not exists
-log_info "Creating Docker network..."
-docker network create tradeviewmon-network 2>/dev/null || true
-
-# Stop existing containers if running
-log_info "Stopping existing containers if running..."
-docker stop $APP_NAME 2>/dev/null || true
-docker stop ${APP_NAME}-db 2>/dev/null || true
-docker rm $APP_NAME 2>/dev/null || true
-docker rm ${APP_NAME}-db 2>/dev/null || true
-
-# Start PostgreSQL container
-log_info "Starting PostgreSQL database..."
-docker run -d \
-    --name ${APP_NAME}-db \
-    --network tradeviewmon-network \
-    --restart unless-stopped \
-    -e POSTGRES_USER=${POSTGRES_USER:-tradeviewmon} \
-    -e POSTGRES_PASSWORD=${POSTGRES_PASSWORD} \
-    -e POSTGRES_DB=${POSTGRES_DB:-tradeviewmon} \
-    -v ${APP_NAME}_postgres_data:/var/lib/postgresql/data \
-    postgres:15-alpine
-
-# Wait for PostgreSQL to be ready
-log_info "Waiting for PostgreSQL to be ready..."
-sleep 5
+# Wait for services to be healthy
+log_info "Waiting for services to start..."
+echo -n "  Database: "
 for i in {1..30}; do
-    if docker exec ${APP_NAME}-db pg_isready -U ${POSTGRES_USER:-tradeviewmon} &>/dev/null; then
-        log_info "PostgreSQL is ready!"
+    if docker exec tradeviewmon-db pg_isready -U tradeviewmon &>/dev/null; then
+        echo -e "${GREEN}Ready${NC}"
         break
     fi
     if [ $i -eq 30 ]; then
-        log_error "PostgreSQL failed to start"
+        echo -e "${RED}Failed${NC}"
+        log_error "Database failed to start. Check logs: docker logs tradeviewmon-db"
         exit 1
     fi
+    echo -n "."
     sleep 1
 done
 
-# Build application image
-log_info "Building Docker image..."
-docker build -t $APP_NAME:latest -f deploy/Dockerfile .
+echo -n "  Application: "
+sleep 5
+for i in {1..30}; do
+    if curl -s http://127.0.0.1:$APP_PORT/api/system/status &>/dev/null; then
+        echo -e "${GREEN}Ready${NC}"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo -e "${YELLOW}Starting (may need more time)${NC}"
+    fi
+    echo -n "."
+    sleep 2
+done
 
-# Start application container
-log_info "Starting application container..."
-docker run -d \
-    --name $APP_NAME \
-    --network tradeviewmon-network \
-    --restart unless-stopped \
-    -p 127.0.0.1:$APP_PORT:5000 \
-    -e NODE_ENV=production \
-    -e PORT=5000 \
-    -e DATABASE_URL=postgresql://${POSTGRES_USER:-tradeviewmon}:${POSTGRES_PASSWORD}@${APP_NAME}-db:5432/${POSTGRES_DB:-tradeviewmon} \
-    -e SESSION_SECRET=${SESSION_SECRET} \
-    -e FINNHUB_API_KEY=${FINNHUB_API_KEY} \
-    $APP_NAME:latest
-
-# Wait for application to be ready
-log_info "Waiting for application to start..."
-sleep 10
-
-log_info "Creating Nginx configuration..."
+# Configure Nginx if domain is provided
 if [ -n "$DOMAIN" ]; then
-    NGINX_CONF="/etc/nginx/sites-available/$APP_NAME"
-    
-    tee $NGINX_CONF > /dev/null << EOF
+    if command -v nginx &> /dev/null; then
+        log_info "Configuring Nginx for $DOMAIN..."
+        
+        NGINX_CONF="/etc/nginx/sites-available/$APP_NAME"
+        
+        cat > /tmp/tradeviewmon-nginx.conf << EOF
 server {
     listen 80;
     listen [::]:80;
@@ -263,64 +225,26 @@ server {
     }
 }
 EOF
-
-    ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
-    rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-    
-    nginx -t
-    systemctl reload nginx
-    
-    if [ -n "$EMAIL" ]; then
-        log_info "Obtaining SSL certificate..."
-        certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL --redirect
-        log_info "SSL certificate installed successfully!"
+        
+        if [ -w /etc/nginx/sites-available ]; then
+            mv /tmp/tradeviewmon-nginx.conf $NGINX_CONF
+            ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
+            rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+            nginx -t && systemctl reload nginx
+            log_info "Nginx configured successfully"
+            
+            if [ -n "$EMAIL" ] && command -v certbot &> /dev/null; then
+                log_info "Obtaining SSL certificate..."
+                certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL --redirect
+                log_info "SSL certificate installed!"
+            fi
+        else
+            log_warn "Cannot write to /etc/nginx. Run as root or copy config manually:"
+            log_warn "  cat /tmp/tradeviewmon-nginx.conf"
+        fi
     else
-        log_warn "No email provided. Skipping SSL setup."
-        log_warn "Run 'certbot --nginx -d $DOMAIN' manually to enable SSL."
+        log_warn "Nginx not installed. Application available on port $APP_PORT"
     fi
-else
-    NGINX_CONF="/etc/nginx/sites-available/$APP_NAME"
-    
-    tee $NGINX_CONF > /dev/null << EOF
-server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-    server_name _;
-
-    location / {
-        proxy_pass http://127.0.0.1:$APP_PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_read_timeout 86400;
-    }
-
-    location /ws {
-        proxy_pass http://127.0.0.1:$APP_PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_read_timeout 86400;
-    }
-}
-EOF
-
-    ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
-    rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-    
-    nginx -t
-    systemctl reload nginx
-    
-    log_warn "No domain specified. Application accessible via server IP."
-    log_warn "To enable SSL, run: $0 --domain your-domain.com --email your@email.com"
 fi
 
 echo ""
@@ -328,26 +252,32 @@ log_info "=========================================="
 log_info "  Deployment Complete!"
 log_info "=========================================="
 echo ""
-log_info "Application Status:"
-docker ps --filter name=$APP_NAME --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+log_info "Container Status:"
+docker ps --filter "name=tradeviewmon" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 echo ""
-log_info "Database Status:"
-docker ps --filter name=${APP_NAME}-db --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-echo ""
+
 log_info "Application running on port: $APP_PORT"
 if [ -n "$DOMAIN" ]; then
-    if [ -n "$EMAIL" ]; then
-        log_info "Access your app at: https://$DOMAIN"
-    else
-        log_info "Access your app at: http://$DOMAIN"
-    fi
+    log_info "Access your app at: http://$DOMAIN"
 else
-    log_info "Access your app at: http://YOUR_SERVER_IP"
+    log_info "Access your app at: http://YOUR_SERVER_IP:$APP_PORT"
 fi
 echo ""
+
+log_info "Default login: adhielesmana / admin123"
+echo ""
+
 log_info "Useful commands:"
-log_info "  View app logs:  docker logs -f $APP_NAME"
-log_info "  View db logs:   docker logs -f ${APP_NAME}-db"
-log_info "  Restart app:    docker restart $APP_NAME"
-log_info "  Stop all:       docker stop $APP_NAME ${APP_NAME}-db"
-log_info "  Update app:     cd $INSTALL_DIR && git pull && ./deploy/deploy.sh"
+log_info "  View app logs:    docker logs -f tradeviewmon"
+log_info "  View db logs:     docker logs -f tradeviewmon-db"
+log_info "  Restart all:      docker compose -f deploy/docker-compose.yml restart"
+log_info "  Stop all:         docker compose -f deploy/docker-compose.yml down"
+log_info "  Update & redeploy: git pull && ./deploy/deploy.sh"
+echo ""
+
+if [ -z "$FINNHUB_KEY" ] && [ -z "$FINNHUB_API_KEY" ]; then
+    log_warn "Note: Finnhub API key not set. You can add it via:"
+    log_warn "  1. Settings page in the app (recommended)"
+    log_warn "  2. Edit .env file and redeploy"
+fi
