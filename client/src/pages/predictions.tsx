@@ -112,14 +112,15 @@ export default function Predictions() {
             height={350}
           />
         </div>
-        <div className="lg:col-span-1 space-y-6">
+        <div className="lg:col-span-1">
           <AccuracyDisplay
             stats={stats || defaultStats}
             isLoading={isLoadingStats}
           />
-          <MultiFactorAnalysis symbol={symbol} />
         </div>
       </div>
+
+      <MultiFactorAnalysis symbol={symbol} />
 
       <PredictionTable
         predictions={predictions || []}
