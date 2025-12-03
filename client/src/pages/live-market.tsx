@@ -158,14 +158,14 @@ export default function LiveMarket() {
       <MarketChart
         data={marketData || []}
         isLoading={isLoadingMarket}
-        title="3-Hour Price Chart (1-minute candles)"
+        title="1-Hour Price Chart (1-minute candles)"
         height={350}
       />
 
       <CandlestickChart
         data={marketData || []}
         isLoading={isLoadingMarket}
-        title="Candlestick Chart (3H / 1min)"
+        title="Candlestick Chart (1H / 1min)"
         height={350}
       />
 

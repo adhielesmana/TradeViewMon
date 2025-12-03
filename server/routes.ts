@@ -322,7 +322,7 @@ export async function registerRoutes(
   app.get("/api/market/recent", async (req, res) => {
     try {
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
-      const limit = parseInt(req.query.limit as string) || 180;
+      const limit = parseInt(req.query.limit as string) || 60;
       const data = await storage.getRecentMarketData(symbol, limit);
       res.json(data);
     } catch (error) {

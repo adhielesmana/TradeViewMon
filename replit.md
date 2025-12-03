@@ -73,9 +73,9 @@ Preferred communication style: Simple, everyday language.
 **Market Data Service**: Abstracted service layer supporting:
 - External API integration (designed for Alpha Vantage, AllTick, or similar)
 - Simulated data generation for development/testing
-- Historical data backfill (generates 3 hours of 1-minute candles on startup)
+- Historical data backfill (generates 1 hour of 1-minute candles on startup)
 - Real-time data fetching with 1-minute intervals
-- Candlestick chart displays 3-hour range with 1-minute candles (~180 data points)
+- Candlestick chart displays 1-hour range with 1-minute candles (~60 data points)
 
 ### Database Architecture
 

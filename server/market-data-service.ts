@@ -89,7 +89,7 @@ export class MarketDataService {
     };
   }
 
-  async generateHistoricalData(hours: number = 3, symbol?: string): Promise<InsertMarketData[]> {
+  async generateHistoricalData(hours: number = 1, symbol?: string): Promise<InsertMarketData[]> {
     const targetSymbol = symbol || this.currentSymbol;
     const config = this.getConfig(targetSymbol);
     const prices = this.getSymbolPrice(targetSymbol);

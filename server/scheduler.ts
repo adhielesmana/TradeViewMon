@@ -132,15 +132,15 @@ class Scheduler {
       );
 
       if (existingData.length === 0) {
-        console.log("[Scheduler] No existing data found, generating initial 3-hour data...");
-        const historicalData = await marketDataService.generateHistoricalData(3);
+        console.log("[Scheduler] No existing data found, generating initial 1-hour data...");
+        const historicalData = await marketDataService.generateHistoricalData(1);
         
         const batchSize = 500;
         for (let i = 0; i < historicalData.length; i += batchSize) {
           const batch = historicalData.slice(i, i + batchSize);
           await storage.insertMarketDataBatch(batch);
         }
-        console.log(`[Scheduler] Generated ${historicalData.length} historical data points (1-second candles)`);
+        console.log(`[Scheduler] Generated ${historicalData.length} historical data points (1-minute candles)`);
       }
 
       await this.runCycle();
