@@ -16,6 +16,7 @@ import { LogOut } from "lucide-react";
 
 import LiveMarket from "@/pages/live-market";
 import Predictions from "@/pages/predictions";
+import AiSuggestions from "@/pages/ai-suggestions";
 import Historical from "@/pages/historical";
 import Backtesting from "@/pages/backtesting";
 import SystemStatus from "@/pages/system-status";
@@ -31,6 +32,7 @@ function ProtectedRoutes() {
     <Switch>
       <Route path="/" component={LiveMarket} />
       <Route path="/predictions" component={Predictions} />
+      <Route path="/ai-suggestions" component={AiSuggestions} />
       <Route path="/historical" component={Historical} />
       <Route path="/backtesting" component={Backtesting} />
       <Route path="/status" component={SystemStatus} />

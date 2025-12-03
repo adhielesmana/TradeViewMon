@@ -6,7 +6,8 @@ import {
   Activity,
   BarChart3,
   FlaskConical,
-  Users
+  Users,
+  Brain
 } from "lucide-react";
 import {
   Sidebar,
@@ -35,6 +36,13 @@ const menuItems = [
     url: "/predictions",
     icon: TrendingUp,
     description: "AI predictions",
+    adminOnly: false,
+  },
+  {
+    title: "AI Suggestions",
+    url: "/ai-suggestions",
+    icon: Brain,
+    description: "Buy/Sell signals",
     adminOnly: false,
   },
   {
