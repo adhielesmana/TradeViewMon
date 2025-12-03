@@ -92,12 +92,15 @@ export class DatabaseStorage implements IStorage {
     if (recentData.length === 0) return null;
 
     const latest = recentData[recentData.length - 1];
-    const first = recentData[0];
+    
+    // Use the latest candle's open as reference so the price change
+    // indicator matches the chart's latest candle color (green = bullish, red = bearish)
+    const referencePrice = latest.open;
 
     return {
       currentPrice: latest.close,
-      change: latest.close - first.open,
-      changePercent: ((latest.close - first.open) / first.open) * 100,
+      change: latest.close - referencePrice,
+      changePercent: ((latest.close - referencePrice) / referencePrice) * 100,
       high: Math.max(...recentData.map(d => d.high)),
       low: Math.min(...recentData.map(d => d.low)),
       volume: recentData.reduce((sum, d) => sum + d.volume, 0),
