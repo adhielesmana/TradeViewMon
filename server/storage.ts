@@ -1,6 +1,6 @@
 import { 
   marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState, aiSuggestions,
-  demoAccounts, demoPositions, demoTransactions, appSettings,
+  demoAccounts, demoPositions, demoTransactions, appSettings, currencyRates,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
@@ -14,7 +14,8 @@ import {
   type DemoPosition, type InsertDemoPosition,
   type DemoTransaction, type InsertDemoTransaction,
   type DemoAccountStats,
-  type AppSetting
+  type AppSetting,
+  type CurrencyRate, type InsertCurrencyRate
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, gte, lte, and, sql, inArray, isNull } from "drizzle-orm";
@@ -102,6 +103,11 @@ export interface IStorage {
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string | null): Promise<AppSetting>;
   getAllSettings(): Promise<AppSetting[]>;
+
+  // Currency Rates
+  getCurrencyRate(baseCurrency: string, targetCurrency: string): Promise<CurrencyRate | null>;
+  getAllCurrencyRates(): Promise<CurrencyRate[]>;
+  upsertCurrencyRate(rate: InsertCurrencyRate): Promise<CurrencyRate>;
 }
 
 const startTime = Date.now();
@@ -961,6 +967,55 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSettings(): Promise<AppSetting[]> {
     return db.select().from(appSettings);
+  }
+
+  // Currency Rate Methods
+  async getCurrencyRate(baseCurrency: string, targetCurrency: string): Promise<CurrencyRate | null> {
+    const result = await db.select()
+      .from(currencyRates)
+      .where(and(
+        eq(currencyRates.baseCurrency, baseCurrency),
+        eq(currencyRates.targetCurrency, targetCurrency)
+      ))
+      .limit(1);
+    return result[0] ?? null;
+  }
+
+  async getAllCurrencyRates(): Promise<CurrencyRate[]> {
+    return db.select()
+      .from(currencyRates)
+      .where(eq(currencyRates.baseCurrency, "USD"))
+      .orderBy(currencyRates.targetCurrency);
+  }
+
+  async upsertCurrencyRate(rate: InsertCurrencyRate): Promise<CurrencyRate> {
+    const existing = await db.select()
+      .from(currencyRates)
+      .where(and(
+        eq(currencyRates.baseCurrency, rate.baseCurrency),
+        eq(currencyRates.targetCurrency, rate.targetCurrency)
+      ))
+      .limit(1);
+
+    if (existing.length > 0) {
+      const [updated] = await db.update(currencyRates)
+        .set({
+          rate: rate.rate,
+          fetchedAt: rate.fetchedAt,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(currencyRates.baseCurrency, rate.baseCurrency),
+          eq(currencyRates.targetCurrency, rate.targetCurrency)
+        ))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(currencyRates)
+        .values(rate)
+        .returning();
+      return created;
+    }
   }
 }
 

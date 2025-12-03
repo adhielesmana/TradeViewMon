@@ -381,3 +381,29 @@ export const appSettings = pgTable("app_settings", {
 export const insertAppSettingSchema = createInsertSchema(appSettings).omit({ id: true });
 export type AppSetting = typeof appSettings.$inferSelect;
 export type InsertAppSetting = z.infer<typeof insertAppSettingSchema>;
+
+// Currency Rates - cached exchange rates from EUR base
+export const currencyRates = pgTable("currency_rates", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  baseCurrency: varchar("base_currency", { length: 10 }).notNull().default("USD"),
+  targetCurrency: varchar("target_currency", { length: 10 }).notNull(),
+  rate: real("rate").notNull(),
+  source: varchar("source", { length: 50 }).notNull().default("frankfurter"),
+  fetchedAt: timestamp("fetched_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("currency_rates_base_target_idx").on(table.baseCurrency, table.targetCurrency),
+]);
+
+export const insertCurrencyRateSchema = createInsertSchema(currencyRates).omit({ id: true });
+export type CurrencyRate = typeof currencyRates.$inferSelect;
+export type InsertCurrencyRate = z.infer<typeof insertCurrencyRateSchema>;
+
+// Currency Rate API Response type
+export type CurrencyRateResponse = {
+  code: string;
+  name: string;
+  symbol: string;
+  rate: number;
+  lastUpdated: string;
+};

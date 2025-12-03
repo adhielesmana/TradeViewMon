@@ -1186,6 +1186,18 @@ export async function registerRoutes(
     }
   });
 
+  // Currency Rates Routes
+  app.get("/api/currency/rates", requireAuth, async (req, res) => {
+    try {
+      const { currencyService } = await import("./currency-service");
+      const rates = await currencyService.getRates();
+      res.json(rates);
+    } catch (error) {
+      console.error("Error getting currency rates:", error);
+      res.status(500).json({ error: "Failed to get currency rates" });
+    }
+  });
+
   // Settings Routes (Superadmin only)
   app.get("/api/settings", requireAuth, requireRole(["superadmin"]), async (req, res) => {
     try {

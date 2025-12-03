@@ -85,6 +85,7 @@ class Scheduler {
   private isRunning: boolean = false;
   private intervalHandle: NodeJS.Timeout | null = null;
   private predictionTask: ReturnType<typeof cron.schedule> | null = null;
+  private currencyTask: ReturnType<typeof cron.schedule> | null = null;
   private intervalMs: number = 60000;
   private predictionCycleCount: number = 0;
 
@@ -100,6 +101,9 @@ class Scheduler {
     await this.updateStatus("running");
 
     await this.initializeData();
+    
+    // Initialize currency rates on startup
+    await this.initializeCurrencyRates();
 
     this.predictionTask = cron.schedule("0 * * * * *", async () => {
       await this.runCycle();
@@ -107,7 +111,13 @@ class Scheduler {
       await this.runAiSuggestionCycle();
     });
 
+    // Update currency rates every 12 hours (at minute 0 of hours 0 and 12)
+    this.currencyTask = cron.schedule("0 0 0,12 * * *", async () => {
+      await this.updateCurrencyRates();
+    });
+
     console.log("[Scheduler] Scheduler started - running every 60 seconds for market data and predictions");
+    console.log("[Scheduler] Currency rates will update every 12 hours");
   }
 
   async stop(): Promise<void> {
@@ -121,9 +131,51 @@ class Scheduler {
       this.predictionTask = null;
     }
 
+    if (this.currencyTask) {
+      this.currencyTask.stop();
+      this.currencyTask = null;
+    }
+
     this.isRunning = false;
     await this.updateStatus("stopped");
     console.log("[Scheduler] Scheduler stopped");
+  }
+
+  private async initializeCurrencyRates(): Promise<void> {
+    try {
+      const { currencyService } = await import("./currency-service");
+      const rates = await storage.getAllCurrencyRates();
+      
+      if (rates.length === 0) {
+        console.log("[Scheduler] No currency rates found, fetching initial rates...");
+        await currencyService.updateRates();
+      } else {
+        const lastUpdate = rates[0]?.fetchedAt;
+        const hoursSinceUpdate = lastUpdate 
+          ? (Date.now() - new Date(lastUpdate).getTime()) / (1000 * 60 * 60)
+          : Infinity;
+        
+        if (hoursSinceUpdate > 12) {
+          console.log(`[Scheduler] Currency rates are ${hoursSinceUpdate.toFixed(1)} hours old, refreshing...`);
+          await currencyService.updateRates();
+        } else {
+          console.log(`[Scheduler] Currency rates are ${hoursSinceUpdate.toFixed(1)} hours old (next update at 12 hours)`);
+        }
+      }
+    } catch (error) {
+      console.error("[Scheduler] Error initializing currency rates:", error);
+    }
+  }
+
+  private async updateCurrencyRates(): Promise<void> {
+    try {
+      console.log("[Scheduler] Running scheduled currency rate update...");
+      const { currencyService } = await import("./currency-service");
+      await currencyService.updateRates();
+      console.log("[Scheduler] Currency rates updated successfully");
+    } catch (error) {
+      console.error("[Scheduler] Error updating currency rates:", error);
+    }
   }
 
   private async initializeData(): Promise<void> {

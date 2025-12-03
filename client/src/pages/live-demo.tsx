@@ -63,9 +63,31 @@ interface CurrencyConfig {
   symbol: string;
   rate: number;
   locale: string;
+  lastUpdated?: string;
 }
 
-const CURRENCIES: CurrencyConfig[] = [
+interface CurrencyRateResponse {
+  code: string;
+  name: string;
+  symbol: string;
+  rate: number;
+  lastUpdated: string;
+}
+
+const CURRENCY_LOCALES: Record<string, string> = {
+  USD: "en-US",
+  IDR: "id-ID",
+  EUR: "de-DE",
+  GBP: "en-GB",
+  JPY: "ja-JP",
+  SGD: "en-SG",
+  MYR: "ms-MY",
+  THB: "th-TH",
+  INR: "en-IN",
+  CNY: "zh-CN",
+};
+
+const FALLBACK_CURRENCIES: CurrencyConfig[] = [
   { code: "USD", name: "US Dollar", symbol: "$", rate: 1, locale: "en-US" },
   { code: "IDR", name: "Indonesian Rupiah", symbol: "Rp", rate: 15850, locale: "id-ID" },
   { code: "EUR", name: "Euro", symbol: "€", rate: 0.92, locale: "de-DE" },
@@ -113,7 +135,24 @@ export default function LiveDemo() {
   const [tradeType, setTradeType] = useState<"BUY" | "SELL">("BUY");
   const [selectedCurrency, setSelectedCurrency] = useState<string>("USD");
 
-  const currentCurrency = CURRENCIES.find(c => c.code === selectedCurrency) || CURRENCIES[0];
+  const { data: currencyRatesData } = useQuery<CurrencyRateResponse[]>({
+    queryKey: ["/api/currency/rates"],
+    refetchInterval: 12 * 60 * 60 * 1000,
+    staleTime: 12 * 60 * 60 * 1000,
+  });
+
+  const currencies: CurrencyConfig[] = currencyRatesData 
+    ? currencyRatesData.map(r => ({
+        code: r.code,
+        name: r.name,
+        symbol: r.symbol,
+        rate: r.rate,
+        locale: CURRENCY_LOCALES[r.code] || "en-US",
+        lastUpdated: r.lastUpdated,
+      }))
+    : FALLBACK_CURRENCIES;
+
+  const currentCurrency = currencies.find(c => c.code === selectedCurrency) || currencies[0];
 
   const convertFromUSD = useCallback((usdAmount: number): number => {
     return usdAmount * currentCurrency.rate;
@@ -368,7 +407,7 @@ export default function LiveDemo() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {CURRENCIES.map((c) => (
+                {currencies.map((c) => (
                   <SelectItem key={c.code} value={c.code} data-testid={`option-currency-${c.code}`}>
                     {c.symbol} {c.code} - {c.name}
                   </SelectItem>
@@ -397,6 +436,11 @@ export default function LiveDemo() {
           <span>
             Displaying in <strong>{currentCurrency.name}</strong> (1 USD = {currentCurrency.rate.toLocaleString()} {currentCurrency.code}).
             All backend operations remain in USD.
+            {currentCurrency.lastUpdated && (
+              <span className="text-xs ml-2">
+                Rate updated {formatDistanceToNow(new Date(currentCurrency.lastUpdated), { addSuffix: true })}
+              </span>
+            )}
           </span>
         </div>
       )}
