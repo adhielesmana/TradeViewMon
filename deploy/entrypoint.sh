@@ -145,6 +145,22 @@ npx drizzle-kit push --force 2>&1 || {
                     );
                 \`);
                 console.log('[Startup] Database tables created successfully!');
+                
+                // Seed superadmin user
+                const bcrypt = require('bcryptjs');
+                const existingAdmin = await pool.query(\"SELECT * FROM users WHERE username = 'adhielesmana'\");
+                
+                if (existingAdmin.rows.length === 0) {
+                    const hashedPassword = await bcrypt.hash('admin123', 10);
+                    await pool.query(
+                        \"INSERT INTO users (username, password, role) VALUES (\\\$1, \\\$2, \\\$3)\",
+                        ['adhielesmana', hashedPassword, 'superadmin']
+                    );
+                    console.log('[Startup] Superadmin user created: adhielesmana');
+                } else {
+                    console.log('[Startup] Superadmin user already exists');
+                }
+                
                 await pool.end();
             } catch (err) {
                 console.error('[Startup] Error creating tables:', err.message);

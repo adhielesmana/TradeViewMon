@@ -20,8 +20,8 @@ RUN apk add --no-cache python3 make g++ curl
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# Install drizzle-kit for migrations
-RUN npm install drizzle-kit drizzle-orm pg
+# Install drizzle-kit for migrations and bcryptjs for password hashing
+RUN npm install drizzle-kit drizzle-orm pg bcryptjs
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/shared ./shared
