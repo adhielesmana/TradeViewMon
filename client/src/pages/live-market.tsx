@@ -50,7 +50,7 @@ function getConnectionStatusColor(status: WSConnectionStatus): "online" | "offli
 export default function LiveMarket() {
   const { currentSymbol } = useSymbol();
   const symbol = currentSymbol.symbol;
-  const [timeframe, setTimeframe] = useState<TimeframeOption>("3h-1min");
+  const [timeframe, setTimeframe] = useState<TimeframeOption>("1h-1min");
 
   const handleWSMessage = useCallback((message: WSMessage) => {
     const matchesSymbol = !message.symbol || message.symbol === symbol;

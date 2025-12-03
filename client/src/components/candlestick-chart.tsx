@@ -12,6 +12,7 @@ import type { MarketData } from "@shared/schema";
 import { format } from "date-fns";
 
 export type TimeframeOption = 
+  | "1h-1min"
   | "3h-1min"
   | "6h-5min"
   | "1d-30min"
@@ -20,6 +21,7 @@ export type TimeframeOption =
   | "1y-1w";
 
 export const TIMEFRAME_LABELS: Record<TimeframeOption, string> = {
+  "1h-1min": "1Hour/1Min",
   "3h-1min": "3Hours/1Min",
   "6h-5min": "6Hours/5Mins",
   "1d-30min": "1Day/30Mins",

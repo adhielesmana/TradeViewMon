@@ -343,6 +343,10 @@ export async function registerRoutes(
       
       // Determine time range and candle interval based on timeframe
       switch (timeframe) {
+        case "1h-1min":
+          startDate = new Date(now.getTime() - 1 * 60 * 60 * 1000);
+          intervalMinutes = 1;
+          break;
         case "3h-1min":
           startDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
           intervalMinutes = 1;
@@ -368,7 +372,7 @@ export async function registerRoutes(
           intervalMinutes = 7 * 24 * 60; // 10080 minutes
           break;
         default:
-          startDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+          startDate = new Date(now.getTime() - 1 * 60 * 60 * 1000);
           intervalMinutes = 1;
       }
       
