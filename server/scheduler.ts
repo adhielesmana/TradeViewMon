@@ -126,10 +126,8 @@ class Scheduler {
 
   private async initializeData(): Promise<void> {
     try {
-      const existingData = await storage.getRecentMarketData(
-        marketDataService.getSymbol(),
-        1
-      );
+      const symbol = marketDataService.getSymbol();
+      const existingData = await storage.getRecentMarketData(symbol, 1);
 
       if (existingData.length === 0) {
         console.log("[Scheduler] No existing data found, generating initial 1-hour data...");
@@ -140,7 +138,21 @@ class Scheduler {
           const batch = historicalData.slice(i, i + batchSize);
           await storage.insertMarketDataBatch(batch);
         }
+        
+        if (historicalData.length > 0) {
+          const lastCandle = historicalData[historicalData.length - 1];
+          await storage.upsertPriceState(symbol, lastCandle.open, lastCandle.close, lastCandle.timestamp);
+          console.log(`[Scheduler] Saved initial price state: open=${lastCandle.open}, close=${lastCandle.close}`);
+        }
+        
         console.log(`[Scheduler] Generated ${historicalData.length} historical data points (1-minute candles)`);
+      } else {
+        const lastCandle = existingData[0];
+        const savedState = await storage.getPriceState(symbol);
+        if (!savedState) {
+          await storage.upsertPriceState(symbol, lastCandle.open, lastCandle.close, lastCandle.timestamp);
+          console.log(`[Scheduler] Restored price state from existing data: close=${lastCandle.close}`);
+        }
       }
 
       await this.runCycle();
@@ -155,11 +167,20 @@ class Scheduler {
     try {
       await this.updateApiStatus("healthy");
 
-      const lastData = await storage.getRecentMarketData(symbol, 1);
-      const lastClosePrice = lastData.length > 0 ? lastData[0].close : undefined;
+      const savedPriceState = await storage.getPriceState(symbol);
+      let lastClosePrice: number | undefined;
+      
+      if (savedPriceState) {
+        lastClosePrice = savedPriceState.lastClose;
+      } else {
+        const lastData = await storage.getRecentMarketData(symbol, 1);
+        lastClosePrice = lastData.length > 0 ? lastData[0].close : undefined;
+      }
 
       const candle = await marketDataService.fetchLatestCandle(symbol, lastClosePrice);
       await storage.insertMarketData(candle);
+      
+      await storage.upsertPriceState(symbol, candle.open, candle.close, candle.timestamp);
 
       const recentData = await storage.getRecentMarketData(symbol, 60);
       const stats = await storage.getMarketStats(symbol);

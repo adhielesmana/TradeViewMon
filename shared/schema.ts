@@ -64,6 +64,16 @@ export const systemStatus = pgTable("system_status", {
   metadata: text("metadata"), // JSON string for additional info
 });
 
+// Price State - stores last open/close prices for continuity
+export const priceState = pgTable("price_state", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  symbol: varchar("symbol", { length: 20 }).notNull().unique(),
+  lastOpen: real("last_open").notNull(),
+  lastClose: real("last_close").notNull(),
+  lastTimestamp: timestamp("last_timestamp").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
 // Define relations
 export const predictionsRelations = relations(predictions, ({ one }) => ({
   accuracyResult: one(accuracyResults, {
@@ -84,6 +94,7 @@ export const insertMarketDataSchema = createInsertSchema(marketData).omit({ id: 
 export const insertPredictionSchema = createInsertSchema(predictions).omit({ id: true });
 export const insertAccuracyResultSchema = createInsertSchema(accuracyResults).omit({ id: true });
 export const insertSystemStatusSchema = createInsertSchema(systemStatus).omit({ id: true });
+export const insertPriceStateSchema = createInsertSchema(priceState).omit({ id: true });
 
 // Types
 export type MarketData = typeof marketData.$inferSelect;
@@ -97,6 +108,9 @@ export type InsertAccuracyResult = z.infer<typeof insertAccuracyResultSchema>;
 
 export type SystemStatus = typeof systemStatus.$inferSelect;
 export type InsertSystemStatus = z.infer<typeof insertSystemStatusSchema>;
+
+export type PriceState = typeof priceState.$inferSelect;
+export type InsertPriceState = z.infer<typeof insertPriceStateSchema>;
 
 // API Response Types for frontend
 export type MarketStats = {

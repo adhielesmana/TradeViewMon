@@ -100,6 +100,11 @@ Preferred communication style: Simple, everyday language.
    - Tracks: component status (API, database, scheduler, prediction engine)
    - Stores: last check time, error messages, metadata for diagnostics
 
+5. **price_state**: Price continuity tracking
+   - Stores: symbol, last open price, last close price, last timestamp
+   - Ensures new candles continue from previous close price
+   - Persists across server restarts for seamless price flow
+
 **Query Patterns**:
 - Time-based range queries for charts (last hour, day, week, month, year)
 - Join queries between predictions and accuracy results

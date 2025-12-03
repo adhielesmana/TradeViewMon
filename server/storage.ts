@@ -1,12 +1,13 @@
 import { 
-  marketData, predictions, accuracyResults, systemStatus, users, userInvites,
+  marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
   type SystemStatus, type InsertSystemStatus,
   type MarketStats, type AccuracyStats, type PredictionWithResult,
   type User, type SafeUser, type InsertUser, type UpdateUser,
-  type UserInvite, type InsertUserInvite
+  type UserInvite, type InsertUserInvite,
+  type PriceState, type InsertPriceState
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, gte, lte, and, sql, inArray, isNull } from "drizzle-orm";
@@ -53,6 +54,10 @@ export interface IStorage {
   getPendingInvites(): Promise<UserInvite[]>;
   acceptInvite(token: string): Promise<UserInvite | null>;
   deleteInvite(id: string): Promise<boolean>;
+  
+  // Price State
+  getPriceState(symbol: string): Promise<PriceState | null>;
+  upsertPriceState(symbol: string, lastOpen: number, lastClose: number, lastTimestamp: Date): Promise<PriceState>;
 }
 
 const startTime = Date.now();
@@ -392,6 +397,43 @@ export class DatabaseStorage implements IStorage {
   async deleteInvite(id: string): Promise<boolean> {
     const result = await db.delete(userInvites).where(eq(userInvites.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getPriceState(symbol: string): Promise<PriceState | null> {
+    const [result] = await db.select()
+      .from(priceState)
+      .where(eq(priceState.symbol, symbol))
+      .limit(1);
+    return result || null;
+  }
+
+  async upsertPriceState(symbol: string, lastOpen: number, lastClose: number, lastTimestamp: Date): Promise<PriceState> {
+    const now = new Date();
+    const existing = await this.getPriceState(symbol);
+    
+    if (existing) {
+      const [result] = await db.update(priceState)
+        .set({ 
+          lastOpen, 
+          lastClose, 
+          lastTimestamp,
+          updatedAt: now 
+        })
+        .where(eq(priceState.symbol, symbol))
+        .returning();
+      return result;
+    } else {
+      const [result] = await db.insert(priceState)
+        .values({ 
+          symbol, 
+          lastOpen, 
+          lastClose, 
+          lastTimestamp,
+          updatedAt: now 
+        })
+        .returning();
+      return result;
+    }
   }
 }
 
