@@ -72,7 +72,7 @@ const menuItems = [
     url: "/status",
     icon: Activity,
     description: "Health checks",
-    adminOnly: false,
+    adminOnly: true,
   },
   {
     title: "User Management",

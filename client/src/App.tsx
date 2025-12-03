@@ -37,7 +37,7 @@ function ProtectedRoutes() {
       <Route path="/historical" component={Historical} />
       <Route path="/backtesting" component={Backtesting} />
       <Route path="/live-demo" component={LiveDemo} />
-      <Route path="/status" component={SystemStatus} />
+      {isAdmin && <Route path="/status" component={SystemStatus} />}
       {isAdmin && <Route path="/users" component={UserManagement} />}
       <Route component={NotFound} />
     </Switch>
