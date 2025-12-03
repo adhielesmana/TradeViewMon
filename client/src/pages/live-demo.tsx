@@ -158,6 +158,17 @@ export default function LiveDemo() {
     const result = usdAmount * currentCurrency.rate;
     // Round to whole numbers for high-rate currencies (IDR, JPY, etc.)
     if (currentCurrency.rate >= 100) {
+      // Smart rounding: snap to clean numbers to avoid 150000001 issues
+      // Check if we're very close to a round number (within 0.01%)
+      const roundFactors = [10000000, 1000000, 100000, 10000, 1000, 100];
+      for (const factor of roundFactors) {
+        const nearestRound = Math.round(result / factor) * factor;
+        const diff = Math.abs(result - nearestRound);
+        // If within 0.01% of a round number, snap to it
+        if (diff / nearestRound < 0.0001) {
+          return nearestRound;
+        }
+      }
       return Math.round(result);
     }
     return Math.round(result * 100) / 100;
