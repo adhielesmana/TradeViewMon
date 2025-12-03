@@ -115,11 +115,11 @@ export default function AiSuggestions() {
     
     if (message.type === "suggestion_update" && matchesSymbol) {
       queryClient.invalidateQueries({ queryKey: ["/api/suggestions/latest", { symbol }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/suggestions/recent", { symbol }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/suggestions/recent", { symbol, limit: 10 }] });
       setLastUpdate(new Date());
     } else if (message.type === "suggestion_accuracy_update" && matchesSymbol) {
       queryClient.invalidateQueries({ queryKey: ["/api/suggestions/accuracy", { symbol }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/suggestions/recent", { symbol }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/suggestions/recent", { symbol, limit: 10 }] });
     }
   }, [symbol]);
 
@@ -134,7 +134,7 @@ export default function AiSuggestions() {
   });
 
   const { data: recentSuggestions, isLoading: isLoadingRecent } = useQuery<AiSuggestion[]>({
-    queryKey: ["/api/suggestions/recent", { symbol }],
+    queryKey: ["/api/suggestions/recent", { symbol, limit: 10 }],
     refetchInterval: 60000,
   });
 
