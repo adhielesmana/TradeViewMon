@@ -7,7 +7,8 @@ import {
   BarChart3,
   FlaskConical,
   Users,
-  Brain
+  Brain,
+  Wallet
 } from "lucide-react";
 import {
   Sidebar,
@@ -57,6 +58,13 @@ const menuItems = [
     url: "/backtesting",
     icon: FlaskConical,
     description: "Model testing",
+    adminOnly: false,
+  },
+  {
+    title: "Live Demo",
+    url: "/live-demo",
+    icon: Wallet,
+    description: "Paper trading",
     adminOnly: false,
   },
   {

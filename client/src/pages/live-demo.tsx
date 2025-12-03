@@ -74,7 +74,7 @@ function getPnLColor(value: number): string {
 }
 
 export default function LiveDemo() {
-  const { currentSymbol, SYMBOLS } = useSymbol();
+  const { currentSymbol, supportedSymbols } = useSymbol();
   const symbol = currentSymbol.symbol;
   const [selectedSymbol, setSelectedSymbol] = useState(symbol);
   const [depositAmount, setDepositAmount] = useState("");
@@ -118,7 +118,7 @@ export default function LiveDemo() {
   });
 
   const depositMutation = useMutation({
-    mutationFn: (amount: number) => apiRequest("/api/demo/deposit", { method: "POST", body: JSON.stringify({ amount }) }),
+    mutationFn: (amount: number) => apiRequest("POST", "/api/demo/deposit", { amount }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/account"] });
       queryClient.invalidateQueries({ queryKey: ["/api/demo/transactions"] });
@@ -128,7 +128,7 @@ export default function LiveDemo() {
   });
 
   const withdrawMutation = useMutation({
-    mutationFn: (amount: number) => apiRequest("/api/demo/withdraw", { method: "POST", body: JSON.stringify({ amount }) }),
+    mutationFn: (amount: number) => apiRequest("POST", "/api/demo/withdraw", { amount }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/account"] });
       queryClient.invalidateQueries({ queryKey: ["/api/demo/transactions"] });
@@ -139,7 +139,7 @@ export default function LiveDemo() {
 
   const openTradeMutation = useMutation({
     mutationFn: (data: { symbol: string; type: string; entryPrice: number; quantity: number; stopLoss?: number; takeProfit?: number }) =>
-      apiRequest("/api/demo/trade/open", { method: "POST", body: JSON.stringify(data) }),
+      apiRequest("POST", "/api/demo/trade/open", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/account"] });
       queryClient.invalidateQueries({ queryKey: ["/api/demo/positions"] });
@@ -153,7 +153,7 @@ export default function LiveDemo() {
 
   const closeTradeMutation = useMutation({
     mutationFn: (data: { positionId: number; exitPrice: number }) =>
-      apiRequest("/api/demo/trade/close", { method: "POST", body: JSON.stringify(data) }),
+      apiRequest("POST", "/api/demo/trade/close", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/account"] });
       queryClient.invalidateQueries({ queryKey: ["/api/demo/positions"] });
@@ -168,7 +168,7 @@ export default function LiveDemo() {
     }
   }, []);
 
-  useWebSocket(handleWSMessage);
+  useWebSocket({ onMessage: handleWSMessage });
 
   const handleDeposit = () => {
     const amount = parseFloat(depositAmount);
@@ -235,7 +235,7 @@ export default function LiveDemo() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {SYMBOLS.map((s) => (
+            {supportedSymbols.map((s) => (
               <SelectItem key={s.symbol} value={s.symbol} data-testid={`option-symbol-${s.symbol}`}>
                 {s.symbol}
               </SelectItem>
@@ -599,7 +599,7 @@ export default function LiveDemo() {
                       <div className="flex items-center gap-4">
                         <div className="text-right">
                           <div className="text-sm text-muted-foreground">Current</div>
-                          <div className="font-medium">{formatCurrency(position.currentPrice)}</div>
+                          <div className="font-medium">{formatCurrency(position.currentPrice || 0)}</div>
                         </div>
                         <div className="text-right">
                           <div className="text-sm text-muted-foreground">P&L</div>
