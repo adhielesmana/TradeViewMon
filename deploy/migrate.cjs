@@ -139,6 +139,20 @@ async function runMigrations() {
             `);
         }
         
+        if (!existingTables.includes('currency_rates')) {
+            tablesToCreate.push(`
+                CREATE TABLE currency_rates (
+                    id SERIAL PRIMARY KEY,
+                    base_currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+                    target_currency VARCHAR(10) NOT NULL,
+                    rate REAL NOT NULL,
+                    source VARCHAR(50) NOT NULL DEFAULT 'frankfurter',
+                    fetched_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                )
+            `);
+        }
+        
         if (!existingTables.includes('auto_trade_settings')) {
             tablesToCreate.push(`
                 CREATE TABLE auto_trade_settings (
@@ -225,6 +239,7 @@ async function runMigrations() {
             'CREATE INDEX IF NOT EXISTS demo_positions_user_id_idx ON demo_positions(user_id)',
             'CREATE INDEX IF NOT EXISTS demo_positions_status_idx ON demo_positions(status)',
             'CREATE INDEX IF NOT EXISTS IDX_session_expire ON session(expire)',
+            'CREATE INDEX IF NOT EXISTS currency_rates_base_target_idx ON currency_rates(base_currency, target_currency)',
         ];
         
         for (const sql of indexes) {
