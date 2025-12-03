@@ -1,0 +1,28 @@
+Candlestick analysis is a technical analysis method that uses visual patterns to predict price movements. The patterns provide insight into market psychology and potential shifts in supply and demand. 
+Candlestick Anatomy
+Each candlestick tells a story about price action within a specific timeframe (e.g., 1 day, 1 hour). 
+Real Body: The main, filled part of the candle represents the range between the opening and closing prices.
+Green/White Body: The closing price was higher than the opening price (bullish movement).
+Red/Black Body: The closing price was lower than the opening price (bearish movement).
+Wicks (Shadows): The thin lines above and below the body show the high and low prices reached during the period.
+Long Wicks: Indicate that trading occurred well beyond the open and close, suggesting price rejection or volatility.
+Short Wicks: Suggest that most trading activity was confined to the open and close range. 
+Candlestick Patterns: The Ultimate Cheat Sheet | TraderLion
+Candlestick Cheat Sheet. Technical Analysis Candlestick ...
+60 Essential Candlestick Patterns: Trading Guide for Beginners
+Mastering Candlestick Patterns: Your Ultimate Cheat Sheet
+Key Candlestick Patterns
+Candlestick patterns are broadly categorized into reversal (indicating a trend change) and continuation (indicating the current trend will persist) patterns. 
+Pattern Name 	Type	Description	Market Psychology / Signal
+Hammer	Bullish Reversal	Small body (usually green), very long lower wick, appears after a downtrend.	Sellers attempted to push the price down, but buyers overwhelmed them, signaling potential bullish pressure.
+Hanging Man	Bearish Reversal	Same shape as a hammer but appears after an uptrend (usually red).	Buyers failed to sustain the high, indicating selling pressure is emerging; caution is advised.
+Bullish Engulfing	Bullish Reversal	A small red candle is completely engulfed by a subsequent large green candle.	Buyers have overpowered the sellers, suggesting a strong potential trend change to the upside.
+Bearish Engulfing	Bearish Reversal	A small green candle is completely engulfed by a subsequent large red candle.	Sellers have taken control from the buyers, signaling a likely downward reversal.
+Doji	Indecision	Open and close prices are virtually equal, resulting in a very small body.	Market indecision; bulls and bears are in a war with no clear winner, often appears before a major move or reversal.
+Morning Star	Bullish Reversal	Three-candle pattern: a large red candle, a small indecision candle (Doji/small body), and a large green candle.	A strong signal that the bearish trend is ending and a bullish reversal is likely.
+Shooting Star	Bearish Reversal	Small body (usually red) with a long upper wick, appears after an uptrend.	Buyers attempted to push higher but were rejected, suggesting a potential drop in price.
+Golden Rules for Effective Analysis
+For patterns to be reliable, context is key. 
+Context: A pattern's significance increases when it forms at a key support or resistance level. A bullish signal within a strong downtrend might be less reliable than the same signal at a major historical support level.
+Confirmation: Never act on a single candle alone. Wait for the subsequent candle(s) to confirm the direction suggested by the pattern before placing a trade.
+Volume: Higher trading volume adds more weight to a pattern. A reversal on high volume is generally considered a stronger signal than one on low volume. 
