@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { 
   TrendingUp, 
@@ -102,6 +103,7 @@ export default function LiveDemo() {
   const [selectedSymbol, setSelectedSymbol] = useState(symbol);
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawAll, setWithdrawAll] = useState(false);
   const [tradeAmount, setTradeAmount] = useState("");
   const [stopLoss, setStopLoss] = useState("");
   const [takeProfit, setTakeProfit] = useState("");
@@ -199,10 +201,11 @@ export default function LiveDemo() {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/account"] });
       queryClient.invalidateQueries({ queryKey: ["/api/demo/transactions"] });
       setWithdrawAmount("");
+      setWithdrawAll(false);
       setIsWithdrawOpen(false);
       toast({
         title: "Withdrawal Successful",
-        description: `Successfully withdrew ${formatCurrency(parseFloat(withdrawAmount), selectedCurrency)}`,
+        description: `Successfully withdrew ${formatCurrency(convertToUSD(parseFloat(withdrawAmount) || 0))}`,
       });
     },
     onError: (error: Error) => {
@@ -312,6 +315,10 @@ export default function LiveDemo() {
 
   const openPnL = openPositions?.reduce((sum, pos) => sum + calculateLivePnL(pos), 0) || 0;
   const totalEquity = (accountData?.account.balance || 0) + openPnL;
+
+  // Calculate available withdrawal balance (balance - open positions value)
+  const openPositionsValue = openPositions?.reduce((sum, pos) => sum + (pos.entryPrice * pos.quantity), 0) || 0;
+  const availableWithdrawBalance = Math.max(0, (accountData?.account.balance || 0) - openPositionsValue);
 
   return (
     <div className="p-6 space-y-6 overflow-auto h-full">
@@ -431,7 +438,13 @@ export default function LiveDemo() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
-              <Dialog open={isWithdrawOpen} onOpenChange={setIsWithdrawOpen}>
+              <Dialog open={isWithdrawOpen} onOpenChange={(open) => {
+                setIsWithdrawOpen(open);
+                if (!open) {
+                  setWithdrawAmount("");
+                  setWithdrawAll(false);
+                }
+              }}>
                 <DialogTrigger asChild>
                   <Button size="sm" variant="outline" data-testid="button-withdraw">
                     <Minus className="h-3 w-3 mr-1" /> Withdraw
@@ -443,14 +456,32 @@ export default function LiveDemo() {
                     <DialogDescription>Remove virtual funds from your demo account</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
+                    <div className="bg-muted/50 p-3 rounded-md space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Total Balance:</span>
+                        <span className="font-medium">{formatCurrency(accountData?.account.balance || 0)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Open Positions Value:</span>
+                        <span className="font-medium text-yellow-500">{formatCurrency(openPositionsValue)}</span>
+                      </div>
+                      <div className="border-t pt-2 flex justify-between text-sm">
+                        <span className="text-muted-foreground">Available to Withdraw:</span>
+                        <span className="font-medium text-green-500">{formatCurrency(availableWithdrawBalance)}</span>
+                      </div>
+                    </div>
                     <div>
                       <Label>Amount ({currentCurrency.code})</Label>
                       <Input
                         type="number"
                         value={withdrawAmount}
-                        onChange={(e) => setWithdrawAmount(e.target.value)}
+                        onChange={(e) => {
+                          setWithdrawAmount(e.target.value);
+                          setWithdrawAll(false);
+                        }}
                         placeholder={currentCurrency.code === "IDR" ? "15850000" : "1000"}
                         min="0"
+                        disabled={withdrawAll}
                         data-testid="input-withdraw-amount"
                       />
                       {selectedCurrency !== "USD" && withdrawAmount && (
@@ -459,12 +490,34 @@ export default function LiveDemo() {
                         </p>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Available: {formatCurrency(accountData?.account.balance || 0)}
-                    </p>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="withdraw-all"
+                        checked={withdrawAll}
+                        onCheckedChange={(checked) => {
+                          setWithdrawAll(checked === true);
+                          if (checked) {
+                            setWithdrawAmount(convertFromUSD(availableWithdrawBalance).toFixed(2));
+                          }
+                        }}
+                        data-testid="checkbox-withdraw-all"
+                      />
+                      <Label htmlFor="withdraw-all" className="text-sm cursor-pointer">
+                        Withdraw all available ({formatCurrency(availableWithdrawBalance)})
+                      </Label>
+                    </div>
+                    {openPositionsValue > 0 && (
+                      <p className="text-xs text-yellow-500">
+                        Note: You have {openPositions?.length || 0} open position(s). Balance must cover open positions.
+                      </p>
+                    )}
                   </div>
                   <DialogFooter>
-                    <Button onClick={handleWithdraw} disabled={withdrawMutation.isPending} data-testid="button-confirm-withdraw">
+                    <Button 
+                      onClick={handleWithdraw} 
+                      disabled={withdrawMutation.isPending || availableWithdrawBalance <= 0} 
+                      data-testid="button-confirm-withdraw"
+                    >
                       {withdrawMutation.isPending ? "Processing..." : "Withdraw"}
                     </Button>
                   </DialogFooter>
