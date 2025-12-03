@@ -1,19 +1,8 @@
-import { useMemo } from "react";
-import {
-  ComposedChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  ReferenceLine,
-} from "recharts";
+import { useEffect, useRef, useMemo } from "react";
+import { createChart, ColorType, IChartApi, CandlestickData, Time, CandlestickSeries } from "lightweight-charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { MarketData } from "@shared/schema";
-import { format } from "date-fns";
 
 interface CandlestickChartProps {
   data: MarketData[];
@@ -23,21 +12,6 @@ interface CandlestickChartProps {
   className?: string;
 }
 
-interface CandleData {
-  time: string;
-  timestamp: Date;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  isUp: boolean;
-  bodyLow: number;
-  bodyHigh: number;
-  wickTop: number;
-  wickBottom: number;
-}
-
 export function CandlestickChart({
   data,
   isLoading = false,
@@ -45,41 +19,127 @@ export function CandlestickChart({
   height = 350,
   className,
 }: CandlestickChartProps) {
-  const chartData = useMemo<CandleData[]>(() => {
-    return data.map((item) => {
-      const isUp = item.close >= item.open;
-      return {
-        time: format(new Date(item.timestamp), "HH:mm"),
-        timestamp: new Date(item.timestamp),
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+
+  const chartData = useMemo<CandlestickData[]>(() => {
+    const sortedData = [...data].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    const uniqueData = new Map<number, CandlestickData>();
+    
+    sortedData.forEach((item) => {
+      const timestamp = Math.floor(new Date(item.timestamp).getTime() / 1000) as Time;
+      uniqueData.set(timestamp as number, {
+        time: timestamp,
         open: item.open,
         high: item.high,
         low: item.low,
         close: item.close,
-        volume: item.volume,
-        isUp,
-        bodyLow: Math.min(item.open, item.close),
-        bodyHigh: Math.max(item.open, item.close),
-        wickTop: item.high,
-        wickBottom: item.low,
-      };
+      });
     });
+
+    return Array.from(uniqueData.values()).sort((a, b) => (a.time as number) - (b.time as number));
   }, [data]);
 
-  const { minPrice, maxPrice, avgPrice } = useMemo(() => {
-    if (data.length === 0) return { minPrice: 0, maxPrice: 0, avgPrice: 0 };
-    const lows = data.map((d) => d.low);
-    const highs = data.map((d) => d.high);
-    const closes = data.map((d) => d.close);
-    const min = Math.min(...lows);
-    const max = Math.max(...highs);
-    const avg = closes.reduce((a, b) => a + b, 0) / closes.length;
-    const padding = (max - min) * 0.1;
-    return { 
-      minPrice: min - padding, 
-      maxPrice: max + padding,
-      avgPrice: avg 
+  useEffect(() => {
+    if (!chartContainerRef.current || isLoading || chartData.length === 0) return;
+
+    const isDarkMode = document.documentElement.classList.contains("dark");
+
+    const chart = createChart(chartContainerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: "transparent" },
+        textColor: isDarkMode ? "#a1a1aa" : "#71717a",
+      },
+      grid: {
+        vertLines: { color: isDarkMode ? "#27272a" : "#e4e4e7", style: 1 },
+        horzLines: { color: isDarkMode ? "#27272a" : "#e4e4e7", style: 1 },
+      },
+      width: chartContainerRef.current.clientWidth,
+      height: height,
+      rightPriceScale: {
+        borderColor: isDarkMode ? "#27272a" : "#e4e4e7",
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.1,
+        },
+      },
+      timeScale: {
+        borderColor: isDarkMode ? "#27272a" : "#e4e4e7",
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      crosshair: {
+        mode: 1,
+        vertLine: {
+          color: isDarkMode ? "#52525b" : "#a1a1aa",
+          width: 1,
+          style: 2,
+          labelBackgroundColor: isDarkMode ? "#27272a" : "#f4f4f5",
+        },
+        horzLine: {
+          color: isDarkMode ? "#52525b" : "#a1a1aa",
+          width: 1,
+          style: 2,
+          labelBackgroundColor: isDarkMode ? "#27272a" : "#f4f4f5",
+        },
+      },
+    });
+
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
+      upColor: "#22c55e",
+      downColor: "#ef4444",
+      borderUpColor: "#22c55e",
+      borderDownColor: "#ef4444",
+      wickUpColor: "#22c55e",
+      wickDownColor: "#ef4444",
+    });
+
+    candlestickSeries.setData(chartData);
+
+    chart.timeScale().fitContent();
+
+    chartRef.current = chart;
+
+    const handleResize = () => {
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+        });
+      }
     };
-  }, [data]);
+
+    window.addEventListener("resize", handleResize);
+
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === "class") {
+          const isDark = document.documentElement.classList.contains("dark");
+          chart.applyOptions({
+            layout: {
+              background: { type: ColorType.Solid, color: "transparent" },
+              textColor: isDark ? "#a1a1aa" : "#71717a",
+            },
+            grid: {
+              vertLines: { color: isDark ? "#27272a" : "#e4e4e7" },
+              horzLines: { color: isDark ? "#27272a" : "#e4e4e7" },
+            },
+          });
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, { attributes: true });
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      observer.disconnect();
+      chart.remove();
+      chartRef.current = null;
+    };
+  }, [chartData, height, isLoading]);
 
   if (isLoading) {
     return (
@@ -101,7 +161,7 @@ export function CandlestickChart({
           <CardTitle className="text-lg font-medium">{title}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div 
+          <div
             className="flex items-center justify-center text-muted-foreground"
             style={{ height }}
           >
@@ -118,127 +178,11 @@ export function CandlestickChart({
         <CardTitle className="text-lg font-medium">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={height}>
-          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-            <CartesianGrid 
-              strokeDasharray="3 3" 
-              stroke="hsl(var(--border))" 
-              opacity={0.4}
-              vertical={false}
-            />
-            <XAxis
-              dataKey="time"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-              dy={10}
-              interval="preserveStartEnd"
-            />
-            <YAxis
-              domain={[minPrice, maxPrice]}
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-              tickFormatter={(value) => value >= 1000 ? `$${(value/1000).toFixed(1)}k` : `$${value.toFixed(2)}`}
-              dx={-5}
-              width={70}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(var(--popover))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: "8px",
-                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-              }}
-              labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 500 }}
-              content={({ active, payload }) => {
-                if (!active || !payload || !payload.length) return null;
-                const d = payload[0].payload as CandleData;
-                const change = ((d.close - d.open) / d.open * 100).toFixed(2);
-                const isPositive = d.close >= d.open;
-                return (
-                  <div className="bg-popover border border-border rounded-lg p-3 shadow-md">
-                    <div className="font-medium mb-2">{format(d.timestamp, "MMM dd, HH:mm")}</div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                      <span className="text-muted-foreground">Open:</span>
-                      <span className="font-mono">${d.open.toFixed(2)}</span>
-                      <span className="text-muted-foreground">High:</span>
-                      <span className="font-mono text-profit">${d.high.toFixed(2)}</span>
-                      <span className="text-muted-foreground">Low:</span>
-                      <span className="font-mono text-loss">${d.low.toFixed(2)}</span>
-                      <span className="text-muted-foreground">Close:</span>
-                      <span className="font-mono">${d.close.toFixed(2)}</span>
-                      <span className="text-muted-foreground">Change:</span>
-                      <span className={`font-mono ${isPositive ? "text-profit" : "text-loss"}`}>
-                        {isPositive ? "+" : ""}{change}%
-                      </span>
-                    </div>
-                  </div>
-                );
-              }}
-            />
-            <ReferenceLine 
-              y={avgPrice} 
-              stroke="hsl(var(--muted-foreground))" 
-              strokeDasharray="3 3"
-              opacity={0.5}
-            />
-            <Bar 
-              dataKey="high" 
-              barSize={8}
-              shape={(props: unknown) => {
-                const p = props as { x: number; y: number; width: number; height: number; payload: CandleData };
-                const { x, width, payload } = p;
-                if (!payload) return <g />;
-                
-                const color = payload.isUp ? "rgb(34, 197, 94)" : "rgb(239, 68, 68)";
-                const candleWidth = Math.max(width * 0.7, 3);
-                const wickWidth = 1;
-                const centerX = x + width / 2;
-                
-                const yDomain = maxPrice - minPrice;
-                const chartHeight = height - 50;
-                const yScale = chartHeight / yDomain;
-                
-                const wickTopY = (maxPrice - payload.high) * yScale + 10;
-                const wickBottomY = (maxPrice - payload.low) * yScale + 10;
-                const bodyTopY = (maxPrice - Math.max(payload.open, payload.close)) * yScale + 10;
-                const bodyBottomY = (maxPrice - Math.min(payload.open, payload.close)) * yScale + 10;
-                const bodyHeight = Math.max(bodyBottomY - bodyTopY, 1);
-
-                return (
-                  <g>
-                    <line
-                      x1={centerX}
-                      y1={wickTopY}
-                      x2={centerX}
-                      y2={wickBottomY}
-                      stroke={color}
-                      strokeWidth={wickWidth}
-                    />
-                    <rect
-                      x={centerX - candleWidth / 2}
-                      y={bodyTopY}
-                      width={candleWidth}
-                      height={bodyHeight}
-                      fill={color}
-                      stroke={color}
-                      strokeWidth={0.5}
-                      rx={0.5}
-                    />
-                  </g>
-                );
-              }}
-            >
-              {chartData.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
-                  fill={entry.isUp ? "rgb(34, 197, 94)" : "rgb(239, 68, 68)"} 
-                />
-              ))}
-            </Bar>
-          </ComposedChart>
-        </ResponsiveContainer>
+        <div 
+          ref={chartContainerRef} 
+          data-testid="chart-candlestick"
+          style={{ height }}
+        />
       </CardContent>
     </Card>
   );
