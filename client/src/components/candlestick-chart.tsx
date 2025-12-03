@@ -1,15 +1,4 @@
-import { useMemo } from "react";
-import {
-  ComposedChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  ReferenceLine,
-} from "recharts";
+import { useMemo, useRef, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { MarketData } from "@shared/schema";
@@ -31,54 +20,13 @@ interface CandleData {
   low: number;
   close: number;
   isUp: boolean;
-  bodyBottom: number;
-  bodyHeight: number;
-  wickLow: number;
-  wickHigh: number;
 }
 
-const CandlestickBar = (props: any) => {
-  const { x, y, width, height, payload } = props;
-  if (!payload) return null;
-  
-  const { open, high, low, close, isUp } = payload;
-  const color = isUp ? "#16a34a" : "#ef4444";
-  
-  const barWidth = Math.max(width * 0.8, 4);
-  const barX = x + (width - barWidth) / 2;
-  
-  const yScale = props.yScale || ((val: number) => y);
-  
-  const bodyTop = yScale(Math.max(open, close));
-  const bodyBottom = yScale(Math.min(open, close));
-  const bodyHeight = Math.max(Math.abs(bodyBottom - bodyTop), 1);
-  
-  const wickX = barX + barWidth / 2;
-  const wickTop = yScale(high);
-  const wickBottom = yScale(low);
-  
-  return (
-    <g>
-      <line
-        x1={wickX}
-        y1={wickTop}
-        x2={wickX}
-        y2={wickBottom}
-        stroke={color}
-        strokeWidth={1}
-      />
-      <rect
-        x={barX}
-        y={bodyTop}
-        width={barWidth}
-        height={bodyHeight}
-        fill={color}
-        stroke={color}
-        strokeWidth={1}
-      />
-    </g>
-  );
-};
+interface TooltipData {
+  x: number;
+  y: number;
+  candle: CandleData;
+}
 
 export function CandlestickChart({
   data,
@@ -87,6 +35,21 @@ export function CandlestickChart({
   height = 350,
   className,
 }: CandlestickChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(800);
+  const [tooltip, setTooltip] = useState<TooltipData | null>(null);
+
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.clientWidth);
+      }
+    };
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
+
   const chartData = useMemo<CandleData[]>(() => {
     const sortedData = [...data].sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
@@ -100,7 +63,6 @@ export function CandlestickChart({
       const high = Number(item.high);
       const low = Number(item.low);
       const close = Number(item.close);
-      const isUp = close >= open;
       
       uniqueData.set(timestamp, {
         time: format(new Date(timestamp), "HH:mm"),
@@ -109,11 +71,7 @@ export function CandlestickChart({
         high,
         low,
         close,
-        isUp,
-        bodyBottom: Math.min(open, close),
-        bodyHeight: Math.abs(close - open),
-        wickLow: low,
-        wickHigh: high,
+        isUp: close >= open,
       });
     });
 
@@ -141,6 +99,22 @@ export function CandlestickChart({
       maxPrice: roundedMax,
       yAxisTicks: ticks
     };
+  }, [chartData]);
+
+  const margin = { top: 20, right: 70, bottom: 40, left: 10 };
+  const chartWidth = containerWidth - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+
+  const priceToY = (price: number) => {
+    const range = maxPrice - minPrice;
+    if (range === 0) return chartHeight / 2;
+    return ((maxPrice - price) / range) * chartHeight;
+  };
+
+  const xAxisLabels = useMemo(() => {
+    if (chartData.length === 0) return [];
+    const step = Math.max(1, Math.floor(chartData.length / 8));
+    return chartData.filter((_, i) => i % step === 0 || i === chartData.length - 1);
   }, [chartData]);
 
   if (isLoading) {
@@ -174,90 +148,149 @@ export function CandlestickChart({
     );
   }
 
+  const candleWidth = Math.max(chartWidth / chartData.length * 0.7, 3);
+  const candleSpacing = chartWidth / chartData.length;
+
   return (
     <Card className={className}>
       <CardHeader className="pb-2">
         <CardTitle className="text-lg font-medium">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={height} data-testid="chart-candlestick">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
-            <CartesianGrid 
-              strokeDasharray="3 3" 
-              stroke="hsl(var(--border))" 
-              opacity={0.4}
-              horizontal={true}
-              vertical={true}
-            />
-            <XAxis
-              dataKey="time"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              dy={10}
-              interval="preserveStartEnd"
-            />
-            <YAxis
-              domain={[minPrice, maxPrice]}
-              ticks={yAxisTicks}
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
-              tickFormatter={(value) => `$${value.toFixed(2)}`}
-              width={75}
-              orientation="right"
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(var(--popover))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: "8px",
-                fontSize: "12px",
-              }}
-              labelStyle={{ color: "hsl(var(--foreground))" }}
-              formatter={(value: number, name: string) => {
-                const labels: Record<string, string> = {
-                  open: "Open",
-                  high: "High", 
-                  low: "Low",
-                  close: "Close",
-                };
-                return [`$${value.toFixed(2)}`, labels[name] || name];
-              }}
-              labelFormatter={(label) => `Time: ${label}`}
-            />
-            {chartData.map((entry, index) => {
-              const color = entry.isUp ? "#16a34a" : "#ef4444";
-              const barWidth = Math.max(100 / chartData.length * 0.6, 2);
-              
-              return (
-                <ReferenceLine
-                  key={`wick-${index}`}
-                  segment={[
-                    { x: entry.time, y: entry.low },
-                    { x: entry.time, y: entry.high }
-                  ]}
-                  stroke={color}
-                  strokeWidth={1}
-                />
-              );
-            })}
-            <Bar 
-              dataKey="bodyHeight" 
-              stackId="candle"
-              fill="#16a34a"
-              stroke="none"
-              barSize={8}
-            >
-              {chartData.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
-                  fill={entry.isUp ? "#16a34a" : "#ef4444"}
-                />
+        <div 
+          ref={containerRef}
+          style={{ width: '100%', height, position: 'relative' }} 
+          data-testid="chart-candlestick"
+        >
+          <svg width="100%" height={height}>
+            <g transform={`translate(${margin.left}, ${margin.top})`}>
+              {yAxisTicks.map((tick, i) => (
+                <g key={`grid-${i}`}>
+                  <line
+                    x1={0}
+                    y1={priceToY(tick)}
+                    x2={chartWidth}
+                    y2={priceToY(tick)}
+                    stroke="hsl(var(--border))"
+                    strokeOpacity={0.3}
+                    strokeDasharray="3 3"
+                  />
+                </g>
               ))}
-            </Bar>
-          </ComposedChart>
-        </ResponsiveContainer>
+
+              {chartData.map((candle, index) => {
+                const x = index * candleSpacing + (candleSpacing - candleWidth) / 2;
+                const color = candle.isUp ? "#16a34a" : "#ef4444";
+                
+                const openY = priceToY(candle.open);
+                const closeY = priceToY(candle.close);
+                const highY = priceToY(candle.high);
+                const lowY = priceToY(candle.low);
+                
+                const bodyTop = Math.min(openY, closeY);
+                const bodyHeight = Math.max(Math.abs(closeY - openY), 1);
+                const wickX = x + candleWidth / 2;
+
+                return (
+                  <g 
+                    key={`candle-${index}`}
+                    onMouseEnter={(e) => {
+                      const rect = containerRef.current?.getBoundingClientRect();
+                      if (rect) {
+                        setTooltip({
+                          x: x + margin.left + candleWidth,
+                          y: bodyTop + margin.top,
+                          candle
+                        });
+                      }
+                    }}
+                    onMouseLeave={() => setTooltip(null)}
+                    style={{ cursor: 'crosshair' }}
+                  >
+                    <line
+                      x1={wickX}
+                      y1={highY}
+                      x2={wickX}
+                      y2={lowY}
+                      stroke={color}
+                      strokeWidth={1.5}
+                    />
+                    <rect
+                      x={x}
+                      y={bodyTop}
+                      width={candleWidth}
+                      height={bodyHeight}
+                      fill={color}
+                      stroke={color}
+                      strokeWidth={0.5}
+                    />
+                    <rect
+                      x={x - 2}
+                      y={highY}
+                      width={candleWidth + 4}
+                      height={lowY - highY}
+                      fill="transparent"
+                    />
+                  </g>
+                );
+              })}
+
+              {yAxisTicks.map((tick, i) => (
+                <text
+                  key={`ytick-${i}`}
+                  x={chartWidth + 5}
+                  y={priceToY(tick)}
+                  fontSize={9}
+                  fill="hsl(var(--muted-foreground))"
+                  dominantBaseline="middle"
+                >
+                  ${tick.toFixed(2)}
+                </text>
+              ))}
+
+              {xAxisLabels.map((candle, i) => {
+                const index = chartData.findIndex(c => c.timestamp === candle.timestamp);
+                const x = index * candleSpacing + candleSpacing / 2;
+                return (
+                  <text
+                    key={`xtick-${i}`}
+                    x={x}
+                    y={chartHeight + 20}
+                    fontSize={10}
+                    fill="hsl(var(--muted-foreground))"
+                    textAnchor="middle"
+                  >
+                    {candle.time}
+                  </text>
+                );
+              })}
+            </g>
+          </svg>
+
+          {tooltip && (
+            <div
+              className="absolute bg-popover border border-border rounded-lg p-3 shadow-lg pointer-events-none z-50"
+              style={{
+                left: Math.min(tooltip.x + 10, containerWidth - 160),
+                top: Math.max(tooltip.y - 60, 10),
+              }}
+            >
+              <div className="text-sm font-medium mb-2">{tooltip.candle.time}</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                <span className="text-muted-foreground">Open:</span>
+                <span className="font-mono">${tooltip.candle.open.toFixed(2)}</span>
+                <span className="text-muted-foreground">High:</span>
+                <span className="font-mono text-green-500">${tooltip.candle.high.toFixed(2)}</span>
+                <span className="text-muted-foreground">Low:</span>
+                <span className="font-mono text-red-500">${tooltip.candle.low.toFixed(2)}</span>
+                <span className="text-muted-foreground">Close:</span>
+                <span className={`font-mono ${tooltip.candle.isUp ? 'text-green-500' : 'text-red-500'}`}>
+                  ${tooltip.candle.close.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
