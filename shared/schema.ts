@@ -407,3 +407,37 @@ export type CurrencyRateResponse = {
   rate: number;
   lastUpdated: string;
 };
+
+// Auto-Trade Settings - per-user auto-trading configuration
+export const autoTradeSettings = pgTable("auto_trade_settings", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  isEnabled: boolean("is_enabled").notNull().default(false),
+  tradeAmount: real("trade_amount").notNull().default(0.01), // Trade amount in USD (e.g., 0.01 = 1 cent worth)
+  symbol: varchar("symbol", { length: 20 }).notNull().default("XAUUSD"), // Symbol to auto-trade
+  lastTradeAt: timestamp("last_trade_at"), // When last auto-trade was executed
+  lastDecision: varchar("last_decision", { length: 10 }), // Last AI decision acted on
+  totalAutoTrades: integer("total_auto_trades").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("auto_trade_settings_user_idx").on(table.userId),
+]);
+
+export const autoTradeSettingsRelations = relations(autoTradeSettings, ({ one }) => ({
+  user: one(users, {
+    fields: [autoTradeSettings.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertAutoTradeSettingSchema = createInsertSchema(autoTradeSettings).omit({ id: true });
+export const updateAutoTradeSettingSchema = createInsertSchema(autoTradeSettings).pick({
+  isEnabled: true,
+  tradeAmount: true,
+  symbol: true,
+}).partial();
+
+export type AutoTradeSetting = typeof autoTradeSettings.$inferSelect;
+export type InsertAutoTradeSetting = z.infer<typeof insertAutoTradeSettingSchema>;
+export type UpdateAutoTradeSetting = z.infer<typeof updateAutoTradeSettingSchema>;

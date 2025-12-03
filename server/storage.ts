@@ -1,6 +1,6 @@
 import { 
   marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState, aiSuggestions,
-  demoAccounts, demoPositions, demoTransactions, appSettings, currencyRates,
+  demoAccounts, demoPositions, demoTransactions, appSettings, currencyRates, autoTradeSettings,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
@@ -15,7 +15,8 @@ import {
   type DemoTransaction, type InsertDemoTransaction,
   type DemoAccountStats,
   type AppSetting,
-  type CurrencyRate, type InsertCurrencyRate
+  type CurrencyRate, type InsertCurrencyRate,
+  type AutoTradeSetting, type UpdateAutoTradeSetting
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, gte, lte, and, sql, inArray, isNull } from "drizzle-orm";
@@ -108,6 +109,13 @@ export interface IStorage {
   getCurrencyRate(baseCurrency: string, targetCurrency: string): Promise<CurrencyRate | null>;
   getAllCurrencyRates(): Promise<CurrencyRate[]>;
   upsertCurrencyRate(rate: InsertCurrencyRate): Promise<CurrencyRate>;
+
+  // Auto-Trade Settings
+  getAutoTradeSettings(userId: string): Promise<AutoTradeSetting | null>;
+  createAutoTradeSettings(userId: string): Promise<AutoTradeSetting>;
+  updateAutoTradeSettings(userId: string, settings: UpdateAutoTradeSetting): Promise<AutoTradeSetting | null>;
+  getAllEnabledAutoTradeSettings(): Promise<AutoTradeSetting[]>;
+  recordAutoTrade(userId: string, decision: string): Promise<void>;
 }
 
 const startTime = Date.now();
@@ -1016,6 +1024,69 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return created;
     }
+  }
+
+  // Auto-Trade Settings Methods
+  async getAutoTradeSettings(userId: string): Promise<AutoTradeSetting | null> {
+    const result = await db.select()
+      .from(autoTradeSettings)
+      .where(eq(autoTradeSettings.userId, userId))
+      .limit(1);
+    return result[0] ?? null;
+  }
+
+  async createAutoTradeSettings(userId: string): Promise<AutoTradeSetting> {
+    const [created] = await db.insert(autoTradeSettings)
+      .values({
+        userId,
+        isEnabled: false,
+        tradeAmount: 0.01,
+        symbol: "XAUUSD",
+        totalAutoTrades: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    return created;
+  }
+
+  async updateAutoTradeSettings(userId: string, settings: UpdateAutoTradeSetting): Promise<AutoTradeSetting | null> {
+    const existing = await this.getAutoTradeSettings(userId);
+    if (!existing) {
+      // Create new settings if not exists
+      const created = await this.createAutoTradeSettings(userId);
+      if (Object.keys(settings).length > 0) {
+        const [updated] = await db.update(autoTradeSettings)
+          .set({ ...settings, updatedAt: new Date() })
+          .where(eq(autoTradeSettings.userId, userId))
+          .returning();
+        return updated;
+      }
+      return created;
+    }
+
+    const [updated] = await db.update(autoTradeSettings)
+      .set({ ...settings, updatedAt: new Date() })
+      .where(eq(autoTradeSettings.userId, userId))
+      .returning();
+    return updated;
+  }
+
+  async getAllEnabledAutoTradeSettings(): Promise<AutoTradeSetting[]> {
+    return db.select()
+      .from(autoTradeSettings)
+      .where(eq(autoTradeSettings.isEnabled, true));
+  }
+
+  async recordAutoTrade(userId: string, decision: string): Promise<void> {
+    await db.update(autoTradeSettings)
+      .set({
+        lastTradeAt: new Date(),
+        lastDecision: decision,
+        totalAutoTrades: sql`${autoTradeSettings.totalAutoTrades} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(autoTradeSettings.userId, userId));
   }
 }
 
