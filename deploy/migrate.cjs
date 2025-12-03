@@ -143,18 +143,18 @@ async function runMigrations() {
             tablesToCreate.push(`
                 CREATE TABLE auto_trade_settings (
                     id SERIAL PRIMARY KEY,
-                    user_id INTEGER NOT NULL UNIQUE,
+                    user_id VARCHAR NOT NULL UNIQUE,
                     is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
                     trade_units REAL NOT NULL DEFAULT 0.01,
-                    max_positions INTEGER NOT NULL DEFAULT 5,
-                    symbols TEXT[] DEFAULT ARRAY['XAUUSD'],
-                    stop_loss_percent REAL DEFAULT 2.0,
-                    take_profit_percent REAL DEFAULT 3.0,
+                    symbol VARCHAR(20) NOT NULL DEFAULT 'XAUUSD',
+                    last_trade_at TIMESTAMP,
+                    last_decision VARCHAR(10),
                     total_auto_trades INTEGER DEFAULT 0,
-                    total_profit_loss REAL DEFAULT 0,
-                    winning_trades INTEGER DEFAULT 0,
-                    losing_trades INTEGER DEFAULT 0,
                     closed_auto_trades INTEGER DEFAULT 0,
+                    total_auto_profit REAL DEFAULT 0,
+                    total_auto_loss REAL DEFAULT 0,
+                    winning_auto_trades INTEGER DEFAULT 0,
+                    losing_auto_trades INTEGER DEFAULT 0,
                     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
                 )
@@ -245,12 +245,16 @@ async function runMigrations() {
             'ALTER TABLE demo_positions ADD COLUMN IF NOT EXISTS stop_loss REAL',
             'ALTER TABLE demo_positions ADD COLUMN IF NOT EXISTS take_profit REAL',
             
-            // auto_trade_settings columns
+            // auto_trade_settings columns - CRITICAL: add symbol column
+            "ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS symbol VARCHAR(20) DEFAULT 'XAUUSD'",
+            'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS last_trade_at TIMESTAMP',
+            'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS last_decision VARCHAR(10)',
             'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS total_auto_trades INTEGER DEFAULT 0',
-            'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS total_profit_loss REAL DEFAULT 0',
-            'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS winning_trades INTEGER DEFAULT 0',
-            'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS losing_trades INTEGER DEFAULT 0',
             'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS closed_auto_trades INTEGER DEFAULT 0',
+            'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS total_auto_profit REAL DEFAULT 0',
+            'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS total_auto_loss REAL DEFAULT 0',
+            'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS winning_auto_trades INTEGER DEFAULT 0',
+            'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS losing_auto_trades INTEGER DEFAULT 0',
             
             // demo_accounts columns
             "ALTER TABLE demo_accounts ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'USD'",
