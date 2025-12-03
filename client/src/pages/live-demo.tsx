@@ -155,11 +155,33 @@ export default function LiveDemo() {
   const currentCurrency = currencies.find(c => c.code === selectedCurrency) || currencies[0];
 
   const convertFromUSD = useCallback((usdAmount: number): number => {
-    return usdAmount * currentCurrency.rate;
+    const result = usdAmount * currentCurrency.rate;
+    // Round to whole numbers for high-rate currencies (IDR, JPY, etc.)
+    if (currentCurrency.rate >= 100) {
+      return Math.round(result);
+    }
+    return Math.round(result * 100) / 100;
   }, [currentCurrency.rate]);
 
   const convertToUSD = useCallback((localAmount: number): number => {
+    // Keep high precision for USD to minimize conversion errors
     return localAmount / currentCurrency.rate;
+  }, [currentCurrency.rate]);
+
+  // Convert local amount to USD, rounding USD to ensure local amount stays exact
+  const convertToUSDExact = useCallback((localAmount: number): number => {
+    // For high-rate currencies, adjust USD precision so local amount stays exact
+    if (currentCurrency.rate >= 100) {
+      // Round local amount to whole number first
+      const roundedLocal = Math.round(localAmount);
+      // Calculate USD with enough precision
+      const usd = roundedLocal / currentCurrency.rate;
+      // Round USD to 6 decimal places for precision
+      return Math.round(usd * 1000000) / 1000000;
+    }
+    // For other currencies, round local to 2 decimals
+    const roundedLocal = Math.round(localAmount * 100) / 100;
+    return roundedLocal / currentCurrency.rate;
   }, [currentCurrency.rate]);
 
   const formatCurrency = useCallback((usdValue: number): string => {
@@ -325,7 +347,8 @@ export default function LiveDemo() {
   const handleDeposit = () => {
     const localAmount = parseFloat(depositAmount);
     if (localAmount > 0) {
-      const usdAmount = convertToUSD(localAmount);
+      // Use exact conversion to keep local currency amount intact
+      const usdAmount = convertToUSDExact(localAmount);
       depositMutation.mutate(usdAmount);
     }
   };
@@ -333,7 +356,8 @@ export default function LiveDemo() {
   const handleWithdraw = () => {
     const localAmount = parseFloat(withdrawAmount);
     if (localAmount > 0) {
-      const usdAmount = convertToUSD(localAmount);
+      // Use exact conversion to keep local currency amount intact
+      const usdAmount = convertToUSDExact(localAmount);
       withdrawMutation.mutate(usdAmount);
     }
   };
@@ -341,7 +365,8 @@ export default function LiveDemo() {
   const handleOpenTrade = () => {
     const localAmount = parseFloat(tradeAmount);
     if (localAmount > 0 && currentPrice) {
-      const usdAmount = convertToUSD(localAmount);
+      // Use exact conversion to keep local currency amount intact
+      const usdAmount = convertToUSDExact(localAmount);
       const quantity = usdAmount / currentPrice.price;
       openTradeMutation.mutate({
         symbol: selectedSymbol,
@@ -485,7 +510,7 @@ export default function LiveDemo() {
                       />
                       {selectedCurrency !== "USD" && depositAmount && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          ≈ {formatCurrencyUSD(convertToUSD(parseFloat(depositAmount) || 0))} USD
+                          ≈ {formatCurrencyUSD(convertToUSDExact(parseFloat(depositAmount) || 0))} USD
                         </p>
                       )}
                     </div>
@@ -563,7 +588,7 @@ export default function LiveDemo() {
                       />
                       {selectedCurrency !== "USD" && withdrawAmount && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          ≈ {formatCurrencyUSD(convertToUSD(parseFloat(withdrawAmount) || 0))} USD
+                          ≈ {formatCurrencyUSD(convertToUSDExact(parseFloat(withdrawAmount) || 0))} USD
                         </p>
                       )}
                     </div>
@@ -574,7 +599,12 @@ export default function LiveDemo() {
                         onCheckedChange={(checked) => {
                           setWithdrawAll(checked === true);
                           if (checked) {
-                            setWithdrawAmount(convertFromUSD(availableWithdrawBalance).toFixed(2));
+                            // For high-rate currencies, show whole number; otherwise 2 decimals
+                            const localAmount = convertFromUSD(availableWithdrawBalance);
+                            const formatted = currentCurrency.rate >= 100 
+                              ? Math.round(localAmount).toString()
+                              : localAmount.toFixed(2);
+                            setWithdrawAmount(formatted);
                           }
                         }}
                         data-testid="checkbox-withdraw-all"
@@ -773,12 +803,12 @@ export default function LiveDemo() {
                     {currentPrice && tradeAmount && (
                       <>
                         <p className="text-sm text-muted-foreground mt-1">
-                          Units: {(convertToUSD(parseFloat(tradeAmount || "0")) / currentPrice.price).toFixed(4)} {selectedSymbol}
+                          Units: {(convertToUSDExact(parseFloat(tradeAmount || "0")) / currentPrice.price).toFixed(4)} {selectedSymbol}
                           {selectedCurrency !== "USD" && (
-                            <span className="text-xs ml-2">(≈ {formatCurrencyUSD(convertToUSD(parseFloat(tradeAmount || "0")))} USD)</span>
+                            <span className="text-xs ml-2">(≈ {formatCurrencyUSD(convertToUSDExact(parseFloat(tradeAmount || "0")))} USD)</span>
                           )}
                         </p>
-                        {convertToUSD(parseFloat(tradeAmount || "0")) > (accountData?.stats?.balance || 0) && (
+                        {convertToUSDExact(parseFloat(tradeAmount || "0")) > (accountData?.stats?.balance || 0) && (
                           <p className="text-sm text-red-500 mt-1" data-testid="text-insufficient-funds">
                             Insufficient funds. Available: {formatCurrency(accountData?.stats?.balance || 0)}
                           </p>
