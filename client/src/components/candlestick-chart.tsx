@@ -84,7 +84,7 @@ export function CandlestickChart({
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
-    return sortedData.map((item) => {
+    const allCandles = sortedData.map((item) => {
       const timestamp = new Date(item.timestamp).getTime();
       const open = item.open != null ? Number(item.open) : null;
       const high = item.high != null ? Number(item.high) : null;
@@ -103,6 +103,12 @@ export function CandlestickChart({
         isNull,
       };
     });
+
+    // Find the first non-null candle and trim leading nulls
+    const firstValidIndex = allCandles.findIndex(c => !c.isNull);
+    if (firstValidIndex === -1) return allCandles;
+    
+    return allCandles.slice(firstValidIndex);
   }, [data]);
 
   const { minPrice, maxPrice, yAxisTicks } = useMemo(() => {
