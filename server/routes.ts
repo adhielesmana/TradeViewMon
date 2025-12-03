@@ -24,6 +24,45 @@ const createInviteSchema = z.object({
 
 const DEFAULT_SYMBOL = marketDataService.getSymbol();
 
+// Track symbols that have been seeded to avoid duplicate seeding
+const seededSymbols = new Set<string>();
+
+// On-demand historical data seeding for symbols without data
+async function ensureHistoricalData(symbol: string): Promise<void> {
+  // Skip if already seeded in this session
+  if (seededSymbols.has(symbol)) {
+    return;
+  }
+  
+  // Check if symbol has any data
+  const existingData = await storage.getRecentMarketData(symbol, 1);
+  if (existingData.length > 0) {
+    seededSymbols.add(symbol);
+    return;
+  }
+  
+  console.log(`[Routes] Seeding historical data for ${symbol}...`);
+  
+  // Generate 1 hour of historical data for the symbol
+  const historicalData = await marketDataService.generateHistoricalData(1, symbol);
+  
+  // Insert in batches
+  const batchSize = 500;
+  for (let i = 0; i < historicalData.length; i += batchSize) {
+    const batch = historicalData.slice(i, i + batchSize);
+    await storage.insertMarketDataBatch(batch);
+  }
+  
+  // Save price state
+  if (historicalData.length > 0) {
+    const lastCandle = historicalData[historicalData.length - 1];
+    await storage.upsertPriceState(symbol, lastCandle.open, lastCandle.close, lastCandle.timestamp);
+  }
+  
+  seededSymbols.add(symbol);
+  console.log(`[Routes] Seeded ${historicalData.length} candles for ${symbol}`);
+}
+
 declare module "express-session" {
   interface SessionData {
     userId?: string;
@@ -324,6 +363,10 @@ export async function registerRoutes(
     try {
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const limit = parseInt(req.query.limit as string) || 60;
+      
+      // Ensure historical data exists for this symbol
+      await ensureHistoricalData(symbol);
+      
       const data = await storage.getRecentMarketData(symbol, limit);
       res.json(data);
     } catch (error) {
@@ -337,6 +380,9 @@ export async function registerRoutes(
     try {
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const timeframe = (req.query.timeframe as string) || "3h-1min";
+      
+      // Ensure historical data exists for this symbol (on-demand seeding)
+      await ensureHistoricalData(symbol);
       
       const now = new Date();
       let startDate: Date;
@@ -487,6 +533,10 @@ export async function registerRoutes(
   app.get("/api/market/stats", async (req, res) => {
     try {
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
+      
+      // Ensure historical data exists for this symbol
+      await ensureHistoricalData(symbol);
+      
       const stats = await storage.getMarketStats(symbol);
       if (!stats) {
         return res.status(404).json({ error: "No market data available" });
@@ -502,6 +552,9 @@ export async function registerRoutes(
     try {
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const period = (req.query.period as string) || "1M";
+      
+      // Ensure historical data exists for this symbol
+      await ensureHistoricalData(symbol);
       
       const now = new Date();
       let startDate: Date;
@@ -548,6 +601,10 @@ export async function registerRoutes(
     try {
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const limit = parseInt(req.query.limit as string) || 100;
+      
+      // Ensure historical data exists for this symbol
+      await ensureHistoricalData(symbol);
+      
       const data = await storage.getRecentMarketData(symbol, limit);
       
       if (data.length === 0) {
