@@ -912,12 +912,8 @@ export default function LiveDemo() {
               <span className="font-medium">{autoTradeSettings?.tradeUnits?.toFixed(2) || "0.01"} units</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Opened:</span>{" "}
+              <span className="text-muted-foreground">Auto-Trades:</span>{" "}
               <span className="font-medium">{autoTradeSettings?.totalAutoTrades || 0}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Closed:</span>{" "}
-              <span className="font-medium">{autoTradeSettings?.closedAutoTrades || 0}</span>
             </div>
           </div>
           {(autoTradeSettings?.closedAutoTrades || 0) > 0 && (
