@@ -2,9 +2,9 @@ import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 interface PriceDisplayProps {
-  price: number;
-  change: number;
-  changePercent: number;
+  price: number | null;
+  change: number | null;
+  changePercent: number | null;
   symbol?: string;
   size?: "sm" | "md" | "lg";
   showSymbol?: boolean;
@@ -18,9 +18,13 @@ export function PriceDisplay({
   size = "lg",
   showSymbol = true,
 }: PriceDisplayProps) {
-  const isPositive = change > 0;
-  const isNegative = change < 0;
-  const isNeutral = change === 0;
+  const safePrice = price ?? 0;
+  const safeChange = change ?? 0;
+  const safeChangePercent = changePercent ?? 0;
+  
+  const isPositive = safeChange > 0;
+  const isNegative = safeChange < 0;
+  const isNeutral = safeChange === 0;
 
   const sizeClasses = {
     sm: {
@@ -53,7 +57,7 @@ export function PriceDisplay({
         className={cn("font-mono tracking-tight", sizeClasses[size].price)}
         data-testid="text-current-price"
       >
-        ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        ${safePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </span>
       <div 
         className={cn(
@@ -67,10 +71,10 @@ export function PriceDisplay({
       >
         <TrendIcon className="h-4 w-4" />
         <span>
-          {isPositive ? "+" : ""}{change.toFixed(2)}
+          {isPositive ? "+" : ""}{safeChange.toFixed(2)}
         </span>
         <span className="text-muted-foreground">
-          ({isPositive ? "+" : ""}{changePercent.toFixed(2)}%)
+          ({isPositive ? "+" : ""}{safeChangePercent.toFixed(2)}%)
         </span>
       </div>
     </div>

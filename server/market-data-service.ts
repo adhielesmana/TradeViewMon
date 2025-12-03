@@ -48,7 +48,7 @@ export class MarketDataService {
     return this.symbolPrices.get(symbol)!;
   }
 
-  private async fetchRealPrice(symbol: string): Promise<number | null> {
+  private async fetchRealPrice(symbol: string): Promise<{ price: number; updatedAt: string } | null> {
     const config = this.getConfig(symbol);
     if (!config.apiSymbol) {
       return null;
@@ -62,8 +62,12 @@ export class MarketDataService {
       }
       
       const data: GoldApiResponse = await response.json();
-      console.log(`[MarketData] Real price for ${symbol}: $${data.price}`);
-      return data.price;
+      console.log(`[MarketData] ✓ Gold-API Response for ${symbol}:`);
+      console.log(`  - Name: ${data.name}`);
+      console.log(`  - Price: $${data.price}`);
+      console.log(`  - Symbol: ${data.symbol}`);
+      console.log(`  - Updated: ${data.updatedAt}`);
+      return { price: data.price, updatedAt: data.updatedAt };
     } catch (error) {
       console.error(`[MarketData] Failed to fetch real price:`, error);
       return null;
@@ -79,12 +83,14 @@ export class MarketDataService {
     now.setSeconds(0);
 
     let close: number;
+    let dataSource = "simulated";
     
     if (this.useRealApi) {
-      const realPrice = await this.fetchRealPrice(targetSymbol);
-      if (realPrice !== null) {
-        close = realPrice;
-        prices.base = realPrice;
+      const apiResult = await this.fetchRealPrice(targetSymbol);
+      if (apiResult !== null) {
+        close = apiResult.price;
+        prices.base = apiResult.price;
+        dataSource = "Gold-API";
       } else {
         const priceChange = (Math.random() - 0.5) * 2 * config.volatility * 0.15 * prices.base * 0.001;
         close = (lastClosePrice || prices.last) + priceChange;
@@ -97,7 +103,7 @@ export class MarketDataService {
     const decimals = prices.base > 100 ? 2 : prices.base > 10 ? 3 : 4;
     const factor = Math.pow(10, decimals);
     
-    const open = lastClosePrice !== undefined ? lastClosePrice : prices.last;
+    const open = lastClosePrice !== undefined ? lastClosePrice : close;
     
     const bodyTop = Math.max(open, close);
     const bodyBottom = Math.min(open, close);
@@ -110,7 +116,7 @@ export class MarketDataService {
     
     prices.last = close;
 
-    return {
+    const candle = {
       symbol: targetSymbol,
       timestamp: now,
       open: Math.round(open * factor) / factor,
@@ -120,6 +126,13 @@ export class MarketDataService {
       volume,
       interval: "1min",
     };
+
+    console.log(`[MarketData] Storing candle (${dataSource}):`);
+    console.log(`  - Symbol: ${candle.symbol}`);
+    console.log(`  - Time: ${candle.timestamp.toISOString()}`);
+    console.log(`  - O: $${candle.open} | H: $${candle.high} | L: $${candle.low} | C: $${candle.close}`);
+
+    return candle;
   }
 
   async generateHistoricalData(hours: number = 1, symbol?: string): Promise<InsertMarketData[]> {
@@ -132,15 +145,20 @@ export class MarketDataService {
     now.setSeconds(0);
     
     let currentPrice = prices.base;
+    let dataSource = "simulated";
+    
     if (this.useRealApi) {
-      const realPrice = await this.fetchRealPrice(targetSymbol);
-      if (realPrice !== null) {
-        currentPrice = realPrice;
-        prices.base = realPrice;
+      const apiResult = await this.fetchRealPrice(targetSymbol);
+      if (apiResult !== null) {
+        currentPrice = apiResult.price;
+        prices.base = apiResult.price;
+        dataSource = "Gold-API";
       }
     }
     
-    let lastClose = currentPrice * (0.998 + Math.random() * 0.004);
+    console.log(`[MarketData] Generating ${hours}h historical data for ${targetSymbol} (base: $${currentPrice}, source: ${dataSource})`);
+    
+    let lastClose = currentPrice * (0.999 + Math.random() * 0.002);
     const totalIntervals = hours * 60;
 
     const decimals = currentPrice > 100 ? 2 : currentPrice > 10 ? 3 : 4;
@@ -149,20 +167,20 @@ export class MarketDataService {
     for (let i = totalIntervals; i >= 0; i--) {
       const timestamp = new Date(now.getTime() - i * 60 * 1000);
 
-      const trend = Math.sin(i / 30) * config.volatility * 0.1;
-      const noise = (Math.random() - 0.5) * config.volatility * 0.05;
-      const priceChange = (trend + noise * 0.3) * currentPrice * 0.0003;
+      const trend = Math.sin(i / 30) * config.volatility * 0.05;
+      const noise = (Math.random() - 0.5) * config.volatility * 0.02;
+      const priceChange = (trend + noise * 0.3) * currentPrice * 0.0002;
       
       const open = lastClose;
       let close = open + priceChange;
       
-      const targetPrice = currentPrice + (currentPrice - lastClose) * (1 - i / totalIntervals);
-      close = close * 0.7 + targetPrice * 0.0001 * (totalIntervals - i);
-      close = Math.max(Math.min(close, currentPrice * 1.01), currentPrice * 0.99);
+      const progress = (totalIntervals - i) / totalIntervals;
+      close = open + (currentPrice - open) * progress * 0.02 + priceChange;
+      close = Math.max(Math.min(close, currentPrice * 1.005), currentPrice * 0.995);
       
       const bodyTop = Math.max(open, close);
       const bodyBottom = Math.min(open, close);
-      const wickSize = Math.abs(close - open) * 0.1 + currentPrice * 0.0002 * Math.random();
+      const wickSize = Math.abs(close - open) * 0.15 + currentPrice * 0.0001 * Math.random();
       
       const high = bodyTop + wickSize;
       const low = bodyBottom - wickSize;
@@ -184,6 +202,7 @@ export class MarketDataService {
     }
 
     prices.last = lastClose;
+    console.log(`[MarketData] Generated ${data.length} candles, last close: $${lastClose.toFixed(2)}`);
     return data;
   }
 

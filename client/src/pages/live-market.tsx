@@ -37,12 +37,12 @@ interface IndicatorsResponse {
   latest: IndicatorData | null;
 }
 
-function getConnectionStatusColor(status: WSConnectionStatus): "online" | "offline" | "warning" {
+function getConnectionStatusColor(status: WSConnectionStatus): "online" | "offline" | "degraded" {
   switch (status) {
     case "connected":
       return "online";
     case "connecting":
-      return "warning";
+      return "degraded";
     default:
       return "offline";
   }
@@ -182,23 +182,25 @@ export default function LiveMarket() {
           <>
             <StatCard
               label="Day High"
-              value={`$${stats.high.toFixed(2)}`}
+              value={stats.high != null ? `$${stats.high.toFixed(2)}` : "--"}
               icon={TrendingUp}
               valueClassName="text-profit"
               testId="text-day-high"
             />
             <StatCard
               label="Day Low"
-              value={`$${stats.low.toFixed(2)}`}
+              value={stats.low != null ? `$${stats.low.toFixed(2)}` : "--"}
               icon={TrendingDown}
               valueClassName="text-loss"
               testId="text-day-low"
             />
             <StatCard
               label="Volume"
-              value={stats.volume >= 1000000 
-                ? `${(stats.volume / 1000000).toFixed(2)}M` 
-                : `${(stats.volume / 1000).toFixed(1)}K`
+              value={stats.volume != null 
+                ? (stats.volume >= 1000000 
+                    ? `${(stats.volume / 1000000).toFixed(2)}M` 
+                    : `${(stats.volume / 1000).toFixed(1)}K`)
+                : "--"
               }
               icon={Volume2}
               testId="text-volume"
@@ -256,13 +258,13 @@ export default function LiveMarket() {
                 <div className="flex flex-col">
                   <span className="text-xs text-muted-foreground">EMA (12)</span>
                   <span className="font-mono text-sm font-medium" data-testid="text-ema12">
-                    {latest.ema12 !== undefined ? `$${latest.ema12.toFixed(2)}` : "--"}
+                    {latest.ema12 != null ? `$${latest.ema12.toFixed(2)}` : "--"}
                   </span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-xs text-muted-foreground">EMA (26)</span>
                   <span className="font-mono text-sm font-medium" data-testid="text-ema26">
-                    {latest.ema26 !== undefined ? `$${latest.ema26.toFixed(2)}` : "--"}
+                    {latest.ema26 != null ? `$${latest.ema26.toFixed(2)}` : "--"}
                   </span>
                 </div>
                 <div className="flex flex-col">
@@ -275,19 +277,19 @@ export default function LiveMarket() {
                     }`}
                     data-testid="text-rsi14"
                   >
-                    {latest.rsi14 !== undefined ? latest.rsi14.toFixed(2) : "--"}
+                    {latest.rsi14 != null ? latest.rsi14.toFixed(2) : "--"}
                   </span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-xs text-muted-foreground">MACD Line</span>
                   <span className="font-mono text-sm font-medium" data-testid="text-macd-line">
-                    {latest.macdLine !== undefined ? latest.macdLine.toFixed(4) : "--"}
+                    {latest.macdLine != null ? latest.macdLine.toFixed(4) : "--"}
                   </span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-xs text-muted-foreground">MACD Signal</span>
                   <span className="font-mono text-sm font-medium" data-testid="text-macd-signal">
-                    {latest.macdSignal !== undefined ? latest.macdSignal.toFixed(4) : "--"}
+                    {latest.macdSignal != null ? latest.macdSignal.toFixed(4) : "--"}
                   </span>
                 </div>
                 <div className="flex flex-col">
@@ -300,7 +302,7 @@ export default function LiveMarket() {
                     }`}
                     data-testid="text-macd-histogram"
                   >
-                    {latest.macdHistogram !== undefined ? latest.macdHistogram.toFixed(4) : "--"}
+                    {latest.macdHistogram != null ? latest.macdHistogram.toFixed(4) : "--"}
                   </span>
                 </div>
               </div>
