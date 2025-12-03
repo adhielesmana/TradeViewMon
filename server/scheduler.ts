@@ -562,14 +562,17 @@ class Scheduler {
           // Use the trade units directly as quantity
           const quantity = tradeUnits;
           
-          // Open the trade
+          // Open the trade with isAutoTrade flag
           const tradeType = suggestion.decision as 'BUY' | 'SELL';
           const result = await storage.openDemoTrade(
             settings.userId,
             settings.symbol,
             tradeType,
             currentPrice,
-            quantity
+            quantity,
+            undefined, // stopLoss
+            undefined, // takeProfit
+            true // isAutoTrade
           );
           
           if (result) {

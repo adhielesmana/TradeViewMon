@@ -96,8 +96,9 @@ export interface IStorage {
   // Demo Trading - Combined Operations
   depositDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction }>;
   withdrawDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction } | { error: string }>;
-  openDemoTrade(userId: string, symbol: string, type: 'BUY' | 'SELL', entryPrice: number, quantity: number, stopLoss?: number, takeProfit?: number): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
+  openDemoTrade(userId: string, symbol: string, type: 'BUY' | 'SELL', entryPrice: number, quantity: number, stopLoss?: number, takeProfit?: number, isAutoTrade?: boolean): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
   closeDemoTrade(userId: string, positionId: number, exitPrice: number, reason?: 'manual' | 'stop_loss' | 'take_profit' | 'liquidation'): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
+  updateAutoTradeStats(userId: string, profitLoss: number): Promise<void>;
   updateOpenPositionPrices(symbol: string, currentPrice: number): Promise<void>;
 
   // App Settings
@@ -808,7 +809,8 @@ export class DatabaseStorage implements IStorage {
     entryPrice: number, 
     quantity: number, 
     stopLoss?: number, 
-    takeProfit?: number
+    takeProfit?: number,
+    isAutoTrade: boolean = false
   ): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null> {
     const account = await this.getDemoAccount(userId);
     if (!account) return null;
@@ -832,6 +834,7 @@ export class DatabaseStorage implements IStorage {
       stopLoss: stopLoss || null,
       takeProfit: takeProfit || null,
       status: 'open',
+      isAutoTrade,
     });
 
     const transaction = await this.createDemoTransaction({
@@ -878,6 +881,12 @@ export class DatabaseStorage implements IStorage {
     const closedPosition = await this.closeDemoPosition(positionId, exitPrice, reason);
     if (!closedPosition) return null;
 
+    // Update auto-trade stats if this was an auto-traded position
+    if (position.isAutoTrade) {
+      await this.updateAutoTradeStats(userId, profitLoss);
+    }
+
+    const autoTradeLabel = position.isAutoTrade ? ' [AUTO]' : '';
     const reasonText = reason === 'liquidation' ? ' [AUTO-LIQUIDATED]' : 
                        reason === 'stop_loss' ? ' [STOP LOSS]' : 
                        reason === 'take_profit' ? ' [TAKE PROFIT]' : '';
@@ -888,7 +897,7 @@ export class DatabaseStorage implements IStorage {
       type: profitLoss >= 0 ? 'profit' : 'loss',
       amount: tradeValue,
       balanceAfter: newBalance,
-      description: `Closed ${position.type} position: ${position.quantity.toFixed(4)} ${position.symbol} @ $${exitPrice.toFixed(2)} (${profitLoss >= 0 ? '+' : ''}$${profitLoss.toFixed(2)})${reasonText}`,
+      description: `Closed ${position.type} position: ${position.quantity.toFixed(4)} ${position.symbol} @ $${exitPrice.toFixed(2)} (${profitLoss >= 0 ? '+' : ''}$${profitLoss.toFixed(2)})${autoTradeLabel}${reasonText}`,
       positionId: position.id,
     });
 
@@ -1084,6 +1093,30 @@ export class DatabaseStorage implements IStorage {
         lastTradeAt: new Date(),
         lastDecision: decision,
         totalAutoTrades: sql`${autoTradeSettings.totalAutoTrades} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(autoTradeSettings.userId, userId));
+  }
+
+  async updateAutoTradeStats(userId: string, profitLoss: number): Promise<void> {
+    const isWinning = profitLoss > 0;
+    const isLosing = profitLoss < 0;
+
+    await db.update(autoTradeSettings)
+      .set({
+        closedAutoTrades: sql`${autoTradeSettings.closedAutoTrades} + 1`,
+        totalAutoProfit: isWinning 
+          ? sql`${autoTradeSettings.totalAutoProfit} + ${profitLoss}` 
+          : autoTradeSettings.totalAutoProfit,
+        totalAutoLoss: isLosing 
+          ? sql`${autoTradeSettings.totalAutoLoss} + ${Math.abs(profitLoss)}` 
+          : autoTradeSettings.totalAutoLoss,
+        winningAutoTrades: isWinning 
+          ? sql`${autoTradeSettings.winningAutoTrades} + 1` 
+          : autoTradeSettings.winningAutoTrades,
+        losingAutoTrades: isLosing 
+          ? sql`${autoTradeSettings.losingAutoTrades} + 1` 
+          : autoTradeSettings.losingAutoTrades,
         updatedAt: new Date(),
       })
       .where(eq(autoTradeSettings.userId, userId));
