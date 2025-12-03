@@ -244,3 +244,128 @@ export const monitoredSymbols = pgTable("monitored_symbols", {
 export const insertMonitoredSymbolSchema = createInsertSchema(monitoredSymbols).omit({ id: true });
 export type MonitoredSymbol = typeof monitoredSymbols.$inferSelect;
 export type InsertMonitoredSymbol = z.infer<typeof insertMonitoredSymbolSchema>;
+
+// Demo Trading - Demo Accounts for paper trading
+export const demoAccounts = pgTable("demo_accounts", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  balance: real("balance").notNull().default(0),
+  totalDeposited: real("total_deposited").notNull().default(0),
+  totalWithdrawn: real("total_withdrawn").notNull().default(0),
+  totalProfit: real("total_profit").notNull().default(0),
+  totalLoss: real("total_loss").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("demo_accounts_user_idx").on(table.userId),
+]);
+
+// Demo Positions - Open and closed trading positions
+export const demoPositions = pgTable("demo_positions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  accountId: integer("account_id").notNull().references(() => demoAccounts.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  type: varchar("type", { length: 10 }).notNull(), // 'BUY' or 'SELL'
+  entryPrice: real("entry_price").notNull(),
+  quantity: real("quantity").notNull(),
+  currentPrice: real("current_price"),
+  exitPrice: real("exit_price"),
+  stopLoss: real("stop_loss"),
+  takeProfit: real("take_profit"),
+  profitLoss: real("profit_loss").default(0),
+  profitLossPercent: real("profit_loss_percent").default(0),
+  status: varchar("status", { length: 20 }).notNull().default("open"), // 'open', 'closed', 'stopped'
+  openedAt: timestamp("opened_at").notNull().default(sql`now()`),
+  closedAt: timestamp("closed_at"),
+  closedReason: varchar("closed_reason", { length: 50 }), // 'manual', 'stop_loss', 'take_profit'
+}, (table) => [
+  index("demo_positions_account_idx").on(table.accountId),
+  index("demo_positions_user_idx").on(table.userId),
+  index("demo_positions_symbol_idx").on(table.symbol),
+  index("demo_positions_status_idx").on(table.status),
+]);
+
+// Demo Transactions - All account transactions (deposits, withdrawals, trades)
+export const demoTransactions = pgTable("demo_transactions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  accountId: integer("account_id").notNull().references(() => demoAccounts.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  type: varchar("type", { length: 20 }).notNull(), // 'deposit', 'withdraw', 'trade_open', 'trade_close', 'profit', 'loss'
+  amount: real("amount").notNull(),
+  balanceAfter: real("balance_after").notNull(),
+  description: text("description"),
+  positionId: integer("position_id").references(() => demoPositions.id),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("demo_transactions_account_idx").on(table.accountId),
+  index("demo_transactions_user_idx").on(table.userId),
+  index("demo_transactions_type_idx").on(table.type),
+  index("demo_transactions_created_idx").on(table.createdAt),
+]);
+
+// Demo Trading Relations
+export const demoAccountsRelations = relations(demoAccounts, ({ one, many }) => ({
+  user: one(users, {
+    fields: [demoAccounts.userId],
+    references: [users.id],
+  }),
+  positions: many(demoPositions),
+  transactions: many(demoTransactions),
+}));
+
+export const demoPositionsRelations = relations(demoPositions, ({ one, many }) => ({
+  account: one(demoAccounts, {
+    fields: [demoPositions.accountId],
+    references: [demoAccounts.id],
+  }),
+  user: one(users, {
+    fields: [demoPositions.userId],
+    references: [users.id],
+  }),
+  transactions: many(demoTransactions),
+}));
+
+export const demoTransactionsRelations = relations(demoTransactions, ({ one }) => ({
+  account: one(demoAccounts, {
+    fields: [demoTransactions.accountId],
+    references: [demoAccounts.id],
+  }),
+  user: one(users, {
+    fields: [demoTransactions.userId],
+    references: [users.id],
+  }),
+  position: one(demoPositions, {
+    fields: [demoTransactions.positionId],
+    references: [demoPositions.id],
+  }),
+}));
+
+// Insert schemas for demo trading
+export const insertDemoAccountSchema = createInsertSchema(demoAccounts).omit({ id: true });
+export const insertDemoPositionSchema = createInsertSchema(demoPositions).omit({ id: true });
+export const insertDemoTransactionSchema = createInsertSchema(demoTransactions).omit({ id: true });
+
+// Types for demo trading
+export type DemoAccount = typeof demoAccounts.$inferSelect;
+export type InsertDemoAccount = z.infer<typeof insertDemoAccountSchema>;
+
+export type DemoPosition = typeof demoPositions.$inferSelect;
+export type InsertDemoPosition = z.infer<typeof insertDemoPositionSchema>;
+
+export type DemoTransaction = typeof demoTransactions.$inferSelect;
+export type InsertDemoTransaction = z.infer<typeof insertDemoTransactionSchema>;
+
+// Demo Account Stats (computed type)
+export type DemoAccountStats = {
+  balance: number;
+  totalDeposited: number;
+  totalWithdrawn: number;
+  totalProfit: number;
+  totalLoss: number;
+  netProfitLoss: number;
+  profitLossPercent: number;
+  openPositions: number;
+  closedPositions: number;
+  winRate: number;
+};
