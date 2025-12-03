@@ -39,7 +39,8 @@ import { useSymbol } from "@/lib/symbol-context";
 import { useWebSocket, type WSMessage } from "@/hooks/use-websocket";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
-import type { DemoAccount, DemoPosition, DemoTransaction, DemoAccountStats } from "@shared/schema";
+import { Switch } from "@/components/ui/switch";
+import type { DemoAccount, DemoPosition, DemoTransaction, DemoAccountStats, AutoTradeSetting } from "@shared/schema";
 
 interface DemoAccountResponse {
   account: DemoAccount;
@@ -241,6 +242,34 @@ export default function LiveDemo() {
   const { data: aiSuggestion } = useQuery<AiSuggestion>({
     queryKey: ["/api/suggestions/latest", { symbol: selectedSymbol }],
     refetchInterval: 60000,
+  });
+
+  const { data: autoTradeSettings } = useQuery<AutoTradeSetting>({
+    queryKey: ["/api/demo/auto-trade"],
+    refetchInterval: 30000,
+  });
+
+  const [isAutoTradeSettingsOpen, setIsAutoTradeSettingsOpen] = useState(false);
+  const [autoTradeAmount, setAutoTradeAmount] = useState("");
+  const [autoTradeSymbol, setAutoTradeSymbol] = useState("");
+
+  const autoTradeMutation = useMutation({
+    mutationFn: (data: { isEnabled?: boolean; tradeAmount?: number; symbol?: string }) =>
+      apiRequest("PATCH", "/api/demo/auto-trade", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/demo/auto-trade"] });
+      toast({
+        title: "Auto-Trade Settings Updated",
+        description: "Your auto-trade settings have been saved.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const depositMutation = useMutation({
@@ -747,6 +776,153 @@ export default function LiveDemo() {
           </CardContent>
         </Card>
       )}
+
+      {/* Auto-Trade Settings */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+          <div className="flex items-center gap-2">
+            <RefreshCw className={`h-5 w-5 ${autoTradeSettings?.isEnabled ? "text-green-500 animate-spin" : "text-muted-foreground"}`} style={{ animationDuration: "3s" }} />
+            <CardTitle className="text-sm font-medium">Auto-Trading</CardTitle>
+            {autoTradeSettings?.isEnabled && (
+              <Badge variant="default" className="ml-2" data-testid="badge-auto-trade-active">
+                Active
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={autoTradeSettings?.isEnabled ?? false}
+              onCheckedChange={(checked) => autoTradeMutation.mutate({ isEnabled: checked })}
+              disabled={autoTradeMutation.isPending}
+              data-testid="switch-auto-trade"
+            />
+            <Dialog open={isAutoTradeSettingsOpen} onOpenChange={(open) => {
+              setIsAutoTradeSettingsOpen(open);
+              if (open && autoTradeSettings) {
+                setAutoTradeAmount(autoTradeSettings.tradeAmount.toString());
+                setAutoTradeSymbol(autoTradeSettings.symbol);
+              }
+            }}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline" data-testid="button-auto-trade-settings">
+                  Settings
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Auto-Trade Settings</DialogTitle>
+                  <DialogDescription>
+                    Configure automatic trading based on AI suggestions. Trades will execute when AI suggests BUY or SELL.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Trade Amount (USD)</Label>
+                    <Input
+                      type="number"
+                      value={autoTradeAmount}
+                      onChange={(e) => setAutoTradeAmount(e.target.value)}
+                      placeholder="0.01"
+                      min="0.01"
+                      step="0.01"
+                      data-testid="input-auto-trade-amount"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Amount in USD to trade per AI suggestion (minimum: $0.01)
+                    </p>
+                  </div>
+                  <div>
+                    <Label>Symbol to Trade</Label>
+                    <Select value={autoTradeSymbol} onValueChange={setAutoTradeSymbol}>
+                      <SelectTrigger data-testid="select-auto-trade-symbol">
+                        <SelectValue placeholder="Select symbol" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {supportedSymbols.map((s) => (
+                          <SelectItem key={s.symbol} value={s.symbol} data-testid={`option-auto-trade-symbol-${s.symbol}`}>
+                            {s.symbol}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {autoTradeSettings && (
+                    <div className="bg-muted/50 p-3 rounded-md space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Total Auto-Trades:</span>
+                        <span className="font-medium">{autoTradeSettings.totalAutoTrades}</span>
+                      </div>
+                      {autoTradeSettings.lastTradeAt && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Last Trade:</span>
+                          <span className="font-medium">
+                            {formatDistanceToNow(new Date(autoTradeSettings.lastTradeAt), { addSuffix: true })}
+                          </span>
+                        </div>
+                      )}
+                      {autoTradeSettings.lastDecision && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Last Decision:</span>
+                          <Badge 
+                            variant={autoTradeSettings.lastDecision === "BUY" ? "default" : "destructive"}
+                          >
+                            {autoTradeSettings.lastDecision}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button
+                    onClick={() => {
+                      const amount = parseFloat(autoTradeAmount);
+                      if (amount >= 0.01 && autoTradeSymbol) {
+                        autoTradeMutation.mutate({ 
+                          tradeAmount: amount, 
+                          symbol: autoTradeSymbol 
+                        });
+                        setIsAutoTradeSettingsOpen(false);
+                      }
+                    }}
+                    disabled={autoTradeMutation.isPending}
+                    data-testid="button-save-auto-trade-settings"
+                  >
+                    {autoTradeMutation.isPending ? "Saving..." : "Save Settings"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4 items-center text-sm">
+            <div>
+              <span className="text-muted-foreground">Status:</span>{" "}
+              <span className={`font-medium ${autoTradeSettings?.isEnabled ? "text-green-500" : "text-muted-foreground"}`}>
+                {autoTradeSettings?.isEnabled ? "Enabled" : "Disabled"}
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Symbol:</span>{" "}
+              <span className="font-medium">{autoTradeSettings?.symbol || "XAUUSD"}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Trade Size:</span>{" "}
+              <span className="font-medium">${autoTradeSettings?.tradeAmount?.toFixed(2) || "0.01"}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Auto-Trades:</span>{" "}
+              <span className="font-medium">{autoTradeSettings?.totalAutoTrades || 0}</span>
+            </div>
+          </div>
+          {autoTradeSettings?.isEnabled && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Auto-trading will execute BUY/SELL trades when AI suggestions are generated. HOLD suggestions are ignored.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Trading Panel */}
       <Card>
