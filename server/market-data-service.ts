@@ -41,7 +41,7 @@ export class MarketDataService {
     return this.symbolPrices.get(symbol)!;
   }
 
-  async fetchLatestCandle(symbol?: string): Promise<InsertMarketData> {
+  async fetchLatestCandle(symbol?: string, lastClosePrice?: number): Promise<InsertMarketData> {
     const targetSymbol = symbol || this.currentSymbol;
     const config = this.getConfig(targetSymbol);
     const prices = this.getSymbolPrice(targetSymbol);
@@ -49,33 +49,27 @@ export class MarketDataService {
     now.setMilliseconds(0);
     now.setSeconds(0);
 
-    const priceChange = (Math.random() - 0.5) * 2 * config.volatility * 0.15;
-    prices.last += priceChange;
-    prices.last = Math.max(prices.last, prices.base * 0.9);
-    prices.last = Math.min(prices.last, prices.base * 1.1);
-
     const decimals = prices.base > 100 ? 2 : prices.base > 10 ? 3 : 4;
     const factor = Math.pow(10, decimals);
     
-    const bodySize = prices.base * 0.002 * (0.5 + Math.random());
+    const open = lastClosePrice !== undefined ? lastClosePrice : prices.last;
+    
+    const priceChange = (Math.random() - 0.5) * 2 * config.volatility * 0.15 * prices.base * 0.001;
+    let close = open + priceChange;
+    
+    close = Math.max(close, prices.base * 0.9);
+    close = Math.min(close, prices.base * 1.1);
+    
+    const bodyTop = Math.max(open, close);
+    const bodyBottom = Math.min(open, close);
     const wickSize = prices.base * 0.001 * Math.random();
     
-    const isBullish = Math.random() > 0.5;
-    
-    let open: number, close: number, high: number, low: number;
-    
-    if (isBullish) {
-      open = prices.last - bodySize / 2;
-      close = prices.last + bodySize / 2;
-    } else {
-      open = prices.last + bodySize / 2;
-      close = prices.last - bodySize / 2;
-    }
-    
-    high = Math.max(open, close) + wickSize;
-    low = Math.min(open, close) - wickSize;
+    const high = bodyTop + wickSize;
+    const low = bodyBottom - wickSize;
     
     const volume = Math.floor(10000 + Math.random() * 100000);
+    
+    prices.last = close;
 
     return {
       symbol: targetSymbol,
@@ -97,8 +91,8 @@ export class MarketDataService {
     const now = new Date();
     now.setMilliseconds(0);
     now.setSeconds(0);
-    let currentPrice = prices.base * (0.98 + Math.random() * 0.04);
-
+    
+    let lastClose = prices.base * (0.98 + Math.random() * 0.04);
     const totalIntervals = hours * 60;
 
     const decimals = prices.base > 100 ? 2 : prices.base > 10 ? 3 : 4;
@@ -109,30 +103,21 @@ export class MarketDataService {
 
       const trend = Math.sin(i / 30) * config.volatility * 0.3;
       const noise = (Math.random() - 0.5) * config.volatility * 0.15;
-      currentPrice += (trend + noise * 0.3) * prices.base * 0.001;
-
-      currentPrice = Math.max(currentPrice, prices.base * 0.95);
-      currentPrice = Math.min(currentPrice, prices.base * 1.05);
-
-      const bodySize = prices.base * 0.002 * (0.5 + Math.random());
+      const priceChange = (trend + noise * 0.3) * prices.base * 0.001;
+      
+      const open = lastClose;
+      const close = open + priceChange;
+      
+      const bodyTop = Math.max(open, close);
+      const bodyBottom = Math.min(open, close);
       const wickSize = prices.base * 0.001 * Math.random();
       
-      const isBullish = Math.random() > 0.5;
-      
-      let open: number, close: number, high: number, low: number;
-      
-      if (isBullish) {
-        open = currentPrice - bodySize / 2;
-        close = currentPrice + bodySize / 2;
-      } else {
-        open = currentPrice + bodySize / 2;
-        close = currentPrice - bodySize / 2;
-      }
-      
-      high = Math.max(open, close) + wickSize;
-      low = Math.min(open, close) - wickSize;
+      const high = bodyTop + wickSize;
+      const low = bodyBottom - wickSize;
       
       const volume = Math.floor(10000 + Math.random() * 100000);
+
+      const clampedClose = Math.max(Math.min(close, prices.base * 1.05), prices.base * 0.95);
 
       data.push({
         symbol: targetSymbol,
@@ -140,13 +125,15 @@ export class MarketDataService {
         open: Math.round(open * factor) / factor,
         high: Math.round(high * factor) / factor,
         low: Math.round(low * factor) / factor,
-        close: Math.round(close * factor) / factor,
+        close: Math.round(clampedClose * factor) / factor,
         volume,
         interval: "1min",
       });
+      
+      lastClose = clampedClose;
     }
 
-    prices.last = currentPrice;
+    prices.last = lastClose;
     return data;
   }
 

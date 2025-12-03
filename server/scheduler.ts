@@ -155,7 +155,10 @@ class Scheduler {
     try {
       await this.updateApiStatus("healthy");
 
-      const candle = await marketDataService.fetchLatestCandle();
+      const lastData = await storage.getRecentMarketData(symbol, 1);
+      const lastClosePrice = lastData.length > 0 ? lastData[0].close : undefined;
+
+      const candle = await marketDataService.fetchLatestCandle(symbol, lastClosePrice);
       await storage.insertMarketData(candle);
 
       const recentData = await storage.getRecentMarketData(symbol, 60);
