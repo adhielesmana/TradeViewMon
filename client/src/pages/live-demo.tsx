@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -178,13 +179,38 @@ export default function LiveDemo() {
     },
   });
 
+  const { toast } = useToast();
+
   const withdrawMutation = useMutation({
-    mutationFn: (amount: number) => apiRequest("POST", "/api/demo/withdraw", { amount }),
+    mutationFn: async (amount: number) => {
+      const response = await fetch("/api/demo/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ amount }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Withdrawal failed");
+      }
+      return data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/account"] });
       queryClient.invalidateQueries({ queryKey: ["/api/demo/transactions"] });
       setWithdrawAmount("");
       setIsWithdrawOpen(false);
+      toast({
+        title: "Withdrawal Successful",
+        description: `Successfully withdrew ${formatCurrency(parseFloat(withdrawAmount), selectedCurrency)}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Withdrawal Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 

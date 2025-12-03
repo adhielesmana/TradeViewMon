@@ -923,8 +923,10 @@ export async function registerRoutes(
       }
       
       const result = await storage.withdrawDemoCredits(userId, amount);
-      if (!result) {
-        return res.status(400).json({ error: "Insufficient balance" });
+      
+      // Check if result is an error
+      if ('error' in result) {
+        return res.status(400).json({ error: result.error });
       }
       
       res.json(result);

@@ -92,9 +92,9 @@ export interface IStorage {
 
   // Demo Trading - Combined Operations
   depositDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction }>;
-  withdrawDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction } | null>;
+  withdrawDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction } | { error: string }>;
   openDemoTrade(userId: string, symbol: string, type: 'BUY' | 'SELL', entryPrice: number, quantity: number, stopLoss?: number, takeProfit?: number): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
-  closeDemoTrade(userId: string, positionId: number, exitPrice: number): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
+  closeDemoTrade(userId: string, positionId: number, exitPrice: number, reason?: 'manual' | 'stop_loss' | 'take_profit' | 'liquidation'): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
   updateOpenPositionPrices(symbol: string, currentPrice: number): Promise<void>;
 }
 
@@ -734,11 +734,32 @@ export class DatabaseStorage implements IStorage {
     return { account: updatedAccount, transaction };
   }
 
-  async withdrawDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction } | null> {
+  async withdrawDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction; error?: string } | { error: string }> {
     const account = await this.getDemoAccount(userId);
-    if (!account || account.balance < amount) return null;
+    if (!account) return { error: 'Account not found' };
+    if (account.balance < amount) return { error: 'Insufficient balance' };
 
+    // Calculate total value of open positions (exposure)
+    const openPositions = await db.select()
+      .from(demoPositions)
+      .where(and(
+        eq(demoPositions.userId, userId),
+        eq(demoPositions.status, 'open')
+      ));
+
+    const totalOpenPositionValue = openPositions.reduce((sum, pos) => {
+      return sum + (pos.entryPrice * pos.quantity);
+    }, 0);
+
+    // Ensure remaining balance covers open positions
     const newBalance = account.balance - amount;
+    if (newBalance < totalOpenPositionValue) {
+      const maxWithdrawable = account.balance - totalOpenPositionValue;
+      return { 
+        error: `Cannot withdraw. You have ${openPositions.length} open position(s) worth $${totalOpenPositionValue.toFixed(2)}. Maximum withdrawable: $${Math.max(0, maxWithdrawable).toFixed(2)}` 
+      };
+    }
+
     const [updatedAccount] = await db.update(demoAccounts)
       .set({
         balance: newBalance,
@@ -806,7 +827,12 @@ export class DatabaseStorage implements IStorage {
     return { position, transaction };
   }
 
-  async closeDemoTrade(userId: string, positionId: number, exitPrice: number): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null> {
+  async closeDemoTrade(
+    userId: string, 
+    positionId: number, 
+    exitPrice: number, 
+    reason: 'manual' | 'stop_loss' | 'take_profit' | 'liquidation' = 'manual'
+  ): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null> {
     const position = await this.getDemoPositionById(positionId);
     if (!position || position.userId !== userId || position.status !== 'open') return null;
 
@@ -829,8 +855,12 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(demoAccounts.id, account.id));
 
-    const closedPosition = await this.closeDemoPosition(positionId, exitPrice, 'manual');
+    const closedPosition = await this.closeDemoPosition(positionId, exitPrice, reason);
     if (!closedPosition) return null;
+
+    const reasonText = reason === 'liquidation' ? ' [AUTO-LIQUIDATED]' : 
+                       reason === 'stop_loss' ? ' [STOP LOSS]' : 
+                       reason === 'take_profit' ? ' [TAKE PROFIT]' : '';
 
     const transaction = await this.createDemoTransaction({
       accountId: account.id,
@@ -838,7 +868,7 @@ export class DatabaseStorage implements IStorage {
       type: profitLoss >= 0 ? 'profit' : 'loss',
       amount: tradeValue,
       balanceAfter: newBalance,
-      description: `Closed ${position.type} position: ${position.quantity} ${position.symbol} @ $${exitPrice.toFixed(2)} (${profitLoss >= 0 ? '+' : ''}$${profitLoss.toFixed(2)})`,
+      description: `Closed ${position.type} position: ${position.quantity.toFixed(4)} ${position.symbol} @ $${exitPrice.toFixed(2)} (${profitLoss >= 0 ? '+' : ''}$${profitLoss.toFixed(2)})${reasonText}`,
       positionId: position.id,
     });
 
@@ -859,6 +889,7 @@ export class DatabaseStorage implements IStorage {
         : (position.entryPrice - currentPrice) * position.quantity;
       
       const profitLossPercent = ((profitLoss) / (position.entryPrice * position.quantity)) * 100;
+      const positionStake = position.entryPrice * position.quantity;
 
       await db.update(demoPositions)
         .set({
@@ -868,17 +899,27 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(demoPositions.id, position.id));
 
-      // Check for stop loss / take profit triggers
+      // Check for auto-liquidation (loss >= position stake = 100% loss)
+      // This prevents positions from losing more than what was invested
+      if (profitLoss <= -positionStake) {
+        console.log(`[Demo Trading] Auto-liquidating position ${position.id}: Loss ($${Math.abs(profitLoss).toFixed(2)}) >= Stake ($${positionStake.toFixed(2)})`);
+        await this.closeDemoTrade(position.userId, position.id, currentPrice, 'liquidation');
+        continue; // Skip other checks since position is closed
+      }
+
+      // Check for stop loss triggers
       if (position.stopLoss && (
         (position.type === 'BUY' && currentPrice <= position.stopLoss) ||
         (position.type === 'SELL' && currentPrice >= position.stopLoss)
       )) {
-        await this.closeDemoTrade(position.userId, position.id, currentPrice);
-      } else if (position.takeProfit && (
+        await this.closeDemoTrade(position.userId, position.id, currentPrice, 'stop_loss');
+      } 
+      // Check for take profit triggers
+      else if (position.takeProfit && (
         (position.type === 'BUY' && currentPrice >= position.takeProfit) ||
         (position.type === 'SELL' && currentPrice <= position.takeProfit)
       )) {
-        await this.closeDemoTrade(position.userId, position.id, currentPrice);
+        await this.closeDemoTrade(position.userId, position.id, currentPrice, 'take_profit');
       }
     }
   }
