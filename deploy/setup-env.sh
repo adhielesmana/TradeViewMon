@@ -20,20 +20,31 @@ if [ -f "$ENV_FILE" ]; then
     cp $ENV_FILE ${ENV_FILE}.backup
 fi
 
-read -p "Enter your PostgreSQL DATABASE_URL: " DATABASE_URL
-read -p "Enter your SESSION_SECRET (press Enter to generate): " SESSION_SECRET
+# Auto-generate secure passwords
+POSTGRES_PASSWORD=$(openssl rand -hex 16)
+SESSION_SECRET=$(openssl rand -hex 32)
+
+log_info "Generating secure credentials..."
+
 read -p "Enter your FINNHUB_API_KEY (optional, press Enter to skip): " FINNHUB_API_KEY
 
-if [ -z "$SESSION_SECRET" ]; then
-    SESSION_SECRET=$(openssl rand -hex 32)
-    log_info "Generated SESSION_SECRET"
-fi
+# Database will be deployed via Docker, so use internal Docker network URL
+DATABASE_URL="postgresql://tradeviewmon:${POSTGRES_PASSWORD}@tradeviewmon-db:5432/tradeviewmon"
 
 cat > $ENV_FILE << EOF
 NODE_ENV=production
 PORT=5000
+
+# Database (auto-deployed via Docker)
 DATABASE_URL=$DATABASE_URL
+POSTGRES_USER=tradeviewmon
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+POSTGRES_DB=tradeviewmon
+
+# Security
 SESSION_SECRET=$SESSION_SECRET
+
+# API Keys (optional)
 FINNHUB_API_KEY=$FINNHUB_API_KEY
 EOF
 
@@ -41,6 +52,8 @@ chmod 600 $ENV_FILE
 
 log_info "Environment file created: $ENV_FILE"
 log_info ""
+log_info "Database will be automatically deployed via Docker"
+log_info "Generated credentials have been saved to $ENV_FILE"
+log_info ""
 log_info "Next steps:"
-log_info "1. Review your .env.production file"
-log_info "2. Run: ./deploy/deploy.sh --domain your-domain.com --email your@email.com"
+log_info "1. Run: ./deploy/deploy.sh --domain your-domain.com --email your@email.com"

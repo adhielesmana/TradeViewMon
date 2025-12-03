@@ -130,9 +130,21 @@ log_info "=========================================="
 log_info "  TradeViewMon Deployment Script"
 log_info "=========================================="
 
+# Check for .env.production file
+if [ ! -f ".env.production" ]; then
+    log_info "No .env.production found. Running setup..."
+    ./deploy/setup-env.sh
+fi
+
+# Source environment variables
+source .env.production
+
 log_info "Checking for port availability..."
 APP_PORT=$(find_available_port $DEFAULT_PORT)
 log_info "Application will use port: $APP_PORT"
+
+# Update APP_PORT in env file
+sed -i "s/^PORT=.*/PORT=$APP_PORT/" .env.production
 
 if ! check_docker; then
     install_docker
@@ -156,29 +168,65 @@ log_info "Copying application files..."
 cp -r . $INSTALL_DIR/
 cd $INSTALL_DIR
 
-log_info "Creating environment file..."
-cat > .env.production << EOF
-NODE_ENV=production
-PORT=$APP_PORT
-DATABASE_URL=\${DATABASE_URL}
-SESSION_SECRET=\${SESSION_SECRET}
-FINNHUB_API_KEY=\${FINNHUB_API_KEY}
-EOF
+# Create Docker network if not exists
+log_info "Creating Docker network..."
+docker network create tradeviewmon-network 2>/dev/null || true
 
+# Stop existing containers if running
+log_info "Stopping existing containers if running..."
+docker stop $APP_NAME 2>/dev/null || true
+docker stop ${APP_NAME}-db 2>/dev/null || true
+docker rm $APP_NAME 2>/dev/null || true
+docker rm ${APP_NAME}-db 2>/dev/null || true
+
+# Start PostgreSQL container
+log_info "Starting PostgreSQL database..."
+docker run -d \
+    --name ${APP_NAME}-db \
+    --network tradeviewmon-network \
+    --restart unless-stopped \
+    -e POSTGRES_USER=${POSTGRES_USER:-tradeviewmon} \
+    -e POSTGRES_PASSWORD=${POSTGRES_PASSWORD} \
+    -e POSTGRES_DB=${POSTGRES_DB:-tradeviewmon} \
+    -v ${APP_NAME}_postgres_data:/var/lib/postgresql/data \
+    postgres:15-alpine
+
+# Wait for PostgreSQL to be ready
+log_info "Waiting for PostgreSQL to be ready..."
+sleep 5
+for i in {1..30}; do
+    if docker exec ${APP_NAME}-db pg_isready -U ${POSTGRES_USER:-tradeviewmon} &>/dev/null; then
+        log_info "PostgreSQL is ready!"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        log_error "PostgreSQL failed to start"
+        exit 1
+    fi
+    sleep 1
+done
+
+# Build application image
 log_info "Building Docker image..."
 docker build -t $APP_NAME:latest -f deploy/Dockerfile .
 
-log_info "Stopping existing container if running..."
-docker stop $APP_NAME 2>/dev/null || true
-docker rm $APP_NAME 2>/dev/null || true
-
+# Start application container
 log_info "Starting application container..."
 docker run -d \
     --name $APP_NAME \
+    --network tradeviewmon-network \
     --restart unless-stopped \
     -p 127.0.0.1:$APP_PORT:5000 \
-    --env-file .env.production \
+    -e NODE_ENV=production \
+    -e PORT=5000 \
+    -e DATABASE_URL=postgresql://${POSTGRES_USER:-tradeviewmon}:${POSTGRES_PASSWORD}@${APP_NAME}-db:5432/${POSTGRES_DB:-tradeviewmon} \
+    -e SESSION_SECRET=${SESSION_SECRET} \
+    -e FINNHUB_API_KEY=${FINNHUB_API_KEY} \
     $APP_NAME:latest
+
+# Wait for application to be ready
+log_info "Waiting for application to start..."
+sleep 10
 
 log_info "Creating Nginx configuration..."
 if [ -n "$DOMAIN" ]; then
@@ -283,6 +331,9 @@ echo ""
 log_info "Application Status:"
 docker ps --filter name=$APP_NAME --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 echo ""
+log_info "Database Status:"
+docker ps --filter name=${APP_NAME}-db --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+echo ""
 log_info "Application running on port: $APP_PORT"
 if [ -n "$DOMAIN" ]; then
     if [ -n "$EMAIL" ]; then
@@ -295,7 +346,8 @@ else
 fi
 echo ""
 log_info "Useful commands:"
-log_info "  View logs:     docker logs -f $APP_NAME"
-log_info "  Restart app:   docker restart $APP_NAME"
-log_info "  Stop app:      docker stop $APP_NAME"
-log_info "  Update app:    cd $INSTALL_DIR && git pull && ./deploy/deploy.sh"
+log_info "  View app logs:  docker logs -f $APP_NAME"
+log_info "  View db logs:   docker logs -f ${APP_NAME}-db"
+log_info "  Restart app:    docker restart $APP_NAME"
+log_info "  Stop all:       docker stop $APP_NAME ${APP_NAME}-db"
+log_info "  Update app:     cd $INSTALL_DIR && git pull && ./deploy/deploy.sh"
