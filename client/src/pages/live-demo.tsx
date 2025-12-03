@@ -452,6 +452,9 @@ export default function LiveDemo() {
 
   const openPnL = openPositions?.reduce((sum, pos) => sum + calculateLivePnL(pos), 0) || 0;
   const totalEquity = (accountData?.account.balance || 0) + openPnL;
+  
+  // Count currently open auto-trade positions
+  const openAutoTradeCount = openPositions?.filter(pos => pos.isAutoTrade).length || 0;
 
   // Calculate available withdrawal balance (balance - open positions value)
   const openPositionsValue = openPositions?.reduce((sum, pos) => sum + (pos.entryPrice * pos.quantity), 0) || 0;
@@ -913,7 +916,7 @@ export default function LiveDemo() {
             </div>
             <div>
               <span className="text-muted-foreground">Auto-Trades:</span>{" "}
-              <span className="font-medium">{autoTradeSettings?.totalAutoTrades || 0}</span>
+              <span className="font-medium">{openAutoTradeCount}</span>
             </div>
           </div>
           {(autoTradeSettings?.closedAutoTrades || 0) > 0 && (
