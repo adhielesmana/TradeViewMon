@@ -79,7 +79,7 @@ export default function LiveDemo() {
   const [selectedSymbol, setSelectedSymbol] = useState(symbol);
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
-  const [tradeQuantity, setTradeQuantity] = useState("");
+  const [tradeAmount, setTradeAmount] = useState("");
   const [stopLoss, setStopLoss] = useState("");
   const [takeProfit, setTakeProfit] = useState("");
   const [isDepositOpen, setIsDepositOpen] = useState(false);
@@ -144,7 +144,7 @@ export default function LiveDemo() {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/account"] });
       queryClient.invalidateQueries({ queryKey: ["/api/demo/positions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/demo/transactions"] });
-      setTradeQuantity("");
+      setTradeAmount("");
       setStopLoss("");
       setTakeProfit("");
       setIsTradeOpen(false);
@@ -185,8 +185,9 @@ export default function LiveDemo() {
   };
 
   const handleOpenTrade = () => {
-    const quantity = parseFloat(tradeQuantity);
-    if (quantity > 0 && currentPrice) {
+    const amount = parseFloat(tradeAmount);
+    if (amount > 0 && currentPrice) {
+      const quantity = amount / currentPrice.price;
       openTradeMutation.mutate({
         symbol: selectedSymbol,
         type: tradeType,
@@ -499,22 +500,22 @@ export default function LiveDemo() {
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label>Quantity (Units)</Label>
+                    <Label>Amount ($)</Label>
                     <Input
                       type="number"
-                      value={tradeQuantity}
-                      onChange={(e) => setTradeQuantity(e.target.value)}
-                      placeholder="1"
-                      min="0.01"
-                      step="0.01"
-                      data-testid="input-trade-quantity"
+                      value={tradeAmount}
+                      onChange={(e) => setTradeAmount(e.target.value)}
+                      placeholder="1000"
+                      min="1"
+                      step="100"
+                      data-testid="input-trade-amount"
                     />
-                    {currentPrice && tradeQuantity && (
+                    {currentPrice && tradeAmount && (
                       <>
                         <p className="text-sm text-muted-foreground mt-1">
-                          Trade value: {formatCurrency(currentPrice.price * parseFloat(tradeQuantity || "0"))}
+                          Units: {(parseFloat(tradeAmount || "0") / currentPrice.price).toFixed(4)} {selectedSymbol}
                         </p>
-                        {currentPrice.price * parseFloat(tradeQuantity || "0") > (accountData?.stats?.balance || 0) && (
+                        {parseFloat(tradeAmount || "0") > (accountData?.stats?.balance || 0) && (
                           <p className="text-sm text-red-500 mt-1" data-testid="text-insufficient-funds">
                             Insufficient funds. Available: {formatCurrency(accountData?.stats?.balance || 0)}
                           </p>
@@ -552,8 +553,8 @@ export default function LiveDemo() {
                     onClick={handleOpenTrade}
                     disabled={
                       openTradeMutation.isPending || 
-                      !tradeQuantity || 
-                      (currentPrice && currentPrice.price * parseFloat(tradeQuantity || "0") > (accountData?.stats?.balance || 0))
+                      !tradeAmount || 
+                      parseFloat(tradeAmount || "0") > (accountData?.stats?.balance || 0)
                     }
                     variant={tradeType === "BUY" ? "default" : "destructive"}
                     data-testid="button-confirm-trade"
