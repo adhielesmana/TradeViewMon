@@ -1,13 +1,39 @@
 import { useMemo, useRef, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { MarketData } from "@shared/schema";
 import { format } from "date-fns";
+
+export type TimeframeOption = 
+  | "3h-1min"
+  | "6h-5min"
+  | "1d-30min"
+  | "1m-12h"
+  | "6m-1d"
+  | "1y-1w";
+
+export const TIMEFRAME_LABELS: Record<TimeframeOption, string> = {
+  "3h-1min": "3Hours/1Min",
+  "6h-5min": "6Hours/5Mins",
+  "1d-30min": "1Day/30Mins",
+  "1m-12h": "1Month/12Hours",
+  "6m-1d": "6Month/1Day",
+  "1y-1w": "1Year/1Week",
+};
 
 interface CandlestickChartProps {
   data: MarketData[];
   isLoading?: boolean;
-  title?: string;
+  symbol: string;
+  timeframe: TimeframeOption;
+  onTimeframeChange: (timeframe: TimeframeOption) => void;
   height?: number;
   className?: string;
 }
@@ -31,7 +57,9 @@ interface TooltipData {
 export function CandlestickChart({
   data,
   isLoading = false,
-  title = "Candlestick Chart",
+  symbol,
+  timeframe,
+  onTimeframeChange,
   height = 350,
   className,
 }: CandlestickChartProps) {
@@ -86,11 +114,11 @@ export function CandlestickChart({
     const minData = Math.min(...allLows);
     const maxData = Math.max(...allHighs);
     
-    const roundedMin = Math.floor(minData * 10) / 10 - 0.2;
-    const roundedMax = Math.ceil(maxData * 10) / 10 + 0.2;
+    const roundedMin = Math.floor(minData * 2) / 2 - 0.5;
+    const roundedMax = Math.ceil(maxData * 2) / 2 + 0.5;
     
     const ticks: number[] = [];
-    for (let tick = roundedMin; tick <= roundedMax; tick = Math.round((tick + 0.10) * 100) / 100) {
+    for (let tick = roundedMin; tick <= roundedMax; tick = Math.round((tick + 0.50) * 100) / 100) {
       ticks.push(tick);
     }
     
@@ -117,11 +145,27 @@ export function CandlestickChart({
     return chartData.filter((_, i) => i % step === 0 || i === chartData.length - 1);
   }, [chartData]);
 
+  const title = `${symbol} CHART (${TIMEFRAME_LABELS[timeframe]})`;
+
   if (isLoading) {
     return (
       <Card className={className}>
         <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-medium">{title}</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-lg font-medium">{title}</CardTitle>
+            <Select value={timeframe} onValueChange={(v) => onTimeframeChange(v as TimeframeOption)}>
+              <SelectTrigger className="w-[160px]" data-testid="select-timeframe">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(TIMEFRAME_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value} data-testid={`option-${value}`}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           <Skeleton className="w-full" style={{ height }} />
@@ -134,7 +178,21 @@ export function CandlestickChart({
     return (
       <Card className={className}>
         <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-medium">{title}</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-lg font-medium">{title}</CardTitle>
+            <Select value={timeframe} onValueChange={(v) => onTimeframeChange(v as TimeframeOption)}>
+              <SelectTrigger className="w-[160px]" data-testid="select-timeframe">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(TIMEFRAME_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value} data-testid={`option-${value}`}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           <div
@@ -154,7 +212,21 @@ export function CandlestickChart({
   return (
     <Card className={className}>
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg font-medium">{title}</CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-lg font-medium">{title}</CardTitle>
+          <Select value={timeframe} onValueChange={(v) => onTimeframeChange(v as TimeframeOption)}>
+            <SelectTrigger className="w-[160px]" data-testid="select-timeframe">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(TIMEFRAME_LABELS).map(([value, label]) => (
+                <SelectItem key={value} value={value} data-testid={`option-${value}`}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </CardHeader>
       <CardContent>
         <div 
@@ -194,15 +266,12 @@ export function CandlestickChart({
                 return (
                   <g 
                     key={`candle-${index}`}
-                    onMouseEnter={(e) => {
-                      const rect = containerRef.current?.getBoundingClientRect();
-                      if (rect) {
-                        setTooltip({
-                          x: x + margin.left + candleWidth,
-                          y: bodyTop + margin.top,
-                          candle
-                        });
-                      }
+                    onMouseEnter={() => {
+                      setTooltip({
+                        x: x + margin.left + candleWidth,
+                        y: bodyTop + margin.top,
+                        candle
+                      });
                     }}
                     onMouseLeave={() => setTooltip(null)}
                     style={{ cursor: 'crosshair' }}

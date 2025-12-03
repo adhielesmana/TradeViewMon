@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { PriceDisplay } from "@/components/price-display";
-import { MarketChart } from "@/components/market-chart";
-import { CandlestickChart } from "@/components/candlestick-chart";
+import { CandlestickChart, type TimeframeOption } from "@/components/candlestick-chart";
 import { StatCard } from "@/components/stat-card";
 import { StatusIndicator } from "@/components/status-indicator";
 import { Activity, Volume2, TrendingUp, TrendingDown, Clock, BarChart3, Gauge, Wifi, WifiOff } from "lucide-react";
@@ -12,7 +12,6 @@ import { formatDistanceToNow } from "date-fns";
 import { useSymbol } from "@/lib/symbol-context";
 import { useWebSocket, type WSMessage, type WSConnectionStatus } from "@/hooks/use-websocket";
 import { queryClient } from "@/lib/queryClient";
-import { useCallback } from "react";
 import type { MarketData, MarketStats } from "@shared/schema";
 
 interface IndicatorData {
@@ -51,12 +50,13 @@ function getConnectionStatusColor(status: WSConnectionStatus): "online" | "offli
 export default function LiveMarket() {
   const { currentSymbol } = useSymbol();
   const symbol = currentSymbol.symbol;
+  const [timeframe, setTimeframe] = useState<TimeframeOption>("3h-1min");
 
   const handleWSMessage = useCallback((message: WSMessage) => {
     const matchesSymbol = !message.symbol || message.symbol === symbol;
     
     if (message.type === "market_update" && matchesSymbol) {
-      queryClient.invalidateQueries({ queryKey: ["/api/market/recent", { symbol }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/market/candles", { symbol, timeframe }] });
       queryClient.invalidateQueries({ queryKey: ["/api/market/stats", { symbol }] });
       queryClient.invalidateQueries({ queryKey: ["/api/market/indicators", { symbol }] });
     } else if (message.type === "prediction_update" && matchesSymbol) {
@@ -65,7 +65,7 @@ export default function LiveMarket() {
     } else if (message.type === "accuracy_update" && matchesSymbol) {
       queryClient.invalidateQueries({ queryKey: ["/api/predictions/accuracy", { symbol }] });
     }
-  }, [symbol]);
+  }, [symbol, timeframe]);
 
   const { status: wsStatus, reconnect } = useWebSocket({
     symbol,
@@ -75,7 +75,7 @@ export default function LiveMarket() {
   const isConnected = wsStatus === "connected";
 
   const { data: marketData, isLoading: isLoadingMarket } = useQuery<MarketData[]>({
-    queryKey: ["/api/market/recent", { symbol }],
+    queryKey: ["/api/market/candles", { symbol, timeframe }],
     refetchInterval: isConnected ? false : 30000,
   });
 
@@ -158,7 +158,9 @@ export default function LiveMarket() {
       <CandlestickChart
         data={marketData || []}
         isLoading={isLoadingMarket}
-        title="Candlestick Chart (1H / 1min)"
+        symbol={symbol}
+        timeframe={timeframe}
+        onTimeframeChange={setTimeframe}
         height={500}
       />
 
@@ -324,7 +326,7 @@ export default function LiveMarket() {
             <div className="flex flex-col">
               <span className="text-sm text-muted-foreground">Open</span>
               <span className="font-mono text-lg font-medium" data-testid="text-open-price">
-                {marketData?.[0]?.open ? `$${marketData[0].open.toFixed(2)}` : "--"}
+                {marketData?.[0]?.open ? `$${Number(marketData[0].open).toFixed(2)}` : "--"}
               </span>
             </div>
             <div className="flex flex-col">

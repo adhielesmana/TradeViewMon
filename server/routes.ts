@@ -331,6 +331,110 @@ export async function registerRoutes(
     }
   });
 
+  // Multi-timeframe candle data endpoint
+  app.get("/api/market/candles", async (req, res) => {
+    try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
+      const timeframe = (req.query.timeframe as string) || "3h-1min";
+      
+      const now = new Date();
+      let startDate: Date;
+      let intervalMinutes: number;
+      
+      // Determine time range and candle interval based on timeframe
+      switch (timeframe) {
+        case "3h-1min":
+          startDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+          intervalMinutes = 1;
+          break;
+        case "6h-5min":
+          startDate = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+          intervalMinutes = 5;
+          break;
+        case "1d-30min":
+          startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          intervalMinutes = 30;
+          break;
+        case "1m-12h":
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          intervalMinutes = 12 * 60; // 720 minutes
+          break;
+        case "6m-1d":
+          startDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+          intervalMinutes = 24 * 60; // 1440 minutes
+          break;
+        case "1y-1w":
+          startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+          intervalMinutes = 7 * 24 * 60; // 10080 minutes
+          break;
+        default:
+          startDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+          intervalMinutes = 1;
+      }
+      
+      const rawData = await storage.getMarketDataByTimeRange(symbol, startDate, now);
+      
+      if (rawData.length === 0) {
+        return res.json([]);
+      }
+      
+      // If interval is 1 minute, return raw data
+      if (intervalMinutes === 1) {
+        return res.json(rawData);
+      }
+      
+      // Aggregate candles for larger intervals
+      const aggregatedCandles: typeof rawData = [];
+      const intervalMs = intervalMinutes * 60 * 1000;
+      
+      // Group data by interval buckets
+      const buckets = new Map<number, typeof rawData>();
+      
+      for (const candle of rawData) {
+        const timestamp = new Date(candle.timestamp).getTime();
+        const bucketKey = Math.floor(timestamp / intervalMs) * intervalMs;
+        
+        if (!buckets.has(bucketKey)) {
+          buckets.set(bucketKey, []);
+        }
+        buckets.get(bucketKey)!.push(candle);
+      }
+      
+      // Convert buckets to aggregated candles
+      const sortedBuckets = Array.from(buckets.entries()).sort((a, b) => a[0] - b[0]);
+      
+      for (const [bucketTime, candles] of sortedBuckets) {
+        if (candles.length === 0) continue;
+        
+        // Sort candles by timestamp within bucket
+        candles.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        
+        const open = Number(candles[0].open);
+        const close = Number(candles[candles.length - 1].close);
+        const high = Math.max(...candles.map(c => Number(c.high)));
+        const low = Math.min(...candles.map(c => Number(c.low)));
+        const volume = candles.reduce((sum, c) => sum + Number(c.volume), 0);
+        
+        aggregatedCandles.push({
+          id: candles[0].id,
+          symbol,
+          timestamp: new Date(bucketTime).toISOString() as any,
+          open: open as any,
+          high: high as any,
+          low: low as any,
+          close: close as any,
+          volume: volume as any,
+          interval: `${intervalMinutes}min` as any,
+        });
+      }
+      
+      res.json(aggregatedCandles);
+    } catch (error) {
+      console.error("Error fetching candle data:", error);
+      res.status(500).json({ error: "Failed to fetch candle data" });
+    }
+  });
+
   app.get("/api/market/stats", async (req, res) => {
     try {
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
