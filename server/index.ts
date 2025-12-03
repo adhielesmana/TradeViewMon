@@ -1,17 +1,42 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { Pool as NeonPool } from "@neondatabase/serverless";
 import pg from "pg";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
-// Use appropriate PostgreSQL driver based on environment
 const isProduction = process.env.NODE_ENV === "production";
-const sessionPool: any = isProduction 
-  ? new pg.Pool({ connectionString: process.env.DATABASE_URL })
-  : new NeonPool({ connectionString: process.env.DATABASE_URL });
+
+// Create PostgreSQL pool for session store
+const sessionPool = new pg.Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  max: 5,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+});
+
+// Create session table if it doesn't exist
+async function initSessionTable() {
+  try {
+    await sessionPool.query(`
+      CREATE TABLE IF NOT EXISTS "session" (
+        "sid" varchar NOT NULL COLLATE "default" PRIMARY KEY,
+        "sess" json NOT NULL,
+        "expire" timestamp(6) NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
+    `);
+    console.log("[Session] Session table ready");
+  } catch (err) {
+    console.error("[Session] Error creating session table:", err);
+  }
+}
+
+// Initialize session table
+initSessionTable();
+
+const PgSession = connectPgSimple(session);
 
 const app = express();
 const httpServer = createServer(app);
@@ -37,22 +62,21 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-const PgSession = connectPgSimple(session);
-
-// In production, check if HTTPS is being used (via X-Forwarded-Proto from Nginx)
-// If not using HTTPS, don't set secure cookies
+// In production, check if HTTPS is being used
 const useSecureCookies = isProduction && process.env.USE_HTTPS === "true";
 
 console.log(`[Session] Environment: ${isProduction ? 'production' : 'development'}`);
 console.log(`[Session] USE_HTTPS env: ${process.env.USE_HTTPS}`);
 console.log(`[Session] Secure cookies: ${useSecureCookies}`);
+console.log(`[Session] Using PostgreSQL session store`);
 
 app.use(
   session({
     store: new PgSession({
       pool: sessionPool,
       tableName: "session",
-      createTableIfMissing: true,
+      createTableIfMissing: false, // We create it ourselves above
+      pruneSessionInterval: 60 * 15, // Prune every 15 minutes
     }),
     secret: process.env.SESSION_SECRET || "tradeviewmon-secret-key-change-in-production",
     name: "tradeviewmon.sid",
