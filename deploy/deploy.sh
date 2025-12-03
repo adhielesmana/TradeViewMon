@@ -151,6 +151,12 @@ export APP_PORT
 log_info "Stopping existing containers..."
 docker compose -f deploy/docker-compose.yml down 2>/dev/null || true
 
+# Force remove any leftover containers with the same names
+docker stop tradeviewmon 2>/dev/null || true
+docker stop tradeviewmon-db 2>/dev/null || true
+docker rm -f tradeviewmon 2>/dev/null || true
+docker rm -f tradeviewmon-db 2>/dev/null || true
+
 log_info "Building and starting services..."
 docker compose -f deploy/docker-compose.yml up -d --build
 
