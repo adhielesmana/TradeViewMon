@@ -221,7 +221,16 @@ export default function LiveDemo() {
 
   const equityCurve = calculateEquityCurve();
 
-  const openPnL = openPositions?.reduce((sum, pos) => sum + (pos.profitLoss || 0), 0) || 0;
+  const calculateLivePnL = (position: DemoPosition) => {
+    const livePrice = position.symbol === selectedSymbol && currentPrice 
+      ? currentPrice.price 
+      : position.currentPrice || position.entryPrice;
+    return position.type === "BUY"
+      ? (livePrice - position.entryPrice) * position.quantity
+      : (position.entryPrice - livePrice) * position.quantity;
+  };
+
+  const openPnL = openPositions?.reduce((sum, pos) => sum + calculateLivePnL(pos), 0) || 0;
   const totalEquity = (accountData?.account.balance || 0) + openPnL;
 
   return (
@@ -593,59 +602,69 @@ export default function LiveDemo() {
             </Card>
           ) : openPositions && openPositions.length > 0 ? (
             <div className="space-y-3">
-              {openPositions.map((position) => (
-                <Card key={position.id} data-testid={`card-position-${position.id}`}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between flex-wrap gap-4">
-                      <div className="flex items-center gap-4">
-                        <Badge variant={position.type === "BUY" ? "default" : "destructive"}>
-                          {position.type}
-                        </Badge>
-                        <div>
-                          <div className="font-semibold">{position.symbol}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {position.quantity} units @ {formatCurrency(position.entryPrice)}
+              {openPositions.map((position) => {
+                const livePrice = position.symbol === selectedSymbol && currentPrice 
+                  ? currentPrice.price 
+                  : position.currentPrice || position.entryPrice;
+                const livePnL = position.type === "BUY"
+                  ? (livePrice - position.entryPrice) * position.quantity
+                  : (position.entryPrice - livePrice) * position.quantity;
+                const livePnLPercent = (livePnL / (position.entryPrice * position.quantity)) * 100;
+                
+                return (
+                  <Card key={position.id} data-testid={`card-position-${position.id}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between flex-wrap gap-4">
+                        <div className="flex items-center gap-4">
+                          <Badge variant={position.type === "BUY" ? "default" : "destructive"}>
+                            {position.type}
+                          </Badge>
+                          <div>
+                            <div className="font-semibold">{position.symbol}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {position.quantity.toFixed(4)} units @ {formatCurrency(position.entryPrice)}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <div className="text-sm text-muted-foreground">Current</div>
-                          <div className="font-medium">{formatCurrency(position.currentPrice || 0)}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm text-muted-foreground">P&L</div>
-                          <div className={`font-bold ${getPnLColor(position.profitLoss || 0)}`}>
-                            {formatCurrency(position.profitLoss || 0)}
-                            <span className="text-xs ml-1">
-                              ({formatPercent(position.profitLossPercent || 0)})
-                            </span>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <div className="text-sm text-muted-foreground">Current</div>
+                            <div className="font-medium">{formatCurrency(livePrice)}</div>
                           </div>
+                          <div className="text-right">
+                            <div className="text-sm text-muted-foreground">P&L</div>
+                            <div className={`font-bold ${getPnLColor(livePnL)}`}>
+                              {formatCurrency(livePnL)}
+                              <span className="text-xs ml-1">
+                                ({formatPercent(livePnLPercent)})
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleCloseTrade(position.id)}
+                            disabled={closeTradeMutation.isPending}
+                            data-testid={`button-close-position-${position.id}`}
+                          >
+                            Close
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleCloseTrade(position.id)}
-                          disabled={closeTradeMutation.isPending}
-                          data-testid={`button-close-position-${position.id}`}
-                        >
-                          Close
-                        </Button>
                       </div>
-                    </div>
-                    {(position.stopLoss || position.takeProfit) && (
-                      <div className="flex gap-4 mt-2 text-sm">
-                        {position.stopLoss && (
-                          <span className="text-red-500">SL: {formatCurrency(position.stopLoss)}</span>
-                        )}
-                        {position.takeProfit && (
-                          <span className="text-green-500">TP: {formatCurrency(position.takeProfit)}</span>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                      {(position.stopLoss || position.takeProfit) && (
+                        <div className="flex gap-4 mt-2 text-sm">
+                          {position.stopLoss && (
+                            <span className="text-red-500">SL: {formatCurrency(position.stopLoss)}</span>
+                          )}
+                          {position.takeProfit && (
+                            <span className="text-green-500">TP: {formatCurrency(position.takeProfit)}</span>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           ) : (
             <Card>
