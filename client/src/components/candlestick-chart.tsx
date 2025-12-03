@@ -41,11 +41,12 @@ interface CandlestickChartProps {
 interface CandleData {
   time: string;
   timestamp: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
   isUp: boolean;
+  isNull: boolean;
 }
 
 interface TooltipData {
@@ -83,34 +84,33 @@ export function CandlestickChart({
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
-    const uniqueData = new Map<number, CandleData>();
-    
-    sortedData.forEach((item) => {
-      const timestamp = Math.floor(new Date(item.timestamp).getTime() / 60000) * 60000;
-      const open = Number(item.open);
-      const high = Number(item.high);
-      const low = Number(item.low);
-      const close = Number(item.close);
+    return sortedData.map((item) => {
+      const timestamp = new Date(item.timestamp).getTime();
+      const open = item.open != null ? Number(item.open) : null;
+      const high = item.high != null ? Number(item.high) : null;
+      const low = item.low != null ? Number(item.low) : null;
+      const close = item.close != null ? Number(item.close) : null;
+      const isNull = open === null || close === null;
       
-      uniqueData.set(timestamp, {
+      return {
         time: format(new Date(timestamp), "HH:mm"),
         timestamp,
         open,
         high,
         low,
         close,
-        isUp: close >= open,
-      });
+        isUp: !isNull && close! >= open!,
+        isNull,
+      };
     });
-
-    return Array.from(uniqueData.values()).sort((a, b) => a.timestamp - b.timestamp);
   }, [data]);
 
   const { minPrice, maxPrice, yAxisTicks } = useMemo(() => {
-    if (chartData.length === 0) return { minPrice: 0, maxPrice: 0, yAxisTicks: [] };
+    const validCandles = chartData.filter(d => !d.isNull);
+    if (validCandles.length === 0) return { minPrice: 0, maxPrice: 0, yAxisTicks: [] };
     
-    const allLows = chartData.map((d) => d.low);
-    const allHighs = chartData.map((d) => d.high);
+    const allLows = validCandles.map((d) => d.low!);
+    const allHighs = validCandles.map((d) => d.high!);
     const minData = Math.min(...allLows);
     const maxData = Math.max(...allHighs);
     
@@ -174,7 +174,9 @@ export function CandlestickChart({
     );
   }
 
-  if (data.length === 0) {
+  const hasValidData = chartData.some(d => !d.isNull);
+
+  if (data.length === 0 || !hasValidData) {
     return (
       <Card className={className}>
         <CardHeader className="pb-2">
@@ -252,12 +254,17 @@ export function CandlestickChart({
 
               {chartData.map((candle, index) => {
                 const x = index * candleSpacing + (candleSpacing - candleWidth) / 2;
+                
+                if (candle.isNull) {
+                  return null;
+                }
+                
                 const color = candle.isUp ? "#16a34a" : "#ef4444";
                 
-                const openY = priceToY(candle.open);
-                const closeY = priceToY(candle.close);
-                const highY = priceToY(candle.high);
-                const lowY = priceToY(candle.low);
+                const openY = priceToY(candle.open!);
+                const closeY = priceToY(candle.close!);
+                const highY = priceToY(candle.high!);
+                const lowY = priceToY(candle.low!);
                 
                 const bodyTop = Math.min(openY, closeY);
                 const bodyHeight = Math.max(Math.abs(closeY - openY), 1);
@@ -336,7 +343,7 @@ export function CandlestickChart({
             </g>
           </svg>
 
-          {tooltip && (
+          {tooltip && !tooltip.candle.isNull && (
             <div
               className="absolute bg-popover border border-border rounded-lg p-3 shadow-lg pointer-events-none z-50"
               style={{
@@ -347,14 +354,14 @@ export function CandlestickChart({
               <div className="text-sm font-medium mb-2">{tooltip.candle.time}</div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                 <span className="text-muted-foreground">Open:</span>
-                <span className="font-mono">${tooltip.candle.open.toFixed(2)}</span>
+                <span className="font-mono">${tooltip.candle.open!.toFixed(2)}</span>
                 <span className="text-muted-foreground">High:</span>
-                <span className="font-mono text-green-500">${tooltip.candle.high.toFixed(2)}</span>
+                <span className="font-mono text-green-500">${tooltip.candle.high!.toFixed(2)}</span>
                 <span className="text-muted-foreground">Low:</span>
-                <span className="font-mono text-red-500">${tooltip.candle.low.toFixed(2)}</span>
+                <span className="font-mono text-red-500">${tooltip.candle.low!.toFixed(2)}</span>
                 <span className="text-muted-foreground">Close:</span>
                 <span className={`font-mono ${tooltip.candle.isUp ? 'text-green-500' : 'text-red-500'}`}>
-                  ${tooltip.candle.close.toFixed(2)}
+                  ${tooltip.candle.close!.toFixed(2)}
                 </span>
               </div>
             </div>

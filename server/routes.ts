@@ -373,21 +373,50 @@ export async function registerRoutes(
       }
       
       const rawData = await storage.getMarketDataByTimeRange(symbol, startDate, now);
-      
-      if (rawData.length === 0) {
-        return res.json([]);
-      }
-      
-      // If interval is 1 minute, return raw data
-      if (intervalMinutes === 1) {
-        return res.json(rawData);
-      }
-      
-      // Aggregate candles for larger intervals
-      const aggregatedCandles: typeof rawData = [];
       const intervalMs = intervalMinutes * 60 * 1000;
       
-      // Group data by interval buckets
+      // For 1-minute interval, generate all expected slots with null for missing data
+      if (intervalMinutes === 1) {
+        const allSlots: any[] = [];
+        const startMs = Math.floor(startDate.getTime() / intervalMs) * intervalMs;
+        const endMs = Math.floor(now.getTime() / intervalMs) * intervalMs;
+        
+        // Create a map of existing data by timestamp
+        const dataMap = new Map<number, typeof rawData[0]>();
+        for (const candle of rawData) {
+          const ts = Math.floor(new Date(candle.timestamp).getTime() / intervalMs) * intervalMs;
+          dataMap.set(ts, candle);
+        }
+        
+        // Generate all time slots
+        for (let ts = startMs; ts <= endMs; ts += intervalMs) {
+          const existingCandle = dataMap.get(ts);
+          if (existingCandle) {
+            allSlots.push(existingCandle);
+          } else {
+            // Return null entry for missing data
+            allSlots.push({
+              id: null,
+              symbol,
+              timestamp: new Date(ts).toISOString(),
+              open: null,
+              high: null,
+              low: null,
+              close: null,
+              volume: null,
+              interval: "1min",
+            });
+          }
+        }
+        
+        return res.json(allSlots);
+      }
+      
+      // For larger intervals, aggregate and include null slots
+      const startMs = Math.floor(startDate.getTime() / intervalMs) * intervalMs;
+      const endMs = Math.floor(now.getTime() / intervalMs) * intervalMs;
+      
+      // Group raw data by interval buckets
       const buckets = new Map<number, typeof rawData>();
       
       for (const candle of rawData) {
@@ -400,35 +429,50 @@ export async function registerRoutes(
         buckets.get(bucketKey)!.push(candle);
       }
       
-      // Convert buckets to aggregated candles
-      const sortedBuckets = Array.from(buckets.entries()).sort((a, b) => a[0] - b[0]);
+      // Generate all expected time slots
+      const allCandles: any[] = [];
       
-      for (const [bucketTime, candles] of sortedBuckets) {
-        if (candles.length === 0) continue;
+      for (let ts = startMs; ts <= endMs; ts += intervalMs) {
+        const candles = buckets.get(ts);
         
-        // Sort candles by timestamp within bucket
-        candles.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-        
-        const open = Number(candles[0].open);
-        const close = Number(candles[candles.length - 1].close);
-        const high = Math.max(...candles.map(c => Number(c.high)));
-        const low = Math.min(...candles.map(c => Number(c.low)));
-        const volume = candles.reduce((sum, c) => sum + Number(c.volume), 0);
-        
-        aggregatedCandles.push({
-          id: candles[0].id,
-          symbol,
-          timestamp: new Date(bucketTime).toISOString() as any,
-          open: open as any,
-          high: high as any,
-          low: low as any,
-          close: close as any,
-          volume: volume as any,
-          interval: `${intervalMinutes}min` as any,
-        });
+        if (candles && candles.length > 0) {
+          // Sort candles by timestamp within bucket
+          candles.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+          
+          const open = Number(candles[0].open);
+          const close = Number(candles[candles.length - 1].close);
+          const high = Math.max(...candles.map(c => Number(c.high)));
+          const low = Math.min(...candles.map(c => Number(c.low)));
+          const volume = candles.reduce((sum, c) => sum + Number(c.volume), 0);
+          
+          allCandles.push({
+            id: candles[0].id,
+            symbol,
+            timestamp: new Date(ts).toISOString(),
+            open,
+            high,
+            low,
+            close,
+            volume,
+            interval: `${intervalMinutes}min`,
+          });
+        } else {
+          // Return null entry for missing data slot
+          allCandles.push({
+            id: null,
+            symbol,
+            timestamp: new Date(ts).toISOString(),
+            open: null,
+            high: null,
+            low: null,
+            close: null,
+            volume: null,
+            interval: `${intervalMinutes}min`,
+          });
+        }
       }
       
-      res.json(aggregatedCandles);
+      res.json(allCandles);
     } catch (error) {
       console.error("Error fetching candle data:", error);
       res.status(500).json({ error: "Failed to fetch candle data" });
