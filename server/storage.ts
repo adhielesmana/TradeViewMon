@@ -1,5 +1,5 @@
 import { 
-  marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState,
+  marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState, aiSuggestions,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
@@ -7,7 +7,8 @@ import {
   type MarketStats, type AccuracyStats, type PredictionWithResult,
   type User, type SafeUser, type InsertUser, type UpdateUser,
   type UserInvite, type InsertUserInvite,
-  type PriceState, type InsertPriceState
+  type PriceState, type InsertPriceState,
+  type AiSuggestion, type InsertAiSuggestion, type AiSuggestionAccuracyStats
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, gte, lte, and, sql, inArray, isNull } from "drizzle-orm";
@@ -58,6 +59,14 @@ export interface IStorage {
   // Price State
   getPriceState(symbol: string): Promise<PriceState | null>;
   upsertPriceState(symbol: string, lastOpen: number, lastClose: number, lastTimestamp: Date): Promise<PriceState>;
+
+  // AI Suggestions
+  insertAiSuggestion(suggestion: InsertAiSuggestion): Promise<AiSuggestion>;
+  getLatestAiSuggestion(symbol: string): Promise<AiSuggestion | null>;
+  getRecentAiSuggestions(symbol: string, limit?: number): Promise<AiSuggestion[]>;
+  getUnevaluatedSuggestions(olderThanMinutes?: number): Promise<AiSuggestion[]>;
+  evaluateAiSuggestion(id: number, actualPrice: number, wasAccurate: boolean, profitLoss: number): Promise<AiSuggestion | null>;
+  getAiSuggestionAccuracyStats(symbol: string): Promise<AiSuggestionAccuracyStats>;
 }
 
 const startTime = Date.now();
@@ -437,6 +446,88 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result;
     }
+  }
+
+  // AI Suggestions
+  async insertAiSuggestion(suggestion: InsertAiSuggestion): Promise<AiSuggestion> {
+    const [result] = await db.insert(aiSuggestions).values(suggestion).returning();
+    return result;
+  }
+
+  async getLatestAiSuggestion(symbol: string): Promise<AiSuggestion | null> {
+    const [result] = await db.select()
+      .from(aiSuggestions)
+      .where(eq(aiSuggestions.symbol, symbol))
+      .orderBy(desc(aiSuggestions.generatedAt))
+      .limit(1);
+    return result || null;
+  }
+
+  async getRecentAiSuggestions(symbol: string, limit: number = 50): Promise<AiSuggestion[]> {
+    const results = await db.select()
+      .from(aiSuggestions)
+      .where(eq(aiSuggestions.symbol, symbol))
+      .orderBy(desc(aiSuggestions.generatedAt))
+      .limit(limit);
+    return results.reverse();
+  }
+
+  async getUnevaluatedSuggestions(olderThanMinutes: number = 5): Promise<AiSuggestion[]> {
+    const cutoffTime = new Date(Date.now() - olderThanMinutes * 60 * 1000);
+    return db.select()
+      .from(aiSuggestions)
+      .where(and(
+        eq(aiSuggestions.isEvaluated, false),
+        lte(aiSuggestions.generatedAt, cutoffTime)
+      ))
+      .orderBy(aiSuggestions.generatedAt);
+  }
+
+  async evaluateAiSuggestion(id: number, actualPrice: number, wasAccurate: boolean, profitLoss: number): Promise<AiSuggestion | null> {
+    const [result] = await db.update(aiSuggestions)
+      .set({
+        isEvaluated: true,
+        evaluatedAt: new Date(),
+        actualPrice,
+        wasAccurate,
+        profitLoss,
+      })
+      .where(eq(aiSuggestions.id, id))
+      .returning();
+    return result || null;
+  }
+
+  async getAiSuggestionAccuracyStats(symbol: string): Promise<AiSuggestionAccuracyStats> {
+    const allSuggestions = await db.select()
+      .from(aiSuggestions)
+      .where(eq(aiSuggestions.symbol, symbol));
+    
+    const evaluated = allSuggestions.filter(s => s.isEvaluated);
+    const accurate = evaluated.filter(s => s.wasAccurate);
+    
+    const buySuggestions = evaluated.filter(s => s.decision === "BUY");
+    const sellSuggestions = evaluated.filter(s => s.decision === "SELL");
+    const holdSuggestions = evaluated.filter(s => s.decision === "HOLD");
+    
+    const buyAccurate = buySuggestions.filter(s => s.wasAccurate).length;
+    const sellAccurate = sellSuggestions.filter(s => s.wasAccurate).length;
+    const holdAccurate = holdSuggestions.filter(s => s.wasAccurate).length;
+    
+    const avgProfitLoss = evaluated.length > 0
+      ? evaluated.reduce((sum, s) => sum + (s.profitLoss || 0), 0) / evaluated.length
+      : 0;
+
+    return {
+      totalSuggestions: allSuggestions.length,
+      evaluatedCount: evaluated.length,
+      accurateCount: accurate.length,
+      inaccurateCount: evaluated.length - accurate.length,
+      accuracyPercent: evaluated.length > 0 ? (accurate.length / evaluated.length) * 100 : 0,
+      avgProfitLoss,
+      buyAccuracy: buySuggestions.length > 0 ? (buyAccurate / buySuggestions.length) * 100 : 0,
+      sellAccuracy: sellSuggestions.length > 0 ? (sellAccurate / sellSuggestions.length) * 100 : 0,
+      holdAccuracy: holdSuggestions.length > 0 ? (holdAccurate / holdSuggestions.length) * 100 : 0,
+    };
   }
 }
 

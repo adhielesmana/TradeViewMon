@@ -191,6 +191,46 @@ export type SafeUser = Omit<User, "password">; // User without password for API 
 export type UserInvite = typeof userInvites.$inferSelect;
 export type InsertUserInvite = z.infer<typeof insertUserInviteSchema>;
 
+// AI Suggestions - stores AI-generated trading suggestions
+export const aiSuggestions = pgTable("ai_suggestions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  generatedAt: timestamp("generated_at").notNull(),
+  decision: varchar("decision", { length: 10 }).notNull(), // 'BUY', 'SELL', 'HOLD'
+  confidence: real("confidence").notNull(), // 0-100
+  buyTarget: real("buy_target"), // Target price for buy
+  sellTarget: real("sell_target"), // Target price for sell
+  currentPrice: real("current_price").notNull(),
+  reasoning: text("reasoning"), // JSON string with analysis breakdown
+  indicators: text("indicators"), // JSON string with indicator values used
+  isEvaluated: boolean("is_evaluated").notNull().default(false),
+  evaluatedAt: timestamp("evaluated_at"),
+  actualPrice: real("actual_price"), // Price when evaluated
+  wasAccurate: boolean("was_accurate"), // Whether suggestion was profitable
+  profitLoss: real("profit_loss"), // Percentage gain/loss
+}, (table) => [
+  index("ai_suggestions_symbol_idx").on(table.symbol),
+  index("ai_suggestions_generated_at_idx").on(table.generatedAt),
+  index("ai_suggestions_symbol_generated_idx").on(table.symbol, table.generatedAt),
+]);
+
+export const insertAiSuggestionSchema = createInsertSchema(aiSuggestions).omit({ id: true });
+export type AiSuggestion = typeof aiSuggestions.$inferSelect;
+export type InsertAiSuggestion = z.infer<typeof insertAiSuggestionSchema>;
+
+// AI Suggestion Accuracy Stats (computed type)
+export type AiSuggestionAccuracyStats = {
+  totalSuggestions: number;
+  evaluatedCount: number;
+  accurateCount: number;
+  inaccurateCount: number;
+  accuracyPercent: number;
+  avgProfitLoss: number;
+  buyAccuracy: number;
+  sellAccuracy: number;
+  holdAccuracy: number;
+};
+
 // Monitored Symbols - configurable list of financial instruments
 export const monitoredSymbols = pgTable("monitored_symbols", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
