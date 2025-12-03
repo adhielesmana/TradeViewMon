@@ -456,8 +456,8 @@ class Scheduler {
 
   private async evaluateAiSuggestions(): Promise<void> {
     try {
-      const symbol = marketDataService.getSymbol();
-      const unevaluatedSuggestions = await storage.getUnevaluatedSuggestions(5);
+      const unevaluatedSuggestions = await storage.getUnevaluatedSuggestions(20);
+      const evaluatedSymbols = new Set<string>();
       
       for (const suggestion of unevaluatedSuggestions) {
         const latestData = await storage.getLatestMarketData(suggestion.symbol);
@@ -480,10 +480,13 @@ class Scheduler {
           evaluation.profitLoss
         );
         
+        evaluatedSymbols.add(suggestion.symbol);
         console.log(`[Scheduler] Evaluated suggestion #${suggestion.id}: ${evaluation.wasAccurate ? 'Accurate' : 'Inaccurate'} (${evaluation.profitLoss.toFixed(2)}%)`);
       }
       
-      if (unevaluatedSuggestions.length > 0) {
+      // Broadcast accuracy updates for each symbol that had suggestions evaluated
+      const symbolsArray = Array.from(evaluatedSymbols);
+      for (const symbol of symbolsArray) {
         const accuracy = await storage.getAiSuggestionAccuracyStats(symbol);
         wsService.broadcast({
           type: "suggestion_accuracy_update",
