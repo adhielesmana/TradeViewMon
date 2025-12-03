@@ -31,7 +31,7 @@ fi
 echo "[Startup] Running database migrations..."
 
 # Run the separate migration script (avoids shell escaping issues)
-node ./migrate.js
+node ./migrate.cjs
 
 echo "[Startup] Database ready!"
 echo "[Startup] Starting application server..."
