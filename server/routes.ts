@@ -9,6 +9,7 @@ import { backtestingEngine, type BacktestConfig } from "./backtesting";
 import { authenticateUser, seedSuperadmin, seedTestUsers, findUserById, findUserByUsername, createUser } from "./auth";
 import type { SafeUser } from "@shared/schema";
 import { predictionEngine } from "./prediction-engine";
+import { generateUnifiedSignal, convertToLegacyIndicatorSignal, convertToMultiFactorAnalysis } from "./unified-signal-generator";
 import { z } from "zod";
 
 const updateUserSchema = z.object({
@@ -683,7 +684,6 @@ export async function registerRoutes(
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
       const limit = parseInt(req.query.limit as string) || 100;
       
-      // Ensure historical data exists for this symbol
       await ensureHistoricalData(symbol);
       
       const data = await storage.getRecentMarketData(symbol, limit);
@@ -698,7 +698,9 @@ export async function registerRoutes(
 
       const indicators = technicalIndicators.calculateAll(data);
       const latest = indicators[indicators.length - 1];
-      const signal = technicalIndicators.generateSignal(latest);
+      
+      const unifiedResult = generateUnifiedSignal(data);
+      const signal = convertToLegacyIndicatorSignal(unifiedResult);
 
       res.json({
         indicators,
@@ -757,7 +759,8 @@ export async function registerRoutes(
         });
       }
 
-      const analysis = predictionEngine.performMultiFactorAnalysis(marketData);
+      const unifiedResult = generateUnifiedSignal(marketData);
+      const analysis = convertToMultiFactorAnalysis(unifiedResult);
       
       res.json({
         analysis,

@@ -62,15 +62,22 @@ Preferred communication style: Simple, everyday language.
 4. Compare predictions against actual prices
 5. Calculate and store accuracy metrics
 
+**Unified Signal Generator** (`server/unified-signal-generator.ts`): Single source of truth for all BUY/SELL/HOLD signals across the platform:
+- Ensures signal consistency across Technical Indicators, Predictions Multi-factor, and AI Suggestions pages
+- Weighted scoring system with consistent thresholds:
+  - EMA Crossover: 25 weight (EMA12 vs EMA26, 0.1% threshold)
+  - RSI: 20 weight (oversold <30, overbought >70, moderate zones 45-55)
+  - MACD: 25 weight (histogram positive/negative with line confirmation)
+  - Stochastic: 15 weight (oversold <20, overbought >80)
+  - Price Trend: 15 weight (0.5% threshold for significant moves)
+  - Candlestick Patterns: 8×strength (hammer, engulfing, doji, etc.)
+- Decision thresholds: BUY (netScore > 20), SELL (netScore < -20), HOLD otherwise
+- ATR-based target price calculations for entry/exit points
+
 **Prediction Engine**: Enhanced ensemble approach with multi-factor analysis:
 - Moving Average predictions for trend analysis (MA7/20/50/200 crossover signals)
 - Linear Regression for price trajectory
-- Multi-factor technical analysis:
-  - RSI (14-period) overbought/oversold detection
-  - MACD (12, 26, 9) signal line crossovers
-  - Stochastic oscillator (14-period) momentum analysis
-  - Volume analysis for trend confirmation
-- Weighted scoring system with normalized factor contributions
+- Multi-factor technical analysis delegated to unified signal generator
 - Outputs: predicted price, direction (UP/DOWN/NEUTRAL), confidence score, and multi-factor analysis breakdown
 - Configurable match threshold (default 0.5%) for accuracy determination
 
