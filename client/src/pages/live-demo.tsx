@@ -29,7 +29,8 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
-  History
+  History,
+  Globe
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useSymbol } from "@/lib/symbol-context";
@@ -54,7 +55,28 @@ interface AiSuggestion {
   generatedAt: string;
 }
 
-function formatCurrency(value: number): string {
+interface CurrencyConfig {
+  code: string;
+  name: string;
+  symbol: string;
+  rate: number;
+  locale: string;
+}
+
+const CURRENCIES: CurrencyConfig[] = [
+  { code: "USD", name: "US Dollar", symbol: "$", rate: 1, locale: "en-US" },
+  { code: "IDR", name: "Indonesian Rupiah", symbol: "Rp", rate: 15850, locale: "id-ID" },
+  { code: "EUR", name: "Euro", symbol: "€", rate: 0.92, locale: "de-DE" },
+  { code: "GBP", name: "British Pound", symbol: "£", rate: 0.79, locale: "en-GB" },
+  { code: "JPY", name: "Japanese Yen", symbol: "¥", rate: 149.50, locale: "ja-JP" },
+  { code: "SGD", name: "Singapore Dollar", symbol: "S$", rate: 1.34, locale: "en-SG" },
+  { code: "MYR", name: "Malaysian Ringgit", symbol: "RM", rate: 4.47, locale: "ms-MY" },
+  { code: "THB", name: "Thai Baht", symbol: "฿", rate: 35.20, locale: "th-TH" },
+  { code: "INR", name: "Indian Rupee", symbol: "₹", rate: 83.50, locale: "en-IN" },
+  { code: "CNY", name: "Chinese Yuan", symbol: "¥", rate: 7.24, locale: "zh-CN" },
+];
+
+function formatCurrencyUSD(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -86,6 +108,35 @@ export default function LiveDemo() {
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
   const [isTradeOpen, setIsTradeOpen] = useState(false);
   const [tradeType, setTradeType] = useState<"BUY" | "SELL">("BUY");
+  const [selectedCurrency, setSelectedCurrency] = useState<string>("USD");
+
+  const currentCurrency = CURRENCIES.find(c => c.code === selectedCurrency) || CURRENCIES[0];
+
+  const convertFromUSD = useCallback((usdAmount: number): number => {
+    return usdAmount * currentCurrency.rate;
+  }, [currentCurrency.rate]);
+
+  const convertToUSD = useCallback((localAmount: number): number => {
+    return localAmount / currentCurrency.rate;
+  }, [currentCurrency.rate]);
+
+  const formatCurrency = useCallback((usdValue: number): string => {
+    const convertedValue = convertFromUSD(usdValue);
+    if (currentCurrency.code === "IDR" || currentCurrency.code === "JPY") {
+      return new Intl.NumberFormat(currentCurrency.locale, {
+        style: "currency",
+        currency: currentCurrency.code,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(convertedValue);
+    }
+    return new Intl.NumberFormat(currentCurrency.locale, {
+      style: "currency",
+      currency: currentCurrency.code,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(convertedValue);
+  }, [currentCurrency, convertFromUSD]);
 
   const { data: accountData, isLoading: accountLoading } = useQuery<DemoAccountResponse>({
     queryKey: ["/api/demo/account"],
@@ -171,23 +222,26 @@ export default function LiveDemo() {
   useWebSocket({ onMessage: handleWSMessage });
 
   const handleDeposit = () => {
-    const amount = parseFloat(depositAmount);
-    if (amount > 0) {
-      depositMutation.mutate(amount);
+    const localAmount = parseFloat(depositAmount);
+    if (localAmount > 0) {
+      const usdAmount = convertToUSD(localAmount);
+      depositMutation.mutate(usdAmount);
     }
   };
 
   const handleWithdraw = () => {
-    const amount = parseFloat(withdrawAmount);
-    if (amount > 0) {
-      withdrawMutation.mutate(amount);
+    const localAmount = parseFloat(withdrawAmount);
+    if (localAmount > 0) {
+      const usdAmount = convertToUSD(localAmount);
+      withdrawMutation.mutate(usdAmount);
     }
   };
 
   const handleOpenTrade = () => {
-    const amount = parseFloat(tradeAmount);
-    if (amount > 0 && currentPrice) {
-      const quantity = amount / currentPrice.price;
+    const localAmount = parseFloat(tradeAmount);
+    if (localAmount > 0 && currentPrice) {
+      const usdAmount = convertToUSD(localAmount);
+      const quantity = usdAmount / currentPrice.price;
       openTradeMutation.mutate({
         symbol: selectedSymbol,
         type: tradeType,
@@ -235,24 +289,51 @@ export default function LiveDemo() {
 
   return (
     <div className="p-6 space-y-6 overflow-auto h-full">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Live Demo Trading</h1>
           <p className="text-muted-foreground">Practice trading with virtual credits - no real money at risk</p>
         </div>
-        <Select value={selectedSymbol} onValueChange={setSelectedSymbol}>
-          <SelectTrigger className="w-[180px]" data-testid="select-symbol">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {supportedSymbols.map((s) => (
-              <SelectItem key={s.symbol} value={s.symbol} data-testid={`option-symbol-${s.symbol}`}>
-                {s.symbol}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Globe className="h-4 w-4 text-muted-foreground" />
+            <Select value={selectedCurrency} onValueChange={setSelectedCurrency}>
+              <SelectTrigger className="w-[160px]" data-testid="select-currency">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CURRENCIES.map((c) => (
+                  <SelectItem key={c.code} value={c.code} data-testid={`option-currency-${c.code}`}>
+                    {c.symbol} {c.code} - {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Select value={selectedSymbol} onValueChange={setSelectedSymbol}>
+            <SelectTrigger className="w-[140px]" data-testid="select-symbol">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {supportedSymbols.map((s) => (
+                <SelectItem key={s.symbol} value={s.symbol} data-testid={`option-symbol-${s.symbol}`}>
+                  {s.symbol}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+
+      {selectedCurrency !== "USD" && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+          <Globe className="h-4 w-4" />
+          <span>
+            Displaying in <strong>{currentCurrency.name}</strong> (1 USD = {currentCurrency.rate.toLocaleString()} {currentCurrency.code}).
+            All backend operations remain in USD.
+          </span>
+        </div>
+      )}
 
       {/* Account Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -283,18 +364,28 @@ export default function LiveDemo() {
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
-                      <Label>Amount (USD)</Label>
+                      <Label>Amount ({currentCurrency.code})</Label>
                       <Input
                         type="number"
                         value={depositAmount}
                         onChange={(e) => setDepositAmount(e.target.value)}
-                        placeholder="1000"
+                        placeholder={currentCurrency.code === "IDR" ? "15850000" : "1000"}
                         min="0"
                         data-testid="input-deposit-amount"
                       />
+                      {selectedCurrency !== "USD" && depositAmount && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ≈ {formatCurrencyUSD(convertToUSD(parseFloat(depositAmount) || 0))} USD
+                        </p>
+                      )}
                     </div>
-                    <div className="flex gap-2">
-                      {[1000, 5000, 10000, 50000].map((amt) => (
+                    <div className="flex gap-2 flex-wrap">
+                      {(currentCurrency.code === "IDR" 
+                        ? [1000000, 5000000, 10000000, 50000000]
+                        : currentCurrency.code === "JPY"
+                        ? [150000, 750000, 1500000, 7500000]
+                        : [1000, 5000, 10000, 50000].map(v => Math.round(v * currentCurrency.rate))
+                      ).map((amt) => (
                         <Button
                           key={amt}
                           size="sm"
@@ -302,7 +393,7 @@ export default function LiveDemo() {
                           onClick={() => setDepositAmount(amt.toString())}
                           data-testid={`button-quick-deposit-${amt}`}
                         >
-                          ${amt.toLocaleString()}
+                          {currentCurrency.symbol}{amt.toLocaleString()}
                         </Button>
                       ))}
                     </div>
@@ -327,16 +418,20 @@ export default function LiveDemo() {
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
-                      <Label>Amount (USD)</Label>
+                      <Label>Amount ({currentCurrency.code})</Label>
                       <Input
                         type="number"
                         value={withdrawAmount}
                         onChange={(e) => setWithdrawAmount(e.target.value)}
-                        placeholder="1000"
+                        placeholder={currentCurrency.code === "IDR" ? "15850000" : "1000"}
                         min="0"
-                        max={accountData?.account.balance || 0}
                         data-testid="input-withdraw-amount"
                       />
+                      {selectedCurrency !== "USD" && withdrawAmount && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ≈ {formatCurrencyUSD(convertToUSD(parseFloat(withdrawAmount) || 0))} USD
+                        </p>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       Available: {formatCurrency(accountData?.account.balance || 0)}
@@ -509,22 +604,25 @@ export default function LiveDemo() {
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label>Amount ($)</Label>
+                    <Label>Amount ({currentCurrency.code})</Label>
                     <Input
                       type="number"
                       value={tradeAmount}
                       onChange={(e) => setTradeAmount(e.target.value)}
-                      placeholder="1000"
+                      placeholder={currentCurrency.code === "IDR" ? "15850000" : "1000"}
                       min="1"
-                      step="100"
+                      step={currentCurrency.code === "IDR" ? "100000" : "100"}
                       data-testid="input-trade-amount"
                     />
                     {currentPrice && tradeAmount && (
                       <>
                         <p className="text-sm text-muted-foreground mt-1">
-                          Units: {(parseFloat(tradeAmount || "0") / currentPrice.price).toFixed(4)} {selectedSymbol}
+                          Units: {(convertToUSD(parseFloat(tradeAmount || "0")) / currentPrice.price).toFixed(4)} {selectedSymbol}
+                          {selectedCurrency !== "USD" && (
+                            <span className="text-xs ml-2">(≈ {formatCurrencyUSD(convertToUSD(parseFloat(tradeAmount || "0")))} USD)</span>
+                          )}
                         </p>
-                        {parseFloat(tradeAmount || "0") > (accountData?.stats?.balance || 0) && (
+                        {convertToUSD(parseFloat(tradeAmount || "0")) > (accountData?.stats?.balance || 0) && (
                           <p className="text-sm text-red-500 mt-1" data-testid="text-insufficient-funds">
                             Insufficient funds. Available: {formatCurrency(accountData?.stats?.balance || 0)}
                           </p>
