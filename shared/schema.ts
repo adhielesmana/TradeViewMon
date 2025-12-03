@@ -278,12 +278,14 @@ export const demoPositions = pgTable("demo_positions", {
   status: varchar("status", { length: 20 }).notNull().default("open"), // 'open', 'closed', 'stopped'
   openedAt: timestamp("opened_at").notNull().default(sql`now()`),
   closedAt: timestamp("closed_at"),
-  closedReason: varchar("closed_reason", { length: 50 }), // 'manual', 'stop_loss', 'take_profit'
+  closedReason: varchar("closed_reason", { length: 50 }), // 'manual', 'stop_loss', 'take_profit', 'auto_trade'
+  isAutoTrade: boolean("is_auto_trade").notNull().default(false), // True if position created by auto-trading
 }, (table) => [
   index("demo_positions_account_idx").on(table.accountId),
   index("demo_positions_user_idx").on(table.userId),
   index("demo_positions_symbol_idx").on(table.symbol),
   index("demo_positions_status_idx").on(table.status),
+  index("demo_positions_auto_trade_idx").on(table.isAutoTrade),
 ]);
 
 // Demo Transactions - All account transactions (deposits, withdrawals, trades)
@@ -417,7 +419,12 @@ export const autoTradeSettings = pgTable("auto_trade_settings", {
   symbol: varchar("symbol", { length: 20 }).notNull().default("XAUUSD"), // Symbol to auto-trade
   lastTradeAt: timestamp("last_trade_at"), // When last auto-trade was executed
   lastDecision: varchar("last_decision", { length: 10 }), // Last AI decision acted on
-  totalAutoTrades: integer("total_auto_trades").notNull().default(0),
+  totalAutoTrades: integer("total_auto_trades").notNull().default(0), // Total auto-trades opened
+  closedAutoTrades: integer("closed_auto_trades").notNull().default(0), // Number of closed auto-trades
+  totalAutoProfit: real("total_auto_profit").notNull().default(0), // Total profit from closed auto-trades
+  totalAutoLoss: real("total_auto_loss").notNull().default(0), // Total loss from closed auto-trades
+  winningAutoTrades: integer("winning_auto_trades").notNull().default(0), // Number of profitable auto-trades
+  losingAutoTrades: integer("losing_auto_trades").notNull().default(0), // Number of losing auto-trades
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 }, (table) => [
