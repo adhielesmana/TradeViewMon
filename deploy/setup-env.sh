@@ -26,8 +26,6 @@ SESSION_SECRET=$(openssl rand -hex 32)
 
 log_info "Generating secure credentials..."
 
-read -p "Enter your FINNHUB_API_KEY (optional, press Enter to skip): " FINNHUB_API_KEY
-
 # Database will be deployed via Docker, so use internal Docker network URL
 DATABASE_URL="postgresql://tradeviewmon:${POSTGRES_PASSWORD}@tradeviewmon-db:5432/tradeviewmon"
 
@@ -44,8 +42,8 @@ POSTGRES_DB=tradeviewmon
 # Security
 SESSION_SECRET=$SESSION_SECRET
 
-# API Keys (optional)
-FINNHUB_API_KEY=$FINNHUB_API_KEY
+# API Keys - Add your Finnhub API key here (copy from Replit secrets)
+FINNHUB_API_KEY=
 EOF
 
 chmod 600 $ENV_FILE
@@ -53,7 +51,11 @@ chmod 600 $ENV_FILE
 log_info "Environment file created: $ENV_FILE"
 log_info ""
 log_info "Database will be automatically deployed via Docker"
-log_info "Generated credentials have been saved to $ENV_FILE"
 log_info ""
-log_info "Next steps:"
-log_info "1. Run: ./deploy/deploy.sh --domain your-domain.com --email your@email.com"
+log_warn "OPTIONAL: Add your Finnhub API key to .env.production"
+log_warn "  You can copy it from your Replit secrets and add it to the file:"
+log_warn "  nano .env.production"
+log_warn "  Then add your key to: FINNHUB_API_KEY=your_key_here"
+log_info ""
+log_info "Ready to deploy! Run:"
+log_info "  ./deploy/deploy.sh --domain your-domain.com --email your@email.com"
