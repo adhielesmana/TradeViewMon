@@ -632,6 +632,57 @@ export async function registerRoutes(
     }
   });
 
+  // AI Suggestions endpoints
+  app.get("/api/suggestions/latest", async (req, res) => {
+    try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
+      const suggestion = await storage.getLatestAiSuggestion(symbol);
+      
+      if (!suggestion) {
+        return res.json(null);
+      }
+      
+      res.json({
+        ...suggestion,
+        reasoning: suggestion.reasoning ? JSON.parse(suggestion.reasoning) : [],
+        indicators: suggestion.indicators ? JSON.parse(suggestion.indicators) : {},
+      });
+    } catch (error) {
+      console.error("Error fetching latest AI suggestion:", error);
+      res.status(500).json({ error: "Failed to fetch latest AI suggestion" });
+    }
+  });
+
+  app.get("/api/suggestions/recent", async (req, res) => {
+    try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const suggestions = await storage.getRecentAiSuggestions(symbol, limit);
+      
+      const parsedSuggestions = suggestions.map(s => ({
+        ...s,
+        reasoning: s.reasoning ? JSON.parse(s.reasoning) : [],
+        indicators: s.indicators ? JSON.parse(s.indicators) : {},
+      }));
+      
+      res.json(parsedSuggestions);
+    } catch (error) {
+      console.error("Error fetching recent AI suggestions:", error);
+      res.status(500).json({ error: "Failed to fetch recent AI suggestions" });
+    }
+  });
+
+  app.get("/api/suggestions/accuracy", async (req, res) => {
+    try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
+      const stats = await storage.getAiSuggestionAccuracyStats(symbol);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching AI suggestion accuracy:", error);
+      res.status(500).json({ error: "Failed to fetch AI suggestion accuracy" });
+    }
+  });
+
   app.get("/api/system/status", async (req, res) => {
     try {
       const status = await storage.getSystemStatus();
