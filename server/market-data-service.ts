@@ -47,10 +47,9 @@ export class MarketDataService {
     const prices = this.getSymbolPrice(targetSymbol);
     const now = new Date();
     now.setMilliseconds(0);
-    const seconds = now.getSeconds();
-    now.setSeconds(seconds - (seconds % 30));
+    now.setSeconds(0);
 
-    const priceChange = (Math.random() - 0.5) * 2 * config.volatility * 0.1;
+    const priceChange = (Math.random() - 0.5) * 2 * config.volatility * 0.15;
     prices.last += priceChange;
     prices.last = Math.max(prices.last, prices.base * 0.9);
     prices.last = Math.min(prices.last, prices.base * 1.1);
@@ -58,8 +57,8 @@ export class MarketDataService {
     const decimals = prices.base > 100 ? 2 : prices.base > 10 ? 3 : 4;
     const factor = Math.pow(10, decimals);
     
-    const bodySize = prices.base * 0.001 * (0.5 + Math.random());
-    const wickSize = prices.base * 0.0005 * Math.random();
+    const bodySize = prices.base * 0.002 * (0.5 + Math.random());
+    const wickSize = prices.base * 0.001 * Math.random();
     
     const isBullish = Math.random() > 0.5;
     
@@ -76,7 +75,7 @@ export class MarketDataService {
     high = Math.max(open, close) + wickSize;
     low = Math.min(open, close) - wickSize;
     
-    const volume = Math.floor(5000 + Math.random() * 50000);
+    const volume = Math.floor(10000 + Math.random() * 100000);
 
     return {
       symbol: targetSymbol,
@@ -86,7 +85,7 @@ export class MarketDataService {
       low: Math.round(low * factor) / factor,
       close: Math.round(close * factor) / factor,
       volume,
-      interval: "30sec",
+      interval: "1min",
     };
   }
 
@@ -97,27 +96,26 @@ export class MarketDataService {
     const data: InsertMarketData[] = [];
     const now = new Date();
     now.setMilliseconds(0);
-    const seconds = now.getSeconds();
-    now.setSeconds(seconds - (seconds % 30));
+    now.setSeconds(0);
     let currentPrice = prices.base * (0.98 + Math.random() * 0.04);
 
-    const totalIntervals = hours * 60 * 2;
+    const totalIntervals = hours * 60;
 
     const decimals = prices.base > 100 ? 2 : prices.base > 10 ? 3 : 4;
     const factor = Math.pow(10, decimals);
 
     for (let i = totalIntervals; i >= 0; i--) {
-      const timestamp = new Date(now.getTime() - i * 30 * 1000);
+      const timestamp = new Date(now.getTime() - i * 60 * 1000);
 
-      const trend = Math.sin(i / 50) * config.volatility * 0.2;
-      const noise = (Math.random() - 0.5) * config.volatility * 0.1;
-      currentPrice += (trend + noise * 0.3) * prices.base * 0.0005;
+      const trend = Math.sin(i / 30) * config.volatility * 0.3;
+      const noise = (Math.random() - 0.5) * config.volatility * 0.15;
+      currentPrice += (trend + noise * 0.3) * prices.base * 0.001;
 
       currentPrice = Math.max(currentPrice, prices.base * 0.95);
       currentPrice = Math.min(currentPrice, prices.base * 1.05);
 
-      const bodySize = prices.base * 0.001 * (0.5 + Math.random());
-      const wickSize = prices.base * 0.0005 * Math.random();
+      const bodySize = prices.base * 0.002 * (0.5 + Math.random());
+      const wickSize = prices.base * 0.001 * Math.random();
       
       const isBullish = Math.random() > 0.5;
       
@@ -134,7 +132,7 @@ export class MarketDataService {
       high = Math.max(open, close) + wickSize;
       low = Math.min(open, close) - wickSize;
       
-      const volume = Math.floor(5000 + Math.random() * 50000);
+      const volume = Math.floor(10000 + Math.random() * 100000);
 
       data.push({
         symbol: targetSymbol,
@@ -144,7 +142,7 @@ export class MarketDataService {
         low: Math.round(low * factor) / factor,
         close: Math.round(close * factor) / factor,
         volume,
-        interval: "30sec",
+        interval: "1min",
       });
     }
 

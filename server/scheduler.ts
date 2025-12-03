@@ -84,7 +84,7 @@ class Scheduler {
   private isRunning: boolean = false;
   private intervalHandle: NodeJS.Timeout | null = null;
   private predictionTask: ReturnType<typeof cron.schedule> | null = null;
-  private intervalMs: number = 30000;
+  private intervalMs: number = 60000;
   private predictionCycleCount: number = 0;
 
   async start(): Promise<void> {
@@ -100,26 +100,18 @@ class Scheduler {
 
     await this.initializeData();
 
-    this.intervalHandle = setInterval(async () => {
-      await this.runCycle();
-    }, 30000);
-
     this.predictionTask = cron.schedule("0 * * * * *", async () => {
+      await this.runCycle();
       await this.runPredictionCycle();
     });
 
-    console.log("[Scheduler] Scheduler started - running every 30 seconds for market data, predictions every minute");
+    console.log("[Scheduler] Scheduler started - running every 60 seconds for market data and predictions");
   }
 
   async stop(): Promise<void> {
     if (!this.isRunning) {
       console.log("[Scheduler] Already stopped");
       return;
-    }
-
-    if (this.intervalHandle) {
-      clearInterval(this.intervalHandle);
-      this.intervalHandle = null;
     }
 
     if (this.predictionTask) {

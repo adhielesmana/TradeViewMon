@@ -158,14 +158,14 @@ export default function LiveMarket() {
       <MarketChart
         data={marketData || []}
         isLoading={isLoadingMarket}
-        title="3-Hour Price Chart (30-second candles)"
+        title="3-Hour Price Chart (1-minute candles)"
         height={350}
       />
 
       <CandlestickChart
         data={marketData || []}
         isLoading={isLoadingMarket}
-        title="Candlestick Chart (3H / 30sec)"
+        title="Candlestick Chart (3H / 1min)"
         height={350}
       />
 
@@ -334,7 +334,7 @@ export default function LiveMarket() {
             </div>
             <div className="flex flex-col">
               <span className="text-sm text-muted-foreground">Interval</span>
-              <span className="text-lg font-medium">30 seconds</span>
+              <span className="text-lg font-medium">1 minute</span>
             </div>
             <div className="flex flex-col">
               <span className="text-sm text-muted-foreground">Symbol</span>
