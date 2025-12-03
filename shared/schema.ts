@@ -413,7 +413,7 @@ export const autoTradeSettings = pgTable("auto_trade_settings", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   userId: varchar("user_id").notNull().references(() => users.id).unique(),
   isEnabled: boolean("is_enabled").notNull().default(false),
-  tradeAmount: real("trade_amount").notNull().default(0.01), // Trade amount in USD (e.g., 0.01 = 1 cent worth)
+  tradeUnits: real("trade_units").notNull().default(0.01), // Trade size in units/lots (e.g., 0.01 lot)
   symbol: varchar("symbol", { length: 20 }).notNull().default("XAUUSD"), // Symbol to auto-trade
   lastTradeAt: timestamp("last_trade_at"), // When last auto-trade was executed
   lastDecision: varchar("last_decision", { length: 10 }), // Last AI decision acted on
@@ -434,7 +434,7 @@ export const autoTradeSettingsRelations = relations(autoTradeSettings, ({ one })
 export const insertAutoTradeSettingSchema = createInsertSchema(autoTradeSettings).omit({ id: true });
 export const updateAutoTradeSettingSchema = createInsertSchema(autoTradeSettings).pick({
   isEnabled: true,
-  tradeAmount: true,
+  tradeUnits: true,
   symbol: true,
 }).partial();
 

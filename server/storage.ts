@@ -1040,7 +1040,7 @@ export class DatabaseStorage implements IStorage {
       .values({
         userId,
         isEnabled: false,
-        tradeAmount: 0.01,
+        tradeUnits: 0.01,
         symbol: "XAUUSD",
         totalAutoTrades: 0,
         createdAt: new Date(),

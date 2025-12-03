@@ -1206,16 +1206,16 @@ export async function registerRoutes(
   app.patch("/api/demo/auto-trade", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId!;
-      const { isEnabled, tradeAmount, symbol } = req.body;
+      const { isEnabled, tradeUnits, symbol } = req.body;
       
-      const updateData: { isEnabled?: boolean; tradeAmount?: number; symbol?: string } = {};
+      const updateData: { isEnabled?: boolean; tradeUnits?: number; symbol?: string } = {};
       
       if (typeof isEnabled === "boolean") {
         updateData.isEnabled = isEnabled;
       }
       
-      if (typeof tradeAmount === "number" && tradeAmount >= 0.01) {
-        updateData.tradeAmount = tradeAmount;
+      if (typeof tradeUnits === "number" && tradeUnits >= 0.01) {
+        updateData.tradeUnits = tradeUnits;
       }
       
       if (typeof symbol === "string" && symbol.length > 0) {

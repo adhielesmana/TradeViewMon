@@ -250,11 +250,11 @@ export default function LiveDemo() {
   });
 
   const [isAutoTradeSettingsOpen, setIsAutoTradeSettingsOpen] = useState(false);
-  const [autoTradeAmount, setAutoTradeAmount] = useState("");
+  const [autoTradeUnits, setAutoTradeUnits] = useState("");
   const [autoTradeSymbol, setAutoTradeSymbol] = useState("");
 
   const autoTradeMutation = useMutation({
-    mutationFn: (data: { isEnabled?: boolean; tradeAmount?: number; symbol?: string }) =>
+    mutationFn: (data: { isEnabled?: boolean; tradeUnits?: number; symbol?: string }) =>
       apiRequest("PATCH", "/api/demo/auto-trade", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/auto-trade"] });
@@ -799,7 +799,7 @@ export default function LiveDemo() {
             <Dialog open={isAutoTradeSettingsOpen} onOpenChange={(open) => {
               setIsAutoTradeSettingsOpen(open);
               if (open && autoTradeSettings) {
-                setAutoTradeAmount(autoTradeSettings.tradeAmount.toString());
+                setAutoTradeUnits(autoTradeSettings.tradeUnits.toString());
                 setAutoTradeSymbol(autoTradeSettings.symbol);
               }
             }}>
@@ -817,18 +817,18 @@ export default function LiveDemo() {
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label>Trade Amount (USD)</Label>
+                    <Label>Trade Size (Units/Lots)</Label>
                     <Input
                       type="number"
-                      value={autoTradeAmount}
-                      onChange={(e) => setAutoTradeAmount(e.target.value)}
+                      value={autoTradeUnits}
+                      onChange={(e) => setAutoTradeUnits(e.target.value)}
                       placeholder="0.01"
                       min="0.01"
                       step="0.01"
-                      data-testid="input-auto-trade-amount"
+                      data-testid="input-auto-trade-units"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      Amount in USD to trade per AI suggestion (minimum: $0.01)
+                      Trade size in units/lots per AI suggestion (e.g., 0.01 lot = micro lot)
                     </p>
                   </div>
                   <div>
@@ -876,10 +876,10 @@ export default function LiveDemo() {
                 <DialogFooter>
                   <Button
                     onClick={() => {
-                      const amount = parseFloat(autoTradeAmount);
-                      if (amount >= 0.01 && autoTradeSymbol) {
+                      const units = parseFloat(autoTradeUnits);
+                      if (units >= 0.01 && autoTradeSymbol) {
                         autoTradeMutation.mutate({ 
-                          tradeAmount: amount, 
+                          tradeUnits: units, 
                           symbol: autoTradeSymbol 
                         });
                         setIsAutoTradeSettingsOpen(false);
@@ -909,7 +909,7 @@ export default function LiveDemo() {
             </div>
             <div>
               <span className="text-muted-foreground">Trade Size:</span>{" "}
-              <span className="font-medium">${autoTradeSettings?.tradeAmount?.toFixed(2) || "0.01"}</span>
+              <span className="font-medium">{autoTradeSettings?.tradeUnits?.toFixed(2) || "0.01"} units</span>
             </div>
             <div>
               <span className="text-muted-foreground">Auto-Trades:</span>{" "}

@@ -546,18 +546,21 @@ class Scheduler {
             continue;
           }
           
-          // Calculate trade quantity based on trade amount in USD
-          const tradeAmountUsd = settings.tradeAmount;
+          // Use trade units (lot size) directly - user specifies quantity
+          const tradeUnits = settings.tradeUnits;
           const currentPrice = suggestion.currentPrice;
           
+          // Calculate required USD for this trade (units × price)
+          const requiredUsd = tradeUnits * currentPrice;
+          
           // Check if user has sufficient balance
-          if (account.balance < tradeAmountUsd) {
-            console.log(`[AutoTrade] Insufficient balance for user ${settings.userId}: ${account.balance} < ${tradeAmountUsd}`);
+          if (account.balance < requiredUsd) {
+            console.log(`[AutoTrade] Insufficient balance for user ${settings.userId}: $${account.balance.toFixed(2)} < $${requiredUsd.toFixed(2)} (${tradeUnits} units @ $${currentPrice.toFixed(2)})`);
             continue;
           }
           
-          // Calculate quantity (amount / price = quantity)
-          const quantity = tradeAmountUsd / currentPrice;
+          // Use the trade units directly as quantity
+          const quantity = tradeUnits;
           
           // Open the trade
           const tradeType = suggestion.decision as 'BUY' | 'SELL';
@@ -584,7 +587,7 @@ class Scheduler {
                 decision: suggestion.decision,
                 quantity,
                 price: currentPrice,
-                tradeAmountUsd,
+                tradeValueUsd: requiredUsd,
               },
             });
           }
