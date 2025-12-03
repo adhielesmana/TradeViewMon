@@ -912,10 +912,44 @@ export default function LiveDemo() {
               <span className="font-medium">{autoTradeSettings?.tradeUnits?.toFixed(2) || "0.01"} units</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Auto-Trades:</span>{" "}
+              <span className="text-muted-foreground">Opened:</span>{" "}
               <span className="font-medium">{autoTradeSettings?.totalAutoTrades || 0}</span>
             </div>
+            <div>
+              <span className="text-muted-foreground">Closed:</span>{" "}
+              <span className="font-medium">{autoTradeSettings?.closedAutoTrades || 0}</span>
+            </div>
           </div>
+          {(autoTradeSettings?.closedAutoTrades || 0) > 0 && (
+            <div className="flex flex-wrap gap-4 items-center text-sm mt-2 pt-2 border-t">
+              <div>
+                <span className="text-muted-foreground">Win/Loss:</span>{" "}
+                <span className="font-medium text-green-500">{autoTradeSettings?.winningAutoTrades || 0}</span>
+                <span className="text-muted-foreground"> / </span>
+                <span className="font-medium text-red-500">{autoTradeSettings?.losingAutoTrades || 0}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Win Rate:</span>{" "}
+                <span className="font-medium">
+                  {((autoTradeSettings?.winningAutoTrades || 0) / (autoTradeSettings?.closedAutoTrades || 1) * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Profit:</span>{" "}
+                <span className="font-medium text-green-500">{formatCurrency(autoTradeSettings?.totalAutoProfit || 0)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Loss:</span>{" "}
+                <span className="font-medium text-red-500">{formatCurrency(autoTradeSettings?.totalAutoLoss || 0)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Net:</span>{" "}
+                <span className={`font-medium ${((autoTradeSettings?.totalAutoProfit || 0) - (autoTradeSettings?.totalAutoLoss || 0)) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                  {formatCurrency((autoTradeSettings?.totalAutoProfit || 0) - (autoTradeSettings?.totalAutoLoss || 0))}
+                </span>
+              </div>
+            </div>
+          )}
           {autoTradeSettings?.isEnabled && (
             <p className="text-xs text-muted-foreground mt-2">
               Auto-trading will execute BUY/SELL trades when AI suggestions are generated. HOLD suggestions are ignored.
@@ -1105,9 +1139,16 @@ export default function LiveDemo() {
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between flex-wrap gap-4">
                         <div className="flex items-center gap-4">
-                          <Badge variant={position.type === "BUY" ? "default" : "destructive"}>
-                            {position.type}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={position.type === "BUY" ? "default" : "destructive"}>
+                              {position.type}
+                            </Badge>
+                            {position.isAutoTrade && (
+                              <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-500 border-blue-500/30">
+                                AUTO
+                              </Badge>
+                            )}
+                          </div>
                           <div>
                             <div className="font-semibold">{position.symbol}</div>
                             <div className="text-sm text-muted-foreground">
@@ -1172,9 +1213,16 @@ export default function LiveDemo() {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between flex-wrap gap-4">
                       <div className="flex items-center gap-4">
-                        <Badge variant={position.type === "BUY" ? "default" : "destructive"}>
-                          {position.type}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={position.type === "BUY" ? "default" : "destructive"}>
+                            {position.type}
+                          </Badge>
+                          {position.isAutoTrade && (
+                            <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-500 border-blue-500/30">
+                              AUTO
+                            </Badge>
+                          )}
+                        </div>
                         <div>
                           <div className="font-semibold">{position.symbol}</div>
                           <div className="text-sm text-muted-foreground">
