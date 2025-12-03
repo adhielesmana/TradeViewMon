@@ -250,6 +250,39 @@ export default function LiveDemo() {
 
   useWebSocket({ onMessage: handleWSMessage });
 
+  // Auto-populate stop loss and take profit when trade modal opens
+  useEffect(() => {
+    if (isTradeOpen && currentPrice) {
+      const price = currentPrice.price;
+      
+      // Calculate suggested stop loss and take profit
+      // Use AI suggestion targets if available, otherwise use 2% defaults
+      if (tradeType === "BUY") {
+        // For BUY: stop loss below entry, take profit above entry
+        const suggestedSL = aiSuggestion?.sellTarget 
+          ? Math.min(aiSuggestion.sellTarget, price * 0.98) // Use AI sell target or 2% below
+          : price * 0.98; // 2% below current price
+        const suggestedTP = aiSuggestion?.buyTarget 
+          ? Math.max(aiSuggestion.buyTarget, price * 1.03) // Use AI buy target or 3% above
+          : price * 1.03; // 3% above current price
+        
+        setStopLoss(suggestedSL.toFixed(2));
+        setTakeProfit(suggestedTP.toFixed(2));
+      } else {
+        // For SELL: stop loss above entry, take profit below entry
+        const suggestedSL = aiSuggestion?.buyTarget 
+          ? Math.max(aiSuggestion.buyTarget, price * 1.02) // Use AI buy target or 2% above
+          : price * 1.02; // 2% above current price
+        const suggestedTP = aiSuggestion?.sellTarget 
+          ? Math.min(aiSuggestion.sellTarget, price * 0.97) // Use AI sell target or 3% below
+          : price * 0.97; // 3% below current price
+        
+        setStopLoss(suggestedSL.toFixed(2));
+        setTakeProfit(suggestedTP.toFixed(2));
+      }
+    }
+  }, [isTradeOpen, tradeType, currentPrice, aiSuggestion]);
+
   const handleDeposit = () => {
     const localAmount = parseFloat(depositAmount);
     if (localAmount > 0) {
@@ -711,7 +744,10 @@ export default function LiveDemo() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label>Stop Loss (optional)</Label>
+                      <Label className="flex items-center gap-1">
+                        Stop Loss
+                        <span className="text-xs text-muted-foreground">(suggested)</span>
+                      </Label>
                       <Input
                         type="number"
                         value={stopLoss}
@@ -720,9 +756,15 @@ export default function LiveDemo() {
                         step="0.01"
                         data-testid="input-stop-loss"
                       />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {tradeType === "BUY" ? "Exit if price drops" : "Exit if price rises"}
+                      </p>
                     </div>
                     <div>
-                      <Label>Take Profit (optional)</Label>
+                      <Label className="flex items-center gap-1">
+                        Take Profit
+                        <span className="text-xs text-muted-foreground">(suggested)</span>
+                      </Label>
                       <Input
                         type="number"
                         value={takeProfit}
@@ -731,8 +773,17 @@ export default function LiveDemo() {
                         step="0.01"
                         data-testid="input-take-profit"
                       />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {tradeType === "BUY" ? "Exit when target reached" : "Exit when target reached"}
+                      </p>
                     </div>
                   </div>
+                  {aiSuggestion && (
+                    <p className="text-xs text-primary">
+                      <Brain className="h-3 w-3 inline mr-1" />
+                      Suggestions based on AI analysis
+                    </p>
+                  )}
                 </div>
                 <DialogFooter>
                   <Button
