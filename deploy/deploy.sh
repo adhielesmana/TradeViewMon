@@ -6,6 +6,8 @@ APP_NAME="tradeviewmon"
 DEFAULT_PORT=5000
 DOMAIN=""
 EMAIL=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -20,18 +22,24 @@ show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  -d, --domain DOMAIN     Domain name for the application (required for SSL)"
+    echo "  -d, --domain DOMAIN     Domain name for the application (enables HTTPS)"
     echo "  -e, --email EMAIL       Email for Let's Encrypt SSL certificate"
     echo "  -p, --port PORT         Preferred port (default: 5000, auto-adjusted if in use)"
     echo "  -k, --finnhub-key KEY   Finnhub API key (optional)"
+    echo "  --no-pull               Skip git pull (use existing code)"
+    echo "  --https                 Force HTTPS cookies (use if behind SSL proxy)"
+    echo "  --no-https              Force HTTP-only cookies (default without domain)"
     echo "  -h, --help              Show this help message"
     echo ""
-    echo "Example:"
-    echo "  $0 --domain tradeview.example.com --email admin@example.com"
-    echo "  $0 --domain tradeview.example.com --email admin@example.com --finnhub-key YOUR_KEY"
+    echo "Examples:"
+    echo "  $0                                              # Simple deploy with HTTP"
+    echo "  $0 --domain tradeview.example.com --email admin@example.com  # With SSL"
+    echo "  $0 --finnhub-key YOUR_KEY                       # With API key"
 }
 
 FINNHUB_KEY=""
+SKIP_PULL=false
+FORCE_HTTPS=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -39,6 +47,9 @@ while [[ $# -gt 0 ]]; do
         -e|--email) EMAIL="$2"; shift 2 ;;
         -p|--port) DEFAULT_PORT="$2"; shift 2 ;;
         -k|--finnhub-key) FINNHUB_KEY="$2"; shift 2 ;;
+        --no-pull) SKIP_PULL=true; shift ;;
+        --https) FORCE_HTTPS="true"; shift ;;
+        --no-https) FORCE_HTTPS="false"; shift ;;
         -h|--help) show_usage; exit 0 ;;
         *) log_error "Unknown option: $1"; show_usage; exit 1 ;;
     esac
@@ -79,12 +90,50 @@ log_info "  TradeViewMon Deployment Script"
 log_info "=========================================="
 echo ""
 
+# Change to project directory
+cd "$PROJECT_DIR"
+log_info "Working directory: $(pwd)"
+
 # Check Docker first
 if ! check_docker; then
     log_error "Please install Docker and ensure the Docker daemon is running"
     log_info "Install Docker: curl -fsSL https://get.docker.com | sh"
     exit 1
 fi
+
+# Git pull to get latest code (unless skipped)
+if [ "$SKIP_PULL" = false ] && [ -d ".git" ]; then
+    log_info "Pulling latest code from repository..."
+    
+    # Stash any local changes
+    if ! git diff --quiet 2>/dev/null; then
+        log_warn "Local changes detected, stashing them..."
+        git stash push -m "Auto-stash before deploy $(date)"
+    fi
+    
+    git fetch --all 2>/dev/null || true
+    git pull --ff-only 2>/dev/null || git reset --hard origin/$(git rev-parse --abbrev-ref HEAD) 2>/dev/null || true
+    log_info "Code updated successfully"
+else
+    if [ "$SKIP_PULL" = true ]; then
+        log_info "Skipping git pull (--no-pull flag)"
+    else
+        log_info "Not a git repository, using existing code"
+    fi
+fi
+
+# Determine USE_HTTPS setting
+if [ -n "$FORCE_HTTPS" ]; then
+    USE_HTTPS="$FORCE_HTTPS"
+elif [ -n "$DOMAIN" ] && [ -n "$EMAIL" ]; then
+    # If domain and email provided, assume SSL will be configured
+    USE_HTTPS="true"
+else
+    # Default to false for simple deployments
+    USE_HTTPS="false"
+fi
+
+log_info "HTTPS cookies: $USE_HTTPS"
 
 # Auto-generate environment file if it doesn't exist
 ENV_FILE=".env"
@@ -111,12 +160,16 @@ FINNHUB_API_KEY=${FINNHUB_KEY}
 
 # Application Port
 APP_PORT=$DEFAULT_PORT
+
+# HTTPS Configuration (set to true if behind SSL/HTTPS proxy)
+USE_HTTPS=$USE_HTTPS
 EOF
     
     chmod 600 $ENV_FILE
     log_info "Environment file created with auto-generated credentials"
 else
     log_info "Using existing environment file"
+    
     # Update FINNHUB_API_KEY if provided via command line
     if [ -n "$FINNHUB_KEY" ]; then
         if grep -q "^FINNHUB_API_KEY=" $ENV_FILE; then
@@ -125,6 +178,13 @@ else
             echo "FINNHUB_API_KEY=$FINNHUB_KEY" >> $ENV_FILE
         fi
         log_info "Updated Finnhub API key"
+    fi
+    
+    # Update USE_HTTPS
+    if grep -q "^USE_HTTPS=" $ENV_FILE; then
+        sed -i "s/^USE_HTTPS=.*/USE_HTTPS=$USE_HTTPS/" $ENV_FILE
+    else
+        echo "USE_HTTPS=$USE_HTTPS" >> $ENV_FILE
     fi
 fi
 
@@ -145,8 +205,9 @@ else
     echo "APP_PORT=$APP_PORT" >> $ENV_FILE
 fi
 
-# Export APP_PORT for docker-compose
+# Export variables for docker-compose
 export APP_PORT
+export USE_HTTPS
 
 log_info "Stopping existing containers..."
 docker compose -f deploy/docker-compose.yml down 2>/dev/null || true
@@ -230,8 +291,8 @@ server {
 }
 EOF
         
-        if [ -w /etc/nginx/sites-available ]; then
-            mv /tmp/tradeviewmon-nginx.conf $NGINX_CONF
+        if [ -w /etc/nginx/sites-available ] || [ "$(id -u)" = "0" ]; then
+            cp /tmp/tradeviewmon-nginx.conf $NGINX_CONF
             ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
             rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
             nginx -t && systemctl reload nginx
@@ -239,12 +300,15 @@ EOF
             
             if [ -n "$EMAIL" ] && command -v certbot &> /dev/null; then
                 log_info "Obtaining SSL certificate..."
-                certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL --redirect
-                log_info "SSL certificate installed!"
+                certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL --redirect || {
+                    log_warn "SSL certificate setup failed. You may need to run certbot manually."
+                }
             fi
         else
-            log_warn "Cannot write to /etc/nginx. Run as root or copy config manually:"
-            log_warn "  cat /tmp/tradeviewmon-nginx.conf"
+            log_warn "Cannot write to /etc/nginx. Run with sudo or copy config manually:"
+            log_warn "  sudo cp /tmp/tradeviewmon-nginx.conf $NGINX_CONF"
+            log_warn "  sudo ln -sf $NGINX_CONF /etc/nginx/sites-enabled/"
+            log_warn "  sudo nginx -t && sudo systemctl reload nginx"
         fi
     else
         log_warn "Nginx not installed. Application available on port $APP_PORT"
@@ -263,25 +327,31 @@ echo ""
 
 log_info "Application running on port: $APP_PORT"
 if [ -n "$DOMAIN" ]; then
-    log_info "Access your app at: http://$DOMAIN"
+    if [ "$USE_HTTPS" = "true" ]; then
+        log_info "Access your app at: https://$DOMAIN"
+    else
+        log_info "Access your app at: http://$DOMAIN"
+    fi
 else
     log_info "Access your app at: http://YOUR_SERVER_IP:$APP_PORT"
 fi
 echo ""
 
-log_info "Default login: adhielesmana / admin123"
+log_info "Default login credentials:"
+log_info "  Username: adhielesmana"
+log_info "  Password: admin123"
 echo ""
 
 log_info "Useful commands:"
 log_info "  View app logs:    docker logs -f tradeviewmon"
 log_info "  View db logs:     docker logs -f tradeviewmon-db"
-log_info "  Restart all:      cd $(pwd) && docker compose -f deploy/docker-compose.yml restart"
-log_info "  Stop all:         cd $(pwd) && docker compose -f deploy/docker-compose.yml down"
-log_info "  Update & redeploy: git pull && ./deploy/deploy.sh"
+log_info "  Restart all:      docker compose -f deploy/docker-compose.yml restart"
+log_info "  Stop all:         docker compose -f deploy/docker-compose.yml down"
+log_info "  Redeploy:         ./deploy/deploy.sh"
 echo ""
 
 if [ -z "$FINNHUB_KEY" ] && [ -z "$FINNHUB_API_KEY" ]; then
     log_warn "Note: Finnhub API key not set. You can add it via:"
     log_warn "  1. Settings page in the app (recommended)"
-    log_warn "  2. Edit .env file and redeploy"
+    log_warn "  2. Redeploy with: ./deploy/deploy.sh --finnhub-key YOUR_KEY"
 fi

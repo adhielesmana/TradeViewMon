@@ -9,7 +9,7 @@ import { createServer } from "http";
 
 // Use appropriate PostgreSQL driver based on environment
 const isProduction = process.env.NODE_ENV === "production";
-const sessionPool = isProduction 
+const sessionPool: any = isProduction 
   ? new pg.Pool({ connectionString: process.env.DATABASE_URL })
   : new NeonPool({ connectionString: process.env.DATABASE_URL });
 
