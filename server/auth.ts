@@ -75,6 +75,26 @@ export async function seedSuperadmin(): Promise<void> {
   }
 }
 
+// Seed dummy test users for demo trading testing
+const TEST_USERS = [
+  { username: "testuser", password: "test123", role: "user" },
+  { username: "demotrader", password: "demo123", role: "user" },
+];
+
+export async function seedTestUsers(): Promise<void> {
+  for (const testUser of TEST_USERS) {
+    const existingUser = await findUserByUsername(testUser.username);
+    
+    if (!existingUser) {
+      console.log(`Creating test user: ${testUser.username}...`);
+      await createUser(testUser.username, testUser.password, testUser.role);
+      console.log(`Test user ${testUser.username} created successfully`);
+    } else {
+      console.log(`Test user ${testUser.username} already exists`);
+    }
+  }
+}
+
 export function getSafeUser(user: User): SafeUser {
   const { password: _, ...safeUser } = user;
   return safeUser;

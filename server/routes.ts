@@ -6,7 +6,7 @@ import { marketDataService } from "./market-data-service";
 import { technicalIndicators } from "./technical-indicators";
 import { wsService } from "./websocket";
 import { backtestingEngine, type BacktestConfig } from "./backtesting";
-import { authenticateUser, seedSuperadmin, findUserById, type SafeUser } from "./auth";
+import { authenticateUser, seedSuperadmin, seedTestUsers, findUserById, type SafeUser } from "./auth";
 import { predictionEngine } from "./prediction-engine";
 import { z } from "zod";
 
@@ -103,6 +103,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   await seedSuperadmin();
+  await seedTestUsers();
 
   app.post("/api/auth/login", async (req, res) => {
     try {
