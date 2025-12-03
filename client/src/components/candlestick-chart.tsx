@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo } from "react";
-import { createChart, ColorType, IChartApi, CandlestickData, Time, CandlestickSeries } from "lightweight-charts";
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries } from "lightweight-charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { MarketData } from "@shared/schema";
@@ -21,22 +21,23 @@ export function CandlestickChart({
 }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
 
-  const chartData = useMemo<CandlestickData[]>(() => {
+  const chartData = useMemo<CandlestickData<Time>[]>(() => {
     const sortedData = [...data].sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
-    const uniqueData = new Map<number, CandlestickData>();
+    const uniqueData = new Map<number, CandlestickData<Time>>();
     
     sortedData.forEach((item) => {
       const timestamp = Math.floor(new Date(item.timestamp).getTime() / 1000) as Time;
       uniqueData.set(timestamp as number, {
         time: timestamp,
-        open: item.open,
-        high: item.high,
-        low: item.low,
-        close: item.close,
+        open: Number(item.open),
+        high: Number(item.high),
+        low: Number(item.low),
+        close: Number(item.close),
       });
     });
 
@@ -50,12 +51,12 @@ export function CandlestickChart({
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: "transparent" },
+        background: { type: ColorType.Solid, color: isDarkMode ? "#09090b" : "#ffffff" },
         textColor: isDarkMode ? "#a1a1aa" : "#71717a",
       },
       grid: {
-        vertLines: { color: isDarkMode ? "#27272a" : "#e4e4e7", style: 1 },
-        horzLines: { color: isDarkMode ? "#27272a" : "#e4e4e7", style: 1 },
+        vertLines: { color: isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" },
+        horzLines: { color: isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" },
       },
       width: chartContainerRef.current.clientWidth,
       height: height,
@@ -89,19 +90,18 @@ export function CandlestickChart({
     });
 
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "#22c55e",
+      upColor: "#16a34a",
       downColor: "#ef4444",
-      borderUpColor: "#22c55e",
-      borderDownColor: "#ef4444",
-      wickUpColor: "#22c55e",
+      borderVisible: false,
+      wickUpColor: "#16a34a",
       wickDownColor: "#ef4444",
     });
 
     candlestickSeries.setData(chartData);
-
     chart.timeScale().fitContent();
 
     chartRef.current = chart;
+    seriesRef.current = candlestickSeries;
 
     const handleResize = () => {
       if (chartContainerRef.current && chartRef.current) {
@@ -119,12 +119,12 @@ export function CandlestickChart({
           const isDark = document.documentElement.classList.contains("dark");
           chart.applyOptions({
             layout: {
-              background: { type: ColorType.Solid, color: "transparent" },
+              background: { type: ColorType.Solid, color: isDark ? "#09090b" : "#ffffff" },
               textColor: isDark ? "#a1a1aa" : "#71717a",
             },
             grid: {
-              vertLines: { color: isDark ? "#27272a" : "#e4e4e7" },
-              horzLines: { color: isDark ? "#27272a" : "#e4e4e7" },
+              vertLines: { color: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" },
+              horzLines: { color: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" },
             },
           });
         }
@@ -138,6 +138,7 @@ export function CandlestickChart({
       observer.disconnect();
       chart.remove();
       chartRef.current = null;
+      seriesRef.current = null;
     };
   }, [chartData, height, isLoading]);
 
