@@ -143,6 +143,13 @@ npx drizzle-kit push --force 2>&1 || {
                         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
                     );
+                    
+                    CREATE TABLE IF NOT EXISTS session (
+                        sid VARCHAR NOT NULL COLLATE "default" PRIMARY KEY,
+                        sess JSON NOT NULL,
+                        expire TIMESTAMP(6) NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS IDX_session_expire ON session (expire);
                 \`);
                 console.log('[Startup] Database tables created successfully!');
                 

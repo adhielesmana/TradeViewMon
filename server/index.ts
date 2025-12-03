@@ -1,13 +1,25 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { Pool } from "@neondatabase/serverless";
+import { Pool as NeonPool } from "@neondatabase/serverless";
+import pg from "pg";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
+// Use appropriate PostgreSQL driver based on environment
+const isProduction = process.env.NODE_ENV === "production";
+const sessionPool = isProduction 
+  ? new pg.Pool({ connectionString: process.env.DATABASE_URL })
+  : new NeonPool({ connectionString: process.env.DATABASE_URL });
+
 const app = express();
 const httpServer = createServer(app);
+
+// Trust proxy when behind Nginx (for secure cookies over HTTPS)
+if (isProduction) {
+  app.set("trust proxy", 1);
+}
 
 declare module "http" {
   interface IncomingMessage {
@@ -26,7 +38,10 @@ app.use(
 app.use(express.urlencoded({ extended: false }));
 
 const PgSession = connectPgSimple(session);
-const sessionPool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+// In production, check if HTTPS is being used (via X-Forwarded-Proto from Nginx)
+// If not using HTTPS, don't set secure cookies
+const useSecureCookies = isProduction && process.env.USE_HTTPS !== "false";
 
 app.use(
   session({
@@ -39,9 +54,9 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: useSecureCookies,
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: useSecureCookies ? "strict" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days for persistent login
     },
   })
