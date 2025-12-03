@@ -52,12 +52,12 @@ find_available_port() {
                 return 0
             fi
         fi
-        log_warn "Port $port is in use, trying next port..."
+        echo -e "${YELLOW}[WARN]${NC} Port $port is in use, trying next port..." >&2
         port=$((port + 1))
         attempt=$((attempt + 1))
     done
     
-    log_error "Could not find available port after $max_attempts attempts"
+    echo -e "${RED}[ERROR]${NC} Could not find available port after $max_attempts attempts" >&2
     exit 1
 }
 
