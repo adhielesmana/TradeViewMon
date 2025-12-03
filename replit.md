@@ -70,14 +70,21 @@ Preferred communication style: Simple, everyday language.
 - Outputs: predicted price, direction (UP/DOWN/NEUTRAL), confidence score, and multi-factor analysis breakdown
 - Configurable match threshold (default 0.5%) for accuracy determination
 
-**Market Data Service**: Abstracted service layer supporting:
+**Market Data Service**: Multi-provider abstracted service layer supporting:
 - **Gold-API.com Integration**: Free real-time prices for XAU (Gold), XAG (Silver), BTC (Bitcoin)
   - Endpoint: `https://api.gold-api.com/price/{symbol}`
   - No authentication required for free tier
   - Returns current spot price used as candle close
-- Simulated data generation for unsupported symbols (DXY, US10Y, GDX, GDXJ, NEM, SPX, USOIL)
-- Historical data backfill (generates 1 hour of 1-minute candles on startup)
-- Real-time data fetching with 1-minute intervals
+- **Finnhub Integration**: Real-time stock/ETF prices for GDX, GDXJ, NEM, SPX, DXY, USOIL
+  - Endpoint: `https://finnhub.io/api/v1/quote?symbol={symbol}&token={API_KEY}`
+  - ETF proxies with price multipliers: SPY×10 for SPX, UUP×3.8 for DXY, USO for USOIL
+  - Requires FINNHUB_API_KEY secret (free tier: 60 calls/min)
+- **On-Demand Historical Seeding**: When user selects a new symbol:
+  - System checks if historical data exists for that symbol
+  - If not, fetches current price from API provider and generates 61 1-minute candles
+  - Provides immediate chart display without waiting for scheduler
+- Simulated data generation for unsupported symbols (US10Y)
+- Real-time data fetching with 1-minute intervals via scheduler
 - Candlestick chart displays 1-hour range with 1-minute candles (~60 data points)
 - Price continuity: Open price = previous candle's close, stored in `price_state` table
 
