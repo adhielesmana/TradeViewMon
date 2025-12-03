@@ -40,6 +40,7 @@ npx drizzle-kit push --force 2>&1 || {
         
         const createTables = async () => {
             try {
+                // Create all base tables
                 await pool.query(\`
                     CREATE TABLE IF NOT EXISTS market_data (
                         id SERIAL PRIMARY KEY,
@@ -136,6 +137,43 @@ npx drizzle-kit push --force 2>&1 || {
                     CREATE INDEX IF NOT EXISTS demo_trades_user_id_idx ON demo_trades(user_id);
                     CREATE INDEX IF NOT EXISTS demo_trades_status_idx ON demo_trades(status);
                     
+                    CREATE TABLE IF NOT EXISTS demo_positions (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id),
+                        symbol VARCHAR(20) NOT NULL,
+                        type VARCHAR(10) NOT NULL,
+                        entry_price REAL NOT NULL,
+                        exit_price REAL,
+                        quantity REAL NOT NULL,
+                        stop_loss REAL,
+                        take_profit REAL,
+                        status VARCHAR(20) NOT NULL DEFAULT 'open',
+                        profit_loss REAL,
+                        is_auto_trade BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        closed_at TIMESTAMP
+                    );
+                    CREATE INDEX IF NOT EXISTS demo_positions_user_id_idx ON demo_positions(user_id);
+                    CREATE INDEX IF NOT EXISTS demo_positions_status_idx ON demo_positions(status);
+                    
+                    CREATE TABLE IF NOT EXISTS auto_trade_settings (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+                        is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                        trade_units REAL NOT NULL DEFAULT 0.01,
+                        max_positions INTEGER NOT NULL DEFAULT 5,
+                        symbols TEXT[] DEFAULT ARRAY['XAUUSD'],
+                        stop_loss_percent REAL DEFAULT 2.0,
+                        take_profit_percent REAL DEFAULT 3.0,
+                        total_auto_trades INTEGER DEFAULT 0,
+                        total_profit_loss REAL DEFAULT 0,
+                        winning_trades INTEGER DEFAULT 0,
+                        losing_trades INTEGER DEFAULT 0,
+                        closed_auto_trades INTEGER DEFAULT 0,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    );
+                    
                     CREATE TABLE IF NOT EXISTS app_settings (
                         id SERIAL PRIMARY KEY,
                         key VARCHAR(100) NOT NULL UNIQUE,
@@ -145,13 +183,38 @@ npx drizzle-kit push --force 2>&1 || {
                     );
                     
                     CREATE TABLE IF NOT EXISTS session (
-                        sid VARCHAR NOT NULL COLLATE "default" PRIMARY KEY,
+                        sid VARCHAR NOT NULL COLLATE \"default\" PRIMARY KEY,
                         sess JSON NOT NULL,
                         expire TIMESTAMP(6) NOT NULL
                     );
                     CREATE INDEX IF NOT EXISTS IDX_session_expire ON session (expire);
                 \`);
-                console.log('[Startup] Database tables created successfully!');
+                console.log('[Startup] Base tables created successfully!');
+                
+                // Add new columns to existing tables (safe - ignores if column exists)
+                const alterStatements = [
+                    // demo_positions table - add is_auto_trade if missing
+                    \"ALTER TABLE demo_positions ADD COLUMN IF NOT EXISTS is_auto_trade BOOLEAN DEFAULT FALSE\",
+                    \"ALTER TABLE demo_positions ADD COLUMN IF NOT EXISTS stop_loss REAL\",
+                    \"ALTER TABLE demo_positions ADD COLUMN IF NOT EXISTS take_profit REAL\",
+                    
+                    // auto_trade_settings table - add tracking columns if missing
+                    \"ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS total_auto_trades INTEGER DEFAULT 0\",
+                    \"ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS total_profit_loss REAL DEFAULT 0\",
+                    \"ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS winning_trades INTEGER DEFAULT 0\",
+                    \"ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS losing_trades INTEGER DEFAULT 0\",
+                    \"ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS closed_auto_trades INTEGER DEFAULT 0\",
+                ];
+                
+                for (const stmt of alterStatements) {
+                    try {
+                        await pool.query(stmt);
+                    } catch (err) {
+                        // Ignore errors (column might already exist or table might not exist yet)
+                        console.log('[Startup] Schema update skipped:', err.message.split('\\n')[0]);
+                    }
+                }
+                console.log('[Startup] Schema updates applied!');
                 
                 // Seed superadmin user
                 const bcrypt = require('bcryptjs');
