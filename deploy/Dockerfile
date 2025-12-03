@@ -27,6 +27,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY deploy/entrypoint.sh ./entrypoint.sh
+COPY deploy/migrate.js ./migrate.js
 
 RUN chmod +x ./entrypoint.sh
 
