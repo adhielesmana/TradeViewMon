@@ -180,3 +180,38 @@ Preferred communication style: Simple, everyday language.
 - **zod**: Runtime schema validation
 - **class-variance-authority**: Component variant management
 - **wouter**: Lightweight routing
+
+## Production Deployment
+
+### Self-Hosted Deployment
+
+The `deploy/` directory contains scripts for deploying to your own production server:
+
+**Quick Start:**
+```bash
+git clone <repo-url> /opt/tradeviewmon
+cd /opt/tradeviewmon
+chmod +x deploy/*.sh
+./deploy/setup-env.sh
+./deploy/deploy.sh --domain your-domain.com --email admin@example.com
+```
+
+**Features:**
+- Automatic Nginx detection and configuration
+- SSL certificate via Let's Encrypt
+- Port conflict detection (auto-selects next available port if 5000 is in use)
+- Docker-based deployment with health checks
+- Multi-stage Docker build for optimized image size
+
+**Files:**
+- `deploy/deploy.sh` - Main deployment script
+- `deploy/setup-env.sh` - Environment variable configuration helper
+- `deploy/Dockerfile` - Multi-stage Docker build
+- `deploy/docker-compose.yml` - Docker Compose for full stack
+- `deploy/nginx-ssl.conf.template` - Nginx configuration with SSL
+- `deploy/README.md` - Detailed deployment documentation
+
+**Environment Variables Required:**
+- `DATABASE_URL` - PostgreSQL connection string
+- `SESSION_SECRET` - Secure session encryption key
+- `FINNHUB_API_KEY` - Finnhub API key for stock data (optional)

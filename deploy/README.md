@@ -1,0 +1,147 @@
+# TradeViewMon Production Deployment
+
+## Quick Start
+
+### 1. Prepare Your Server
+
+Ensure you have:
+- Ubuntu 20.04+ or similar Linux distribution
+- Root or sudo access
+- A domain name pointing to your server (for SSL)
+
+### 2. Clone and Deploy
+
+```bash
+git clone <your-repo-url> /opt/tradeviewmon
+cd /opt/tradeviewmon
+
+chmod +x deploy/*.sh
+
+./deploy/setup-env.sh
+
+./deploy/deploy.sh --domain your-domain.com --email admin@example.com
+```
+
+## Deployment Options
+
+### Basic Deployment (No SSL)
+```bash
+./deploy/deploy.sh
+```
+
+### With Custom Domain and SSL
+```bash
+./deploy/deploy.sh --domain tradeview.example.com --email admin@example.com
+```
+
+### With Custom Port
+```bash
+./deploy/deploy.sh --port 3000 --domain tradeview.example.com --email admin@example.com
+```
+
+## What the Script Does
+
+1. **Port Detection**: Checks if port 5000 (or specified port) is in use by Docker or other services
+2. **Auto Port Selection**: If the port is busy, automatically finds the next available port
+3. **Nginx Check**: Detects if Nginx is installed, installs if missing
+4. **Docker Check**: Detects if Docker is installed, installs if missing
+5. **SSL Setup**: Uses Certbot to obtain and configure Let's Encrypt SSL certificates
+6. **App Deployment**: Builds and runs the application in a Docker container
+
+## Environment Variables
+
+Create a `.env.production` file with:
+
+```env
+NODE_ENV=production
+PORT=5000
+DATABASE_URL=postgresql://user:password@host:5432/database
+SESSION_SECRET=your-secure-secret-key
+FINNHUB_API_KEY=your-finnhub-api-key
+```
+
+## Using Docker Compose
+
+For a complete setup with PostgreSQL:
+
+```bash
+cd deploy
+
+cp .env.example .env.production
+
+docker-compose up -d
+```
+
+## Management Commands
+
+```bash
+docker logs -f tradeviewmon
+
+docker restart tradeviewmon
+
+docker stop tradeviewmon
+
+docker start tradeviewmon
+
+docker pull <image> && docker-compose up -d
+```
+
+## SSL Certificate Renewal
+
+Certbot automatically sets up a cron job for renewal. To manually renew:
+
+```bash
+sudo certbot renew
+```
+
+## Nginx Configuration
+
+The deployment script creates an Nginx config at `/etc/nginx/sites-available/tradeviewmon`.
+
+To manually update:
+```bash
+sudo nano /etc/nginx/sites-available/tradeviewmon
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+## Troubleshooting
+
+### Port Already in Use
+The script automatically detects and avoids port conflicts. Check current usage:
+```bash
+ss -tuln | grep :5000
+docker ps --format '{{.Ports}}' | grep 5000
+```
+
+### Docker Container Not Starting
+```bash
+docker logs tradeviewmon
+docker inspect tradeviewmon
+```
+
+### Nginx Issues
+```bash
+sudo nginx -t
+sudo systemctl status nginx
+sudo tail -f /var/log/nginx/error.log
+```
+
+### SSL Certificate Issues
+```bash
+sudo certbot certificates
+sudo certbot renew --dry-run
+```
+
+## Security Recommendations
+
+1. Use strong passwords for database and session secrets
+2. Keep your server updated: `sudo apt update && sudo apt upgrade`
+3. Configure a firewall (UFW):
+   ```bash
+   sudo ufw allow ssh
+   sudo ufw allow 'Nginx Full'
+   sudo ufw enable
+   ```
+4. Set up automatic security updates
+5. Regularly backup your database
