@@ -91,7 +91,7 @@ docker pull <image> && docker-compose up -d
 Certbot automatically sets up a cron job for renewal. To manually renew:
 
 ```bash
-sudo certbot renew
+certbot renew
 ```
 
 ## Nginx Configuration
@@ -100,9 +100,9 @@ The deployment script creates an Nginx config at `/etc/nginx/sites-available/tra
 
 To manually update:
 ```bash
-sudo nano /etc/nginx/sites-available/tradeviewmon
-sudo nginx -t
-sudo systemctl reload nginx
+nano /etc/nginx/sites-available/tradeviewmon
+nginx -t
+systemctl reload nginx
 ```
 
 ## Troubleshooting
@@ -122,26 +122,26 @@ docker inspect tradeviewmon
 
 ### Nginx Issues
 ```bash
-sudo nginx -t
-sudo systemctl status nginx
-sudo tail -f /var/log/nginx/error.log
+nginx -t
+systemctl status nginx
+tail -f /var/log/nginx/error.log
 ```
 
 ### SSL Certificate Issues
 ```bash
-sudo certbot certificates
-sudo certbot renew --dry-run
+certbot certificates
+certbot renew --dry-run
 ```
 
 ## Security Recommendations
 
 1. Use strong passwords for database and session secrets
-2. Keep your server updated: `sudo apt update && sudo apt upgrade`
+2. Keep your server updated: `apt update && apt upgrade`
 3. Configure a firewall (UFW):
    ```bash
-   sudo ufw allow ssh
-   sudo ufw allow 'Nginx Full'
-   sudo ufw enable
+   ufw allow ssh
+   ufw allow 'Nginx Full'
+   ufw enable
    ```
 4. Set up automatic security updates
 5. Regularly backup your database

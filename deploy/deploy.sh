@@ -74,12 +74,12 @@ check_nginx() {
 install_nginx() {
     log_info "Installing Nginx..."
     if command -v apt-get &> /dev/null; then
-        sudo apt-get update
-        sudo apt-get install -y nginx
+        apt-get update
+        apt-get install -y nginx
     elif command -v yum &> /dev/null; then
-        sudo yum install -y nginx
+        yum install -y nginx
     elif command -v dnf &> /dev/null; then
-        sudo dnf install -y nginx
+        dnf install -y nginx
     else
         log_error "Could not detect package manager. Please install Nginx manually."
         exit 1
@@ -99,8 +99,8 @@ check_docker() {
 install_docker() {
     log_info "Installing Docker..."
     curl -fsSL https://get.docker.com -o get-docker.sh
-    sudo sh get-docker.sh
-    sudo usermod -aG docker $USER
+    sh get-docker.sh
+    usermod -aG docker $USER
     rm get-docker.sh
     log_info "Docker installed. You may need to log out and back in for group changes to take effect."
 }
@@ -118,11 +118,11 @@ check_certbot() {
 install_certbot() {
     log_info "Installing Certbot..."
     if command -v apt-get &> /dev/null; then
-        sudo apt-get install -y certbot python3-certbot-nginx
+        apt-get install -y certbot python3-certbot-nginx
     elif command -v yum &> /dev/null; then
-        sudo yum install -y certbot python3-certbot-nginx
+        yum install -y certbot python3-certbot-nginx
     elif command -v dnf &> /dev/null; then
-        sudo dnf install -y certbot python3-certbot-nginx
+        dnf install -y certbot python3-certbot-nginx
     fi
 }
 
@@ -149,8 +149,8 @@ if [ -n "$DOMAIN" ] && [ -n "$EMAIL" ]; then
 fi
 
 log_info "Creating application directory..."
-sudo mkdir -p $INSTALL_DIR
-sudo chown $USER:$USER $INSTALL_DIR
+mkdir -p $INSTALL_DIR
+chown $USER:$USER $INSTALL_DIR
 
 log_info "Copying application files..."
 cp -r . $INSTALL_DIR/
@@ -166,7 +166,7 @@ FINNHUB_API_KEY=\${FINNHUB_API_KEY}
 EOF
 
 log_info "Building Docker image..."
-docker build -t $APP_NAME:latest .
+docker build -t $APP_NAME:latest -f deploy/Dockerfile .
 
 log_info "Stopping existing container if running..."
 docker stop $APP_NAME 2>/dev/null || true
@@ -184,7 +184,7 @@ log_info "Creating Nginx configuration..."
 if [ -n "$DOMAIN" ]; then
     NGINX_CONF="/etc/nginx/sites-available/$APP_NAME"
     
-    sudo tee $NGINX_CONF > /dev/null << EOF
+    tee $NGINX_CONF > /dev/null << EOF
 server {
     listen 80;
     listen [::]:80;
@@ -216,24 +216,24 @@ server {
 }
 EOF
 
-    sudo ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
-    sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+    ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
+    rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
     
-    sudo nginx -t
-    sudo systemctl reload nginx
+    nginx -t
+    systemctl reload nginx
     
     if [ -n "$EMAIL" ]; then
         log_info "Obtaining SSL certificate..."
-        sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL --redirect
+        certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL --redirect
         log_info "SSL certificate installed successfully!"
     else
         log_warn "No email provided. Skipping SSL setup."
-        log_warn "Run 'sudo certbot --nginx -d $DOMAIN' manually to enable SSL."
+        log_warn "Run 'certbot --nginx -d $DOMAIN' manually to enable SSL."
     fi
 else
     NGINX_CONF="/etc/nginx/sites-available/$APP_NAME"
     
-    sudo tee $NGINX_CONF > /dev/null << EOF
+    tee $NGINX_CONF > /dev/null << EOF
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -265,11 +265,11 @@ server {
 }
 EOF
 
-    sudo ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
-    sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+    ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
+    rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
     
-    sudo nginx -t
-    sudo systemctl reload nginx
+    nginx -t
+    systemctl reload nginx
     
     log_warn "No domain specified. Application accessible via server IP."
     log_warn "To enable SSL, run: $0 --domain your-domain.com --email your@email.com"
