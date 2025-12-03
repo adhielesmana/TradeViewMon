@@ -163,13 +163,21 @@ export async function registerRoutes(
       req.session.userId = user.id;
       req.session.user = user;
 
-      res.json({ 
-        message: "Login successful", 
-        user: {
-          id: user.id,
-          username: user.username,
-          role: user.role,
+      // Explicitly save session before responding
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Login failed - session error" });
         }
+        
+        res.json({ 
+          message: "Login successful", 
+          user: {
+            id: user.id,
+            username: user.username,
+            role: user.role,
+          }
+        });
       });
     } catch (error) {
       console.error("Login error:", error);

@@ -41,7 +41,11 @@ const PgSession = connectPgSimple(session);
 
 // In production, check if HTTPS is being used (via X-Forwarded-Proto from Nginx)
 // If not using HTTPS, don't set secure cookies
-const useSecureCookies = isProduction && process.env.USE_HTTPS !== "false";
+const useSecureCookies = isProduction && process.env.USE_HTTPS === "true";
+
+console.log(`[Session] Environment: ${isProduction ? 'production' : 'development'}`);
+console.log(`[Session] USE_HTTPS env: ${process.env.USE_HTTPS}`);
+console.log(`[Session] Secure cookies: ${useSecureCookies}`);
 
 app.use(
   session({
@@ -51,13 +55,15 @@ app.use(
       createTableIfMissing: true,
     }),
     secret: process.env.SESSION_SECRET || "tradeviewmon-secret-key-change-in-production",
+    name: "tradeviewmon.sid",
     resave: false,
     saveUninitialized: false,
     cookie: {
       secure: useSecureCookies,
       httpOnly: true,
-      sameSite: useSecureCookies ? "strict" : "lax",
+      sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days for persistent login
+      path: "/",
     },
   })
 );
