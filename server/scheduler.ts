@@ -82,8 +82,10 @@ function aggregateCandles(candles: any[], intervalMinutes: number): AggregatedCa
 
 class Scheduler {
   private isRunning: boolean = false;
-  private task: cron.ScheduledTask | null = null;
-  private intervalMs: number = 60000;
+  private intervalHandle: NodeJS.Timeout | null = null;
+  private predictionTask: ReturnType<typeof cron.schedule> | null = null;
+  private intervalMs: number = 30000;
+  private predictionCycleCount: number = 0;
 
   async start(): Promise<void> {
     if (this.isRunning) {
@@ -98,12 +100,15 @@ class Scheduler {
 
     await this.initializeData();
 
-    // Run at exactly :00 seconds of each minute (6-field cron format: second minute hour day month weekday)
-    this.task = cron.schedule("0 * * * * *", async () => {
+    this.intervalHandle = setInterval(async () => {
       await this.runCycle();
+    }, 30000);
+
+    this.predictionTask = cron.schedule("0 * * * * *", async () => {
+      await this.runPredictionCycle();
     });
 
-    console.log("[Scheduler] Scheduler started - running every minute at :00 seconds");
+    console.log("[Scheduler] Scheduler started - running every 30 seconds for market data, predictions every minute");
   }
 
   async stop(): Promise<void> {
@@ -112,9 +117,14 @@ class Scheduler {
       return;
     }
 
-    if (this.task) {
-      this.task.stop();
-      this.task = null;
+    if (this.intervalHandle) {
+      clearInterval(this.intervalHandle);
+      this.intervalHandle = null;
+    }
+
+    if (this.predictionTask) {
+      this.predictionTask.stop();
+      this.predictionTask = null;
     }
 
     this.isRunning = false;
@@ -130,15 +140,15 @@ class Scheduler {
       );
 
       if (existingData.length === 0) {
-        console.log("[Scheduler] No existing data found, generating initial data...");
-        const historicalData = await marketDataService.generateHistoricalData(7);
+        console.log("[Scheduler] No existing data found, generating initial 3-hour data...");
+        const historicalData = await marketDataService.generateHistoricalData(3);
         
-        const batchSize = 100;
+        const batchSize = 500;
         for (let i = 0; i < historicalData.length; i += batchSize) {
           const batch = historicalData.slice(i, i + batchSize);
           await storage.insertMarketDataBatch(batch);
         }
-        console.log(`[Scheduler] Generated ${historicalData.length} historical data points`);
+        console.log(`[Scheduler] Generated ${historicalData.length} historical data points (1-second candles)`);
       }
 
       await this.runCycle();
@@ -164,8 +174,22 @@ class Scheduler {
         stats,
         recentCount: recentData.length,
       });
+
+      await this.updateStatus("running", new Date());
       
-      if (recentData.length >= 15) {
+    } catch (error) {
+      console.error("[Scheduler] Error in cycle:", error);
+      await this.updateApiStatus("error", String(error));
+    }
+  }
+
+  private async runPredictionCycle(): Promise<void> {
+    const symbol = marketDataService.getSymbol();
+
+    try {
+      const recentData = await storage.getRecentMarketData(symbol, 300);
+      
+      if (recentData.length >= 60) {
         const now = new Date();
         const newPredictions: Array<{
           timeframe: string;
@@ -175,7 +199,7 @@ class Scheduler {
         }> = [];
 
         for (const timeframe of TIMEFRAMES) {
-          const dataNeeded = timeframe.dataPoints;
+          const dataNeeded = timeframe.dataPoints * 60;
           const timeframeData = await storage.getRecentMarketData(symbol, dataNeeded);
           
           const aggregatedData = aggregateCandles(timeframeData, timeframe.minutes);
@@ -215,12 +239,8 @@ class Scheduler {
         await this.evaluatePastPredictions(symbol);
         await this.updatePredictionEngineStatus("healthy");
       }
-
-      await this.updateStatus("running", new Date());
-      
     } catch (error) {
-      console.error("[Scheduler] Error in cycle:", error);
-      await this.updateApiStatus("error", String(error));
+      console.error("[Scheduler] Error in prediction cycle:", error);
     }
   }
 
@@ -292,7 +312,7 @@ class Scheduler {
         lastCheck: new Date(),
         lastSuccess: lastSuccess || null,
         errorMessage: null,
-        metadata: JSON.stringify({ interval: "60s" }),
+        metadata: JSON.stringify({ interval: "1s" }),
       });
     } catch (error) {
       console.error("[Scheduler] Error updating status:", error);

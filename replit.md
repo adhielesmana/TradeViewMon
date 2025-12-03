@@ -51,7 +51,9 @@ Preferred communication style: Simple, everyday language.
 - `accuracy_update`: Prediction evaluation results
 - Clients subscribe to specific symbols and only receive relevant updates
 
-**Scheduler System**: Node-cron based job scheduler that runs every minute to:
+**Scheduler System**: Dual-interval scheduling system:
+- Market data: Every 30 seconds via setInterval for real-time candle updates
+- Predictions: Every minute via node-cron for generating predictions
 1. Fetch latest market data from external API or generate simulated data
 2. Store new candles in the database
 3. Generate predictions using the ensemble model
@@ -73,8 +75,9 @@ Preferred communication style: Simple, everyday language.
 **Market Data Service**: Abstracted service layer supporting:
 - External API integration (designed for Alpha Vantage, AllTick, or similar)
 - Simulated data generation for development/testing
-- Historical data backfill (generates 30+ days of minute-by-minute data)
-- Real-time data fetching with 1-minute intervals
+- Historical data backfill (generates 3 hours of 30-second candles on startup)
+- Real-time data fetching with 30-second intervals
+- Candlestick chart displays 3-hour range with 30-second candles (~360 data points)
 
 ### Database Architecture
 
