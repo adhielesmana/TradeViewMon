@@ -941,6 +941,7 @@ export class DatabaseStorage implements IStorage {
         (position.type === 'BUY' && currentPrice <= position.stopLoss) ||
         (position.type === 'SELL' && currentPrice >= position.stopLoss)
       )) {
+        console.log(`[Demo Trading] STOP LOSS triggered for position ${position.id}: ${position.type} ${position.symbol} @ $${currentPrice.toFixed(2)} (SL: $${position.stopLoss.toFixed(2)})`);
         await this.closeDemoTrade(position.userId, position.id, currentPrice, 'stop_loss');
       } 
       // Check for take profit triggers
@@ -948,6 +949,7 @@ export class DatabaseStorage implements IStorage {
         (position.type === 'BUY' && currentPrice >= position.takeProfit) ||
         (position.type === 'SELL' && currentPrice <= position.takeProfit)
       )) {
+        console.log(`[Demo Trading] TAKE PROFIT triggered for position ${position.id}: ${position.type} ${position.symbol} @ $${currentPrice.toFixed(2)} (TP: $${position.takeProfit.toFixed(2)})`);
         await this.closeDemoTrade(position.userId, position.id, currentPrice, 'take_profit');
       }
     }

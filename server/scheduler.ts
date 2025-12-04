@@ -298,6 +298,9 @@ class Scheduler {
           
           await storage.upsertPriceState(symbol, candle.open, candle.close, candle.timestamp);
 
+          // Check and update open positions - trigger stop loss / take profit if needed
+          await storage.updateOpenPositionPrices(symbol, candle.close);
+
           const recentData = await storage.getRecentMarketData(symbol, 60);
           const stats = await storage.getMarketStats(symbol);
 
