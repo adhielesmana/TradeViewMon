@@ -335,6 +335,89 @@ async function runMigrations() {
             }
         }
         
+        // Set default SL/TP for open positions that don't have them
+        console.log('[Migration] Checking open positions without SL/TP...');
+        try {
+            // Get open positions that are missing stop_loss or take_profit
+            const positionsWithoutSlTp = await pool.query(`
+                SELECT dp.id, dp.user_id, dp.symbol, dp.type, dp.entry_price, dp.stop_loss, dp.take_profit
+                FROM demo_positions dp
+                WHERE dp.status = 'open' AND (dp.stop_loss IS NULL OR dp.take_profit IS NULL)
+            `);
+            
+            if (positionsWithoutSlTp.rows.length > 0) {
+                console.log(`[Migration] Found ${positionsWithoutSlTp.rows.length} open positions without SL/TP`);
+                
+                // Pip values per symbol (matching unified-signal-generator.ts)
+                const pipValues = {
+                    'XAUUSD': 0.10,
+                    'XAGUSD': 0.01,
+                    'BTCUSD': 1.00,
+                    'GDX': 0.01,
+                    'GDXJ': 0.01,
+                    'NEM': 0.01,
+                    'SPX': 0.10,
+                    'DXY': 0.01,
+                    'USOIL': 0.01,
+                    'US10Y': 0.001
+                };
+                
+                for (const position of positionsWithoutSlTp.rows) {
+                    try {
+                        // Get user's auto-trade settings for SL/TP defaults
+                        const settingsResult = await pool.query(
+                            'SELECT sl_tp_mode, stop_loss_value FROM auto_trade_settings WHERE user_id = $1',
+                            [position.user_id]
+                        );
+                        
+                        // Default values if no settings found
+                        let slTpMode = 'pips';
+                        let stopLossValue = 1;
+                        
+                        if (settingsResult.rows.length > 0) {
+                            slTpMode = settingsResult.rows[0].sl_tp_mode || 'pips';
+                            stopLossValue = settingsResult.rows[0].stop_loss_value || 1;
+                        }
+                        
+                        const entryPrice = position.entry_price;
+                        const pipValue = pipValues[position.symbol] || 0.01;
+                        
+                        let slDistance, tpDistance;
+                        if (slTpMode === 'percentage') {
+                            slDistance = entryPrice * (stopLossValue / 100);
+                            tpDistance = slDistance * 2; // 1:2 ratio
+                        } else {
+                            slDistance = stopLossValue * pipValue;
+                            tpDistance = slDistance * 2; // 1:2 ratio
+                        }
+                        
+                        let stopLoss, takeProfit;
+                        if (position.type === 'BUY') {
+                            stopLoss = entryPrice - slDistance;
+                            takeProfit = entryPrice + tpDistance;
+                        } else {
+                            stopLoss = entryPrice + slDistance;
+                            takeProfit = entryPrice - tpDistance;
+                        }
+                        
+                        // Update position with calculated SL/TP
+                        await pool.query(
+                            'UPDATE demo_positions SET stop_loss = $1, take_profit = $2 WHERE id = $3',
+                            [stopLoss, takeProfit, position.id]
+                        );
+                        
+                        console.log(`[Migration] Set SL/TP for position ${position.id}: ${position.type} ${position.symbol} @ $${entryPrice.toFixed(2)} -> SL: $${stopLoss.toFixed(2)}, TP: $${takeProfit.toFixed(2)}`);
+                    } catch (posErr) {
+                        console.log(`[Migration] Failed to set SL/TP for position ${position.id}:`, posErr.message);
+                    }
+                }
+            } else {
+                console.log('[Migration] All open positions have SL/TP set');
+            }
+        } catch (slTpErr) {
+            console.log('[Migration] SL/TP check skipped:', slTpErr.message.split('\n')[0]);
+        }
+        
         // Seed superadmin user
         console.log('[Migration] Checking superadmin user...');
         const existingAdmin = await pool.query("SELECT * FROM users WHERE username = 'adhielesmana'");
