@@ -67,18 +67,36 @@ export function CandlestickChart({
   className,
 }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(800);
+  const [containerWidth, setContainerWidth] = useState(0);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
 
   useEffect(() => {
+    if (!containerRef.current) return;
+    
     const updateWidth = () => {
       if (containerRef.current) {
-        setContainerWidth(containerRef.current.clientWidth);
+        const width = containerRef.current.clientWidth;
+        if (width > 0) {
+          setContainerWidth(width);
+        }
       }
     };
+    
+    // Initial measurement
     updateWidth();
-    window.addEventListener('resize', updateWidth);
-    return () => window.removeEventListener('resize', updateWidth);
+    
+    // Use ResizeObserver for proper container resize detection
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setContainerWidth(entry.contentRect.width);
+        }
+      }
+    });
+    
+    resizeObserver.observe(containerRef.current);
+    
+    return () => resizeObserver.disconnect();
   }, []);
 
   const chartData = useMemo<CandleData[]>(() => {
@@ -216,8 +234,8 @@ export function CandlestickChart({
     );
   }
 
-  const candleWidth = Math.max(chartWidth / chartData.length * 0.7, 3);
-  const candleSpacing = chartWidth / chartData.length;
+  const candleWidth = containerWidth > 0 ? Math.max(chartWidth / chartData.length * 0.7, 3) : 0;
+  const candleSpacing = containerWidth > 0 ? chartWidth / chartData.length : 0;
 
   return (
     <Card className={className}>
@@ -241,10 +259,15 @@ export function CandlestickChart({
       <CardContent>
         <div 
           ref={containerRef}
-          style={{ width: '100%', height, position: 'relative' }} 
+          className="w-full"
+          style={{ height, position: 'relative' }} 
           data-testid="chart-candlestick"
         >
-          <svg width="100%" height={height}>
+          {containerWidth === 0 ? (
+            <Skeleton className="w-full h-full" />
+          ) : (
+          <>
+          <svg width={containerWidth} height={height} style={{ display: 'block' }}>
             <g transform={`translate(${margin.left}, ${margin.top})`}>
               {yAxisTicks.map((tick, i) => (
                 <g key={`grid-${i}`}>
@@ -373,6 +396,8 @@ export function CandlestickChart({
                 </span>
               </div>
             </div>
+          )}
+          </>
           )}
         </div>
       </CardContent>
