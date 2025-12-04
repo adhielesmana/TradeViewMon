@@ -299,6 +299,8 @@ async function runMigrations() {
             
             // auto_trade_settings columns - CRITICAL: add symbol column
             "ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS symbol VARCHAR(20) DEFAULT 'XAUUSD'",
+            'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS stop_loss_pips REAL DEFAULT 50',
+            'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS take_profit_pips REAL DEFAULT 100',
             'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS last_trade_at TIMESTAMP',
             'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS last_decision VARCHAR(10)',
             'ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS total_auto_trades INTEGER DEFAULT 0',

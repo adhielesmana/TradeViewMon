@@ -417,8 +417,11 @@ export const autoTradeSettings = pgTable("auto_trade_settings", {
   isEnabled: boolean("is_enabled").notNull().default(false),
   tradeUnits: real("trade_units").notNull().default(0.01), // Trade size in units/lots (e.g., 0.01 lot)
   symbol: varchar("symbol", { length: 20 }).notNull().default("XAUUSD"), // Symbol to auto-trade
-  stopLossPips: real("stop_loss_pips").default(50), // Stop loss in pips (e.g., 50 pips)
-  takeProfitPips: real("take_profit_pips").default(100), // Take profit in pips (e.g., 100 pips)
+  slTpMode: varchar("sl_tp_mode", { length: 10 }).notNull().default("pips"), // 'pips' or 'percentage'
+  stopLossValue: real("stop_loss_value").notNull().default(1), // Stop loss value (1 pip or 1% based on mode)
+  // Take profit is always 2x stop loss (1:2 ratio) - calculated dynamically
+  stopLossPips: real("stop_loss_pips").default(50), // Legacy: Stop loss in pips
+  takeProfitPips: real("take_profit_pips").default(100), // Legacy: Take profit in pips
   lastTradeAt: timestamp("last_trade_at"), // When last auto-trade was executed
   lastDecision: varchar("last_decision", { length: 10 }), // Last AI decision acted on
   totalAutoTrades: integer("total_auto_trades").notNull().default(0), // Total auto-trades opened
@@ -445,6 +448,8 @@ export const updateAutoTradeSettingSchema = createInsertSchema(autoTradeSettings
   isEnabled: true,
   tradeUnits: true,
   symbol: true,
+  slTpMode: true,
+  stopLossValue: true,
   stopLossPips: true,
   takeProfitPips: true,
 }).partial();
