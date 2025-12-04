@@ -508,41 +508,20 @@ export async function registerRoutes(
       const rawData = await storage.getMarketDataByTimeRange(symbol, startDate, now);
       const intervalMs = intervalMinutes * 60 * 1000;
       
-      // For 1-minute interval, generate all expected slots with null for missing data
+      // For 1-minute interval, return only actual data (skip gaps)
       if (intervalMinutes === 1) {
-        const allSlots: any[] = [];
-        const startMs = Math.floor(startDate.getTime() / intervalMs) * intervalMs;
-        const endMs = Math.floor(now.getTime() / intervalMs) * intervalMs;
-        
-        // Create a map of existing data by timestamp
+        // Deduplicate by timestamp, keeping the latest entry for each minute
         const dataMap = new Map<number, typeof rawData[0]>();
         for (const candle of rawData) {
           const ts = Math.floor(new Date(candle.timestamp).getTime() / intervalMs) * intervalMs;
           dataMap.set(ts, candle);
         }
         
-        // Generate all time slots
-        for (let ts = startMs; ts <= endMs; ts += intervalMs) {
-          const existingCandle = dataMap.get(ts);
-          if (existingCandle) {
-            allSlots.push(existingCandle);
-          } else {
-            // Return null entry for missing data
-            allSlots.push({
-              id: null,
-              symbol,
-              timestamp: new Date(ts).toISOString(),
-              open: null,
-              high: null,
-              low: null,
-              close: null,
-              volume: null,
-              interval: "1min",
-            });
-          }
-        }
+        // Convert map to sorted array
+        const sortedCandles = Array.from(dataMap.values())
+          .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
         
-        return res.json(allSlots);
+        return res.json(sortedCandles);
       }
       
       // For larger intervals, aggregate and include null slots
@@ -589,20 +568,8 @@ export async function registerRoutes(
             volume,
             interval: `${intervalMinutes}min`,
           });
-        } else {
-          // Return null entry for missing data slot
-          allCandles.push({
-            id: null,
-            symbol,
-            timestamp: new Date(ts).toISOString(),
-            open: null,
-            high: null,
-            low: null,
-            close: null,
-            volume: null,
-            interval: `${intervalMinutes}min`,
-          });
         }
+        // Skip null entries for missing data slots - chart handles gaps gracefully
       }
       
       res.json(allCandles);
