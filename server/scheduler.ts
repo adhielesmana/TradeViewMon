@@ -5,6 +5,54 @@ import { marketDataService } from "./market-data-service";
 import { wsService } from "./websocket";
 import { generateAiSuggestion, toInsertSuggestion, evaluateSuggestion } from "./ai-suggestion-engine";
 
+// Pip value for each symbol (1 pip = this amount in price)
+// Standard forex pip values based on instrument type
+function getPipValue(symbol: string): number {
+  switch (symbol) {
+    case "XAUUSD": return 0.10;      // Gold: 1 pip = $0.10
+    case "XAGUSD": return 0.01;      // Silver: 1 pip = $0.01
+    case "BTCUSD": return 1.00;      // Bitcoin: 1 pip = $1.00
+    case "DXY": return 0.01;         // Dollar Index: 1 pip = 0.01
+    case "SPX": return 0.10;         // S&P 500: 1 pip = 0.10
+    case "USOIL": return 0.01;       // Crude Oil: 1 pip = $0.01
+    case "GDX": return 0.01;         // Gold Miners ETF: 1 pip = $0.01
+    case "GDXJ": return 0.01;        // Junior Gold Miners: 1 pip = $0.01
+    case "NEM": return 0.01;         // Newmont: 1 pip = $0.01
+    case "US10Y": return 0.01;       // 10-Year Treasury: 1 pip = 0.01
+    default: return 0.01;            // Default: 1 pip = $0.01
+  }
+}
+
+// Calculate stop loss and take profit prices from pips
+function calculateSlTpPrices(
+  entryPrice: number,
+  tradeType: 'BUY' | 'SELL',
+  stopLossPips: number | null,
+  takeProfitPips: number | null,
+  symbol: string
+): { stopLoss: number | undefined; takeProfit: number | undefined } {
+  const pipValue = getPipValue(symbol);
+  
+  let stopLoss: number | undefined;
+  let takeProfit: number | undefined;
+  
+  if (stopLossPips && stopLossPips > 0) {
+    const slDistance = stopLossPips * pipValue;
+    stopLoss = tradeType === 'BUY' 
+      ? entryPrice - slDistance 
+      : entryPrice + slDistance;
+  }
+  
+  if (takeProfitPips && takeProfitPips > 0) {
+    const tpDistance = takeProfitPips * pipValue;
+    takeProfit = tradeType === 'BUY' 
+      ? entryPrice + tpDistance 
+      : entryPrice - tpDistance;
+  }
+  
+  return { stopLoss, takeProfit };
+}
+
 const TIMEFRAMES = [
   { name: "1min", minutes: 1, dataPoints: 60, stepsAhead: 1 },
   { name: "5min", minutes: 5, dataPoints: 100, stepsAhead: 1 },
@@ -562,16 +610,25 @@ class Scheduler {
           // Use the trade units directly as quantity
           const quantity = tradeUnits;
           
-          // Open the trade with isAutoTrade flag
+          // Calculate stop loss and take profit from pips
           const tradeType = suggestion.decision as 'BUY' | 'SELL';
+          const { stopLoss, takeProfit } = calculateSlTpPrices(
+            currentPrice,
+            tradeType,
+            settings.stopLossPips,
+            settings.takeProfitPips,
+            settings.symbol
+          );
+          
+          // Open the trade with isAutoTrade flag and SL/TP
           const result = await storage.openDemoTrade(
             settings.userId,
             settings.symbol,
             tradeType,
             currentPrice,
             quantity,
-            undefined, // stopLoss
-            undefined, // takeProfit
+            stopLoss,
+            takeProfit,
             true // isAutoTrade
           );
           
@@ -579,7 +636,9 @@ class Scheduler {
             // Record the auto-trade
             await storage.recordAutoTrade(settings.userId, suggestion.decision);
             
-            console.log(`[AutoTrade] Executed ${tradeType} trade for user ${settings.userId}: ${quantity.toFixed(6)} ${settings.symbol} @ $${currentPrice.toFixed(2)}`);
+            const slStr = stopLoss ? `SL: $${stopLoss.toFixed(2)}` : 'No SL';
+            const tpStr = takeProfit ? `TP: $${takeProfit.toFixed(2)}` : 'No TP';
+            console.log(`[AutoTrade] Executed ${tradeType} trade for user ${settings.userId}: ${quantity.toFixed(6)} ${settings.symbol} @ $${currentPrice.toFixed(2)} | ${slStr} | ${tpStr}`);
             
             // Broadcast auto-trade event via WebSocket
             wsService.broadcast({
