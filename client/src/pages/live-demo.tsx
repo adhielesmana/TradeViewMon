@@ -252,9 +252,11 @@ export default function LiveDemo() {
   const [isAutoTradeSettingsOpen, setIsAutoTradeSettingsOpen] = useState(false);
   const [autoTradeUnits, setAutoTradeUnits] = useState("");
   const [autoTradeSymbol, setAutoTradeSymbol] = useState("");
+  const [autoTradeStopLossPips, setAutoTradeStopLossPips] = useState("");
+  const [autoTradeTakeProfitPips, setAutoTradeTakeProfitPips] = useState("");
 
   const autoTradeMutation = useMutation({
-    mutationFn: (data: { isEnabled?: boolean; tradeUnits?: number; symbol?: string }) =>
+    mutationFn: (data: { isEnabled?: boolean; tradeUnits?: number; symbol?: string; stopLossPips?: number; takeProfitPips?: number }) =>
       apiRequest("PATCH", "/api/demo/auto-trade", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/auto-trade"] });
@@ -804,6 +806,8 @@ export default function LiveDemo() {
               if (open && autoTradeSettings) {
                 setAutoTradeUnits(autoTradeSettings.tradeUnits.toString());
                 setAutoTradeSymbol(autoTradeSettings.symbol);
+                setAutoTradeStopLossPips(autoTradeSettings.stopLossPips?.toString() || "50");
+                setAutoTradeTakeProfitPips(autoTradeSettings.takeProfitPips?.toString() || "100");
               }
             }}>
               <DialogTrigger asChild>
@@ -849,6 +853,38 @@ export default function LiveDemo() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Stop Loss (Pips)</Label>
+                      <Input
+                        type="number"
+                        value={autoTradeStopLossPips}
+                        onChange={(e) => setAutoTradeStopLossPips(e.target.value)}
+                        placeholder="50"
+                        min="0"
+                        step="1"
+                        data-testid="input-auto-trade-stop-loss-pips"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        0 = disabled
+                      </p>
+                    </div>
+                    <div>
+                      <Label>Take Profit (Pips)</Label>
+                      <Input
+                        type="number"
+                        value={autoTradeTakeProfitPips}
+                        onChange={(e) => setAutoTradeTakeProfitPips(e.target.value)}
+                        placeholder="100"
+                        min="0"
+                        step="1"
+                        data-testid="input-auto-trade-take-profit-pips"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        0 = disabled
+                      </p>
+                    </div>
+                  </div>
                   {autoTradeSettings && (
                     <div className="bg-muted/50 p-3 rounded-md space-y-1 text-sm">
                       <div className="flex justify-between">
@@ -880,10 +916,14 @@ export default function LiveDemo() {
                   <Button
                     onClick={() => {
                       const units = parseFloat(autoTradeUnits);
+                      const slPips = parseFloat(autoTradeStopLossPips) || 0;
+                      const tpPips = parseFloat(autoTradeTakeProfitPips) || 0;
                       if (units >= 0.01 && autoTradeSymbol) {
                         autoTradeMutation.mutate({ 
                           tradeUnits: units, 
-                          symbol: autoTradeSymbol 
+                          symbol: autoTradeSymbol,
+                          stopLossPips: slPips > 0 ? slPips : undefined,
+                          takeProfitPips: tpPips > 0 ? tpPips : undefined,
                         });
                         setIsAutoTradeSettingsOpen(false);
                       }
@@ -917,6 +957,14 @@ export default function LiveDemo() {
             <div>
               <span className="text-muted-foreground">Auto-Trades:</span>{" "}
               <span className="font-medium">{openAutoTradeCount}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">SL:</span>{" "}
+              <span className="font-medium text-red-500">{autoTradeSettings?.stopLossPips || 0} pips</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">TP:</span>{" "}
+              <span className="font-medium text-green-500">{autoTradeSettings?.takeProfitPips || 0} pips</span>
             </div>
           </div>
           {(autoTradeSettings?.closedAutoTrades || 0) > 0 && (
