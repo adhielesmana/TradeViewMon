@@ -252,11 +252,11 @@ export default function LiveDemo() {
   const [isAutoTradeSettingsOpen, setIsAutoTradeSettingsOpen] = useState(false);
   const [autoTradeUnits, setAutoTradeUnits] = useState("");
   const [autoTradeSymbol, setAutoTradeSymbol] = useState("");
-  const [autoTradeStopLossPips, setAutoTradeStopLossPips] = useState("");
-  const [autoTradeTakeProfitPips, setAutoTradeTakeProfitPips] = useState("");
+  const [autoTradeSlTpMode, setAutoTradeSlTpMode] = useState<"pips" | "percentage">("pips");
+  const [autoTradeStopLossValue, setAutoTradeStopLossValue] = useState("");
 
   const autoTradeMutation = useMutation({
-    mutationFn: (data: { isEnabled?: boolean; tradeUnits?: number; symbol?: string; stopLossPips?: number; takeProfitPips?: number }) =>
+    mutationFn: (data: { isEnabled?: boolean; tradeUnits?: number; symbol?: string; slTpMode?: string; stopLossValue?: number }) =>
       apiRequest("PATCH", "/api/demo/auto-trade", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/auto-trade"] });
@@ -806,8 +806,8 @@ export default function LiveDemo() {
               if (open && autoTradeSettings) {
                 setAutoTradeUnits(autoTradeSettings.tradeUnits.toString());
                 setAutoTradeSymbol(autoTradeSettings.symbol);
-                setAutoTradeStopLossPips(autoTradeSettings.stopLossPips?.toString() || "50");
-                setAutoTradeTakeProfitPips(autoTradeSettings.takeProfitPips?.toString() || "100");
+                setAutoTradeSlTpMode((autoTradeSettings.slTpMode as "pips" | "percentage") || "pips");
+                setAutoTradeStopLossValue(autoTradeSettings.stopLossValue?.toString() || "1");
               }
             }}>
               <DialogTrigger asChild>
@@ -853,36 +853,69 @@ export default function LiveDemo() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-3">
                     <div>
-                      <Label>Stop Loss (Pips)</Label>
-                      <Input
-                        type="number"
-                        value={autoTradeStopLossPips}
-                        onChange={(e) => setAutoTradeStopLossPips(e.target.value)}
-                        placeholder="50"
-                        min="0"
-                        step="1"
-                        data-testid="input-auto-trade-stop-loss-pips"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        0 = disabled
-                      </p>
+                      <Label>SL/TP Mode</Label>
+                      <div className="flex gap-4 mt-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="slTpMode"
+                            value="pips"
+                            checked={autoTradeSlTpMode === "pips"}
+                            onChange={() => {
+                              setAutoTradeSlTpMode("pips");
+                              setAutoTradeStopLossValue("1");
+                            }}
+                            className="w-4 h-4"
+                            data-testid="radio-sl-tp-mode-pips"
+                          />
+                          <span className="text-sm">Pips</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="slTpMode"
+                            value="percentage"
+                            checked={autoTradeSlTpMode === "percentage"}
+                            onChange={() => {
+                              setAutoTradeSlTpMode("percentage");
+                              setAutoTradeStopLossValue("1");
+                            }}
+                            className="w-4 h-4"
+                            data-testid="radio-sl-tp-mode-percentage"
+                          />
+                          <span className="text-sm">Percentage</span>
+                        </label>
+                      </div>
                     </div>
-                    <div>
-                      <Label>Take Profit (Pips)</Label>
-                      <Input
-                        type="number"
-                        value={autoTradeTakeProfitPips}
-                        onChange={(e) => setAutoTradeTakeProfitPips(e.target.value)}
-                        placeholder="100"
-                        min="0"
-                        step="1"
-                        data-testid="input-auto-trade-take-profit-pips"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        0 = disabled
-                      </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Stop Loss ({autoTradeSlTpMode === "pips" ? "Pips" : "%"})</Label>
+                        <Input
+                          type="number"
+                          value={autoTradeStopLossValue}
+                          onChange={(e) => setAutoTradeStopLossValue(e.target.value)}
+                          placeholder={autoTradeSlTpMode === "pips" ? "1" : "1"}
+                          min="0"
+                          step={autoTradeSlTpMode === "pips" ? "1" : "0.1"}
+                          data-testid="input-auto-trade-stop-loss"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Default: {autoTradeSlTpMode === "pips" ? "1 pip" : "1%"}
+                        </p>
+                      </div>
+                      <div>
+                        <Label>Take Profit ({autoTradeSlTpMode === "pips" ? "Pips" : "%"})</Label>
+                        <div className="h-9 flex items-center px-3 bg-muted rounded-md border">
+                          <span className="text-sm font-medium">
+                            {(parseFloat(autoTradeStopLossValue) || 0) * 2} {autoTradeSlTpMode === "pips" ? "pips" : "%"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Auto: 1:2 ratio (2x SL)
+                        </p>
+                      </div>
                     </div>
                   </div>
                   {autoTradeSettings && (
@@ -916,14 +949,13 @@ export default function LiveDemo() {
                   <Button
                     onClick={() => {
                       const units = parseFloat(autoTradeUnits);
-                      const slPips = parseFloat(autoTradeStopLossPips) || 0;
-                      const tpPips = parseFloat(autoTradeTakeProfitPips) || 0;
+                      const slValue = parseFloat(autoTradeStopLossValue) || 0;
                       if (units >= 0.01 && autoTradeSymbol) {
                         autoTradeMutation.mutate({ 
                           tradeUnits: units, 
                           symbol: autoTradeSymbol,
-                          stopLossPips: slPips > 0 ? slPips : undefined,
-                          takeProfitPips: tpPips > 0 ? tpPips : undefined,
+                          slTpMode: autoTradeSlTpMode,
+                          stopLossValue: slValue > 0 ? slValue : 1,
                         });
                         setIsAutoTradeSettingsOpen(false);
                       }
@@ -960,11 +992,15 @@ export default function LiveDemo() {
             </div>
             <div>
               <span className="text-muted-foreground">SL:</span>{" "}
-              <span className="font-medium text-red-500">{autoTradeSettings?.stopLossPips || 0} pips</span>
+              <span className="font-medium text-red-500">
+                {autoTradeSettings?.stopLossValue || 1} {autoTradeSettings?.slTpMode === "percentage" ? "%" : "pips"}
+              </span>
             </div>
             <div>
               <span className="text-muted-foreground">TP:</span>{" "}
-              <span className="font-medium text-green-500">{autoTradeSettings?.takeProfitPips || 0} pips</span>
+              <span className="font-medium text-green-500">
+                {(autoTradeSettings?.stopLossValue || 1) * 2} {autoTradeSettings?.slTpMode === "percentage" ? "%" : "pips"}
+              </span>
             </div>
           </div>
           {(autoTradeSettings?.closedAutoTrades || 0) > 0 && (
