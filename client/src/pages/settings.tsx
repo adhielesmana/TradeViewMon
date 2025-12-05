@@ -9,14 +9,17 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, Key, CheckCircle, AlertCircle, Info, Loader2, Eye, EyeOff } from "lucide-react";
+import { Settings, Key, CheckCircle, AlertCircle, Info, Loader2, Eye, EyeOff, Bot } from "lucide-react";
+
+interface ApiKeyStatus {
+  isConfigured: boolean;
+  source: string;
+  maskedValue: string | null;
+}
 
 interface SettingsData {
-  finnhubApiKey: {
-    isConfigured: boolean;
-    source: string;
-    maskedValue: string | null;
-  };
+  finnhubApiKey: ApiKeyStatus;
+  openaiApiKey: ApiKeyStatus;
 }
 
 export default function SettingsPage() {
@@ -31,11 +34,8 @@ export default function SettingsPage() {
 
   const updateKeyMutation = useMutation({
     mutationFn: async (newApiKey: string) => {
-      const response = await apiRequest("/api/settings/finnhub-key", {
-        method: "POST",
-        body: JSON.stringify({ apiKey: newApiKey }),
-      });
-      return response as { success: boolean; message: string };
+      const response = await apiRequest("POST", "/api/settings/finnhub-key", { apiKey: newApiKey });
+      return response.json() as Promise<{ success: boolean; message: string }>;
     },
     onSuccess: (data) => {
       toast({
@@ -207,6 +207,82 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader>
+            <div className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-blue-500" />
+              <CardTitle>OpenAI API Key</CardTitle>
+            </div>
+            <CardDescription>
+              Required for AI-enhanced auto-trading filter. Get an API key from{" "}
+              <a
+                href="https://platform.openai.com/api-keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+                data-testid="link-openai"
+              >
+                platform.openai.com
+              </a>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Status:</span>
+              {settings?.openaiApiKey?.isConfigured ? (
+                <Badge variant="default" className="gap-1 bg-blue-500">
+                  <CheckCircle className="h-3 w-3" />
+                  Configured
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  Not Configured
+                </Badge>
+              )}
+            </div>
+
+            {settings?.openaiApiKey?.isConfigured && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Source:</span>
+                <Badge variant="outline">Environment Variable</Badge>
+                {settings.openaiApiKey.maskedValue && (
+                  <span className="font-mono text-muted-foreground">{settings.openaiApiKey.maskedValue}</span>
+                )}
+              </div>
+            )}
+
+            <Separator />
+
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                {settings?.openaiApiKey?.isConfigured ? (
+                  <>
+                    OpenAI API key is configured via environment variable.
+                    AI-enhanced auto-trading filter is available in the Live Demo page.
+                  </>
+                ) : (
+                  <>
+                    To enable AI features, set the <code className="bg-muted px-1 rounded">AI_INTEGRATIONS_OPENAI_API_KEY</code> environment variable.
+                    Without it, auto-trading will use technical analysis only.
+                  </>
+                )}
+              </AlertDescription>
+            </Alert>
+
+            {!settings?.openaiApiKey?.isConfigured && (
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p className="font-medium">How to configure:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>On Replit: Uses AI integration automatically</li>
+                  <li>Self-hosted: Add to <code className="bg-muted px-1 rounded">.env.production</code></li>
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Data Sources</CardTitle>
             <CardDescription>Current data providers for each instrument</CardDescription>
           </CardHeader>
@@ -227,6 +303,30 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <span className="text-sm">US10Y</span>
                 <Badge variant="secondary">Simulated</Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>AI Features Status</CardTitle>
+            <CardDescription>Current availability of AI-powered features</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm">AI Auto-Trading Filter</span>
+                <Badge variant={settings?.openaiApiKey?.isConfigured ? "default" : "secondary"}>
+                  {settings?.openaiApiKey?.isConfigured ? "Available" : "Disabled"}
+                </Badge>
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <span className="text-sm">AI Market Analysis</span>
+                <Badge variant={settings?.openaiApiKey?.isConfigured ? "default" : "secondary"}>
+                  {settings?.openaiApiKey?.isConfigured ? "Available" : "Disabled"}
+                </Badge>
               </div>
             </div>
           </CardContent>

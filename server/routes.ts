@@ -1241,10 +1241,21 @@ export async function registerRoutes(
   app.get("/api/settings", requireAuth, requireRole(["superadmin"]), async (req, res) => {
     try {
       // Get Finnhub API key status from service
-      const keyStatus = marketDataService.getFinnhubKeyStatus();
+      const finnhubKeyStatus = marketDataService.getFinnhubKeyStatus();
+      
+      // Get OpenAI API key status (environment variable only - secure)
+      const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      const openaiKeyStatus = {
+        isConfigured: !!openaiKey && openaiKey !== "not-configured",
+        source: openaiKey ? "environment" : "not_set",
+        maskedValue: openaiKey && openaiKey !== "not-configured" 
+          ? `****${openaiKey.slice(-4)}` 
+          : null
+      };
       
       res.json({
-        finnhubApiKey: keyStatus
+        finnhubApiKey: finnhubKeyStatus,
+        openaiApiKey: openaiKeyStatus
       });
     } catch (error) {
       console.error("Error getting settings:", error);
