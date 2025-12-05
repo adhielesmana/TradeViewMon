@@ -48,7 +48,7 @@ FINNHUB_API_KEY=
 # OpenAI API Key for AI Trading Features
 # Required for AI-enhanced auto-trading and market analysis
 # Get your API key from: https://platform.openai.com/api-keys
-AI_INTEGRATIONS_OPENAI_API_KEY=
+OPENAI_API_KEY=
 EOF
 
 chmod 600 $ENV_FILE
@@ -62,7 +62,7 @@ log_warn ""
 log_warn "  1. FINNHUB_API_KEY (optional) - For real-time stock data"
 log_warn "     Get free key: https://finnhub.io/"
 log_warn ""
-log_warn "  2. AI_INTEGRATIONS_OPENAI_API_KEY (required for AI features)"
+log_warn "  2. OPENAI_API_KEY (required for AI features)"
 log_warn "     Required for AI-enhanced auto-trading"
 log_warn "     Get your key: https://platform.openai.com/api-keys"
 log_warn ""

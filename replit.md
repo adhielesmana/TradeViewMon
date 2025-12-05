@@ -253,4 +253,9 @@ chmod +x deploy/*.sh
 - `DATABASE_URL` - PostgreSQL connection string
 - `SESSION_SECRET` - Secure session encryption key (also used for API key encryption)
 - `FINNHUB_API_KEY` - Finnhub API key for stock data (optional, can be configured via Settings UI)
-- `AI_INTEGRATIONS_OPENAI_API_KEY` - OpenAI API key for AI-enhanced trading (optional, can be configured via Settings UI)
+- `OPENAI_API_KEY` - OpenAI API key for AI-enhanced trading (optional, can be configured via Settings UI)
+
+**Note on OpenAI Integration:**
+- For self-hosted deployments, use the standard `OPENAI_API_KEY` environment variable
+- For Replit deployments, the app also supports `AI_INTEGRATIONS_OPENAI_API_KEY` (Replit's managed integration)
+- Priority: `OPENAI_API_KEY` > `AI_INTEGRATIONS_OPENAI_API_KEY` > database (Settings page)

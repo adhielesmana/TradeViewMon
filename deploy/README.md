@@ -71,7 +71,7 @@ SESSION_SECRET=your-secure-secret-key
 FINNHUB_API_KEY=your-finnhub-api-key
 
 # Required for AI-enhanced auto-trading features
-AI_INTEGRATIONS_OPENAI_API_KEY=your-openai-api-key
+OPENAI_API_KEY=your-openai-api-key
 ```
 
 ### API Keys Required
@@ -79,10 +79,12 @@ AI_INTEGRATIONS_OPENAI_API_KEY=your-openai-api-key
 | Key | Required | Purpose |
 |-----|----------|---------|
 | `SESSION_SECRET` | Yes | Session encryption (auto-generated) |
-| `AI_INTEGRATIONS_OPENAI_API_KEY` | Yes* | AI-enhanced auto-trading filter |
+| `OPENAI_API_KEY` | Yes* | AI-enhanced auto-trading filter |
 | `FINNHUB_API_KEY` | No | Real-time stock data for GDX, SPX, etc. |
 
 *Required if using AI-enhanced auto-trading. Get your key at: https://platform.openai.com/api-keys
+
+**Note**: The app also supports `AI_INTEGRATIONS_OPENAI_API_KEY` for Replit deployments, but for self-hosted production deployments, use the standard `OPENAI_API_KEY` environment variable.
 
 ## Using Docker Compose
 

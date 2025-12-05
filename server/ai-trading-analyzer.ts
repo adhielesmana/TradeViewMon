@@ -9,13 +9,19 @@ let cachedOpenAIClient: OpenAI | null = null;
 let cachedApiKey: string | null = null;
 
 async function getOpenAIKey(): Promise<string | null> {
-  // Environment variable takes precedence
-  const envKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  if (envKey && envKey !== "not-configured") {
-    return envKey;
+  // Check for standard OPENAI_API_KEY first (self-hosted deployments)
+  const standardKey = process.env.OPENAI_API_KEY;
+  if (standardKey && standardKey !== "not-configured") {
+    return standardKey;
   }
   
-  // Check database for encrypted key
+  // Check for Replit's managed OpenAI integration
+  const replitKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  if (replitKey && replitKey !== "not-configured") {
+    return replitKey;
+  }
+  
+  // Check database for encrypted key (configured via Settings page)
   try {
     const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
     if (encryptedKey) {
@@ -26,6 +32,15 @@ async function getOpenAIKey(): Promise<string | null> {
   }
   
   return null;
+}
+
+function getOpenAIBaseURL(): string | undefined {
+  // If using Replit's integration, use their base URL
+  if (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL) {
+    return process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  }
+  // For self-hosted or standard OpenAI key, use default OpenAI API
+  return undefined; // OpenAI SDK will use https://api.openai.com/v1 by default
 }
 
 async function getOpenAIClient(): Promise<OpenAI | null> {
@@ -44,19 +59,27 @@ async function getOpenAIClient(): Promise<OpenAI | null> {
   
   // Create new client with updated key
   cachedApiKey = apiKey;
+  const baseURL = getOpenAIBaseURL();
   cachedOpenAIClient = new OpenAI({
-    baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    baseURL: baseURL,
     apiKey: apiKey
   });
+  
+  console.log(`[AI Analyzer] OpenAI client initialized (using ${baseURL ? 'Replit proxy' : 'direct OpenAI API'})`);
   
   return cachedOpenAIClient;
 }
 
 // Check for OpenAI API key on startup (async check happens on first use)
-const envKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-if (!envKey || envKey === "not-configured") {
+const standardKey = process.env.OPENAI_API_KEY;
+const replitKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+if (standardKey && standardKey !== "not-configured") {
+  console.log("[AI Analyzer] Using OPENAI_API_KEY environment variable (self-hosted mode)");
+} else if (replitKey && replitKey !== "not-configured") {
+  console.log("[AI Analyzer] Using Replit's managed OpenAI integration");
+} else {
   console.log("[AI Analyzer] OpenAI API key not in environment - will check database on first use");
-  console.log("[AI Analyzer] Configure via Settings page or set AI_INTEGRATIONS_OPENAI_API_KEY");
+  console.log("[AI Analyzer] Configure via Settings page or set OPENAI_API_KEY environment variable");
 }
 
 export interface AITradingAnalysis {
