@@ -9,7 +9,7 @@ import { backtestingEngine, type BacktestConfig } from "./backtesting";
 import { authenticateUser, seedSuperadmin, seedTestUsers, findUserById, findUserByUsername, createUser } from "./auth";
 import type { SafeUser } from "@shared/schema";
 import { predictionEngine } from "./prediction-engine";
-import { generateUnifiedSignal, convertToLegacyIndicatorSignal, convertToMultiFactorAnalysis } from "./unified-signal-generator";
+import { generateUnifiedSignal, convertToLegacyIndicatorSignal, convertToMultiFactorAnalysis, detectAllCandlestickPatterns } from "./unified-signal-generator";
 import { encrypt, decrypt, maskApiKey } from "./encryption";
 import { z } from "zod";
 
@@ -678,6 +678,39 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error calculating indicators:", error);
       res.status(500).json({ error: "Failed to calculate indicators" });
+    }
+  });
+
+  app.get("/api/market/patterns", async (req, res) => {
+    try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
+      const timeframe = (req.query.timeframe as string) || "3h-1min";
+      
+      await ensureHistoricalData(symbol);
+      
+      let candleCount = 180;
+      if (timeframe === "1h-1min") {
+        candleCount = 60;
+      } else if (timeframe === "3h-1min") {
+        candleCount = 180;
+      } else if (timeframe === "6h-5min") {
+        candleCount = 72;
+      }
+      
+      const data = await storage.getRecentMarketData(symbol, candleCount);
+      
+      if (data.length === 0) {
+        return res.json({
+          patterns: [],
+          trend: "sideways"
+        });
+      }
+
+      const result = detectAllCandlestickPatterns(data);
+      res.json(result);
+    } catch (error) {
+      console.error("Error detecting candlestick patterns:", error);
+      res.status(500).json({ error: "Failed to detect patterns" });
     }
   });
 

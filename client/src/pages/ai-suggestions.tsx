@@ -15,13 +15,25 @@ import {
   XCircle,
   BarChart3,
   Zap,
-  RefreshCw
+  RefreshCw,
+  CandlestickChart as CandlestickIcon,
+  AlertTriangle
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useSymbol } from "@/lib/symbol-context";
 import { useWebSocket, type WSMessage } from "@/hooks/use-websocket";
 import { queryClient } from "@/lib/queryClient";
-import type { AiSuggestionAccuracyStats } from "@shared/schema";
+import type { AiSuggestionAccuracyStats, MarketData } from "@shared/schema";
+import { CandlestickChart, type TimeframeOption } from "@/components/candlestick-chart";
+
+interface CandlestickPattern {
+  name: string;
+  type: "bullish" | "bearish" | "neutral";
+  strength: number;
+  description: string;
+  candleIndex: number;
+  timestamp: string;
+}
 
 interface SuggestionReason {
   indicator: string;
@@ -109,6 +121,7 @@ export default function AiSuggestions() {
   const { currentSymbol } = useSymbol();
   const symbol = currentSymbol.symbol;
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [chartTimeframe] = useState<TimeframeOption>("3h-1min");
 
   const handleWSMessage = useCallback((message: WSMessage) => {
     const matchesSymbol = !message.symbol || message.symbol === symbol;
@@ -116,12 +129,17 @@ export default function AiSuggestions() {
     if (message.type === "suggestion_update" && matchesSymbol) {
       queryClient.invalidateQueries({ queryKey: ["/api/suggestions/latest", { symbol }] });
       queryClient.invalidateQueries({ queryKey: ["/api/suggestions/recent", { symbol, limit: 10 }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/market/candles", { symbol, timeframe: chartTimeframe }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/market/patterns", { symbol, timeframe: chartTimeframe }] });
       setLastUpdate(new Date());
     } else if (message.type === "suggestion_accuracy_update" && matchesSymbol) {
       queryClient.invalidateQueries({ queryKey: ["/api/suggestions/accuracy", { symbol }] });
       queryClient.invalidateQueries({ queryKey: ["/api/suggestions/recent", { symbol, limit: 10 }] });
+    } else if (message.type === "market_update" && matchesSymbol) {
+      queryClient.invalidateQueries({ queryKey: ["/api/market/candles", { symbol, timeframe: chartTimeframe }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/market/patterns", { symbol, timeframe: chartTimeframe }] });
     }
-  }, [symbol]);
+  }, [symbol, chartTimeframe]);
 
   useWebSocket({
     symbol,
@@ -140,6 +158,16 @@ export default function AiSuggestions() {
 
   const { data: accuracyStats, isLoading: isLoadingAccuracy } = useQuery<AiSuggestionAccuracyStats>({
     queryKey: ["/api/suggestions/accuracy", { symbol }],
+    refetchInterval: 60000,
+  });
+
+  const { data: candleData, isLoading: isLoadingCandles } = useQuery<MarketData[]>({
+    queryKey: ["/api/market/candles", { symbol, timeframe: chartTimeframe }],
+    refetchInterval: 60000,
+  });
+
+  const { data: patternData } = useQuery<{ patterns: CandlestickPattern[]; trend: string }>({
+    queryKey: ["/api/market/patterns", { symbol, timeframe: chartTimeframe }],
     refetchInterval: 60000,
   });
 
@@ -339,6 +367,92 @@ export default function AiSuggestions() {
           </CardContent>
         </Card>
       )}
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <CandlestickChart
+            data={candleData || []}
+            isLoading={isLoadingCandles}
+            symbol={symbol}
+            timeframe={chartTimeframe}
+            onTimeframeChange={() => {}}
+            height={400}
+          />
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CandlestickIcon className="h-5 w-5" />
+              Candlestick Patterns
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {patternData && patternData.patterns && patternData.patterns.length > 0 ? (
+              <div className="space-y-3">
+                <div className="text-sm text-muted-foreground mb-4">
+                  Current Trend: <Badge variant="outline" className="ml-2 capitalize">{patternData.trend}</Badge>
+                </div>
+                {patternData.patterns.map((pattern, index) => (
+                  <div 
+                    key={index} 
+                    className={`p-3 rounded-lg border ${
+                      pattern.type === "bullish" 
+                        ? "bg-green-500/10 border-green-500/30" 
+                        : pattern.type === "bearish"
+                        ? "bg-red-500/10 border-red-500/30"
+                        : "bg-yellow-500/10 border-yellow-500/30"
+                    }`}
+                    data-testid={`pattern-${pattern.name.toLowerCase().replace(/\s+/g, '-')}-${index}`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`font-medium ${
+                        pattern.type === "bullish" ? "text-green-500" 
+                        : pattern.type === "bearish" ? "text-red-500" 
+                        : "text-yellow-500"
+                      }`}>
+                        {pattern.name}
+                      </span>
+                      <Badge 
+                        variant={pattern.type === "bullish" ? "default" : pattern.type === "bearish" ? "destructive" : "secondary"}
+                        className="text-xs"
+                      >
+                        {pattern.type}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{pattern.description}</p>
+                    {pattern.timestamp && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {format(new Date(pattern.timestamp), "HH:mm:ss")}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-1 mt-2">
+                      <span className="text-xs text-muted-foreground">Strength:</span>
+                      {[...Array(5)].map((_, i) => (
+                        <div 
+                          key={i} 
+                          className={`w-2 h-2 rounded-full ${
+                            i < pattern.strength 
+                              ? pattern.type === "bullish" ? "bg-green-500" 
+                                : pattern.type === "bearish" ? "bg-red-500" 
+                                : "bg-yellow-500"
+                              : "bg-muted"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No significant patterns detected</p>
+                <p className="text-xs mt-1">Patterns are scanned across the last 3 hours</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid gap-6 md:grid-cols-3">
         <Card>

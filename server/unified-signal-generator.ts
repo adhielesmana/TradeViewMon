@@ -41,6 +41,8 @@ export interface CandlestickPattern {
   type: "bullish" | "bearish" | "neutral";
   strength: number;
   description: string;
+  candleIndex?: number;
+  timestamp?: string;
 }
 
 const WEIGHTS = {
@@ -189,88 +191,244 @@ function detectCandlestickPatterns(candles: MarketData[]): CandlestickPattern[] 
   if (candles.length < 3) return [];
   
   const patterns: CandlestickPattern[] = [];
-  const trend = detectTrend(candles, 10);
-  const currentCandle = candles[candles.length - 1];
-  const { body, totalRange, upperWick, lowerWick } = getCandleMetrics(currentCandle);
+  const scanLength = Math.min(20, candles.length);
   
-  if (totalRange === 0) return [];
-  
-  const bodyRatio = body / totalRange;
-  const lowerWickRatio = lowerWick / totalRange;
-  const upperWickRatio = upperWick / totalRange;
-  
-  if (bodyRatio < 0.35 && lowerWickRatio > 0.5 && upperWickRatio < 0.15) {
-    if (trend === "downtrend" || trend === "sideways") {
-      patterns.push({
-        name: "Hammer",
-        type: "bullish",
-        strength: trend === "downtrend" ? 3 : 2,
-        description: "Hammer pattern - potential bullish reversal"
-      });
-    } else if (trend === "uptrend") {
-      patterns.push({
-        name: "Hanging Man",
-        type: "bearish",
-        strength: 2,
-        description: "Hanging Man pattern - momentum may be weakening"
-      });
-    }
-  }
-  
-  if (bodyRatio < 0.35 && upperWickRatio > 0.5 && lowerWickRatio < 0.15) {
-    if (trend === "uptrend" || trend === "sideways") {
-      patterns.push({
-        name: "Shooting Star",
-        type: "bearish",
-        strength: trend === "uptrend" ? 3 : 2,
-        description: "Shooting Star pattern - potential bearish reversal"
-      });
-    }
-  }
-  
-  if (bodyRatio < 0.1) {
-    patterns.push({
-      name: "Doji",
-      type: "neutral",
-      strength: 2,
-      description: "Doji - market indecision, potential trend change"
-    });
-  }
-  
-  if (candles.length >= 2) {
-    const prev = candles[candles.length - 2];
-    const curr = candles[candles.length - 1];
-    const prevMetrics = getCandleMetrics(prev);
-    const currMetrics = getCandleMetrics(curr);
+  for (let i = candles.length - scanLength; i < candles.length; i++) {
+    if (i < 1) continue;
     
-    if (prevMetrics.isBearish && currMetrics.isBullish) {
-      if (curr.open < prev.close && curr.close > prev.open && currMetrics.body > prevMetrics.body * 1.2) {
-        if (trend === "downtrend" || trend === "sideways") {
+    const localTrend = detectTrend(candles.slice(0, i + 1), 10);
+    const currentCandle = candles[i];
+    const { body, totalRange, upperWick, lowerWick, isBullish, isBearish } = getCandleMetrics(currentCandle);
+    
+    if (totalRange === 0) continue;
+    
+    const bodyRatio = body / totalRange;
+    const lowerWickRatio = lowerWick / totalRange;
+    const upperWickRatio = upperWick / totalRange;
+    const timestamp = currentCandle.timestamp?.toString();
+    
+    if (bodyRatio < 0.40 && lowerWickRatio > 0.45 && upperWickRatio < 0.20) {
+      if (localTrend === "downtrend" || localTrend === "sideways") {
+        patterns.push({
+          name: "Hammer",
+          type: "bullish",
+          strength: localTrend === "downtrend" ? 4 : 3,
+          description: "Hammer pattern - potential bullish reversal with strong buying pressure",
+          candleIndex: i,
+          timestamp
+        });
+      } else if (localTrend === "uptrend") {
+        patterns.push({
+          name: "Hanging Man",
+          type: "bearish",
+          strength: 3,
+          description: "Hanging Man pattern - uptrend may be losing momentum",
+          candleIndex: i,
+          timestamp
+        });
+      }
+    }
+    
+    if (bodyRatio < 0.40 && upperWickRatio > 0.45 && lowerWickRatio < 0.20) {
+      if (localTrend === "uptrend" || localTrend === "sideways") {
+        patterns.push({
+          name: "Shooting Star",
+          type: "bearish",
+          strength: localTrend === "uptrend" ? 4 : 3,
+          description: "Shooting Star pattern - potential bearish reversal with selling pressure",
+          candleIndex: i,
+          timestamp
+        });
+      } else if (localTrend === "downtrend") {
+        patterns.push({
+          name: "Inverted Hammer",
+          type: "bullish",
+          strength: 3,
+          description: "Inverted Hammer - potential bullish reversal",
+          candleIndex: i,
+          timestamp
+        });
+      }
+    }
+    
+    if (bodyRatio < 0.15) {
+      const dragonfly = lowerWickRatio > 0.6 && upperWickRatio < 0.1;
+      const gravestone = upperWickRatio > 0.6 && lowerWickRatio < 0.1;
+      
+      if (dragonfly) {
+        patterns.push({
+          name: "Dragonfly Doji",
+          type: localTrend === "downtrend" ? "bullish" : "neutral",
+          strength: 3,
+          description: "Dragonfly Doji - bullish reversal potential after downtrend",
+          candleIndex: i,
+          timestamp
+        });
+      } else if (gravestone) {
+        patterns.push({
+          name: "Gravestone Doji",
+          type: localTrend === "uptrend" ? "bearish" : "neutral",
+          strength: 3,
+          description: "Gravestone Doji - bearish reversal potential after uptrend",
+          candleIndex: i,
+          timestamp
+        });
+      } else {
+        patterns.push({
+          name: "Doji",
+          type: "neutral",
+          strength: 2,
+          description: "Doji - market indecision, watch for directional move",
+          candleIndex: i,
+          timestamp
+        });
+      }
+    }
+    
+    if (i >= 1) {
+      const prev = candles[i - 1];
+      const curr = candles[i];
+      const prevMetrics = getCandleMetrics(prev);
+      const currMetrics = getCandleMetrics(curr);
+      
+      if (prevMetrics.isBearish && currMetrics.isBullish) {
+        const engulfing = curr.close > prev.open && curr.open <= prev.close;
+        if (engulfing && currMetrics.body > prevMetrics.body * 1.1) {
           patterns.push({
             name: "Bullish Engulfing",
             type: "bullish",
-            strength: 3,
-            description: "Bullish Engulfing - strong potential upward reversal"
+            strength: localTrend === "downtrend" ? 5 : 4,
+            description: "Bullish Engulfing - strong upward reversal signal",
+            candleIndex: i,
+            timestamp
           });
         }
       }
-    }
-    
-    if (prevMetrics.isBullish && currMetrics.isBearish) {
-      if (curr.open > prev.close && curr.close < prev.open && currMetrics.body > prevMetrics.body * 1.2) {
-        if (trend === "uptrend" || trend === "sideways") {
+      
+      if (prevMetrics.isBullish && currMetrics.isBearish) {
+        const engulfing = curr.close < prev.open && curr.open >= prev.close;
+        if (engulfing && currMetrics.body > prevMetrics.body * 1.1) {
           patterns.push({
             name: "Bearish Engulfing",
             type: "bearish",
-            strength: 3,
-            description: "Bearish Engulfing - strong potential downward reversal"
+            strength: localTrend === "uptrend" ? 5 : 4,
+            description: "Bearish Engulfing - strong downward reversal signal",
+            candleIndex: i,
+            timestamp
+          });
+        }
+      }
+      
+      if (currMetrics.isBullish && currMetrics.body > prevMetrics.totalRange * 2) {
+        patterns.push({
+          name: "Bullish Marubozu",
+          type: "bullish",
+          strength: 4,
+          description: "Bullish Marubozu - strong buying pressure with minimal wicks",
+          candleIndex: i,
+          timestamp
+        });
+      }
+      
+      if (currMetrics.isBearish && currMetrics.body > prevMetrics.totalRange * 2) {
+        patterns.push({
+          name: "Bearish Marubozu",
+          type: "bearish",
+          strength: 4,
+          description: "Bearish Marubozu - strong selling pressure with minimal wicks",
+          candleIndex: i,
+          timestamp
+        });
+      }
+    }
+    
+    if (i >= 2) {
+      const c1 = candles[i - 2];
+      const c2 = candles[i - 1];
+      const c3 = candles[i];
+      const m1 = getCandleMetrics(c1);
+      const m2 = getCandleMetrics(c2);
+      const m3 = getCandleMetrics(c3);
+      
+      if (m1.isBullish && m3.isBullish && m2.body / m2.totalRange < 0.3) {
+        const starLower = Math.min(c2.open, c2.close) < Math.min(c1.close, c3.open);
+        if (starLower && localTrend === "uptrend") {
+          patterns.push({
+            name: "Evening Star",
+            type: "bearish",
+            strength: 4,
+            description: "Evening Star - three-candle bearish reversal pattern",
+            candleIndex: i,
+            timestamp
+          });
+        }
+      }
+      
+      if (m1.isBearish && m3.isBullish && m2.body / m2.totalRange < 0.3) {
+        const starHigher = Math.max(c2.open, c2.close) > Math.max(c1.close, c3.open);
+        if (starHigher && localTrend === "downtrend") {
+          patterns.push({
+            name: "Morning Star",
+            type: "bullish",
+            strength: 4,
+            description: "Morning Star - three-candle bullish reversal pattern",
+            candleIndex: i,
+            timestamp
+          });
+        }
+      }
+      
+      if (m1.isBullish && m2.isBullish && m3.isBullish) {
+        const rising = c1.close < c2.close && c2.close < c3.close;
+        if (rising) {
+          patterns.push({
+            name: "Three White Soldiers",
+            type: "bullish",
+            strength: 5,
+            description: "Three White Soldiers - strong bullish continuation",
+            candleIndex: i,
+            timestamp
+          });
+        }
+      }
+      
+      if (m1.isBearish && m2.isBearish && m3.isBearish) {
+        const falling = c1.close > c2.close && c2.close > c3.close;
+        if (falling) {
+          patterns.push({
+            name: "Three Black Crows",
+            type: "bearish",
+            strength: 5,
+            description: "Three Black Crows - strong bearish continuation",
+            candleIndex: i,
+            timestamp
           });
         }
       }
     }
   }
   
-  return patterns;
+  const uniquePatterns = patterns.reduce((acc, pattern) => {
+    const key = `${pattern.name}-${pattern.candleIndex}`;
+    if (!acc.has(key)) {
+      acc.set(key, pattern);
+    }
+    return acc;
+  }, new Map<string, CandlestickPattern>());
+  
+  return Array.from(uniquePatterns.values())
+    .sort((a, b) => (b.candleIndex || 0) - (a.candleIndex || 0))
+    .slice(0, 10);
+}
+
+export function detectAllCandlestickPatterns(candles: MarketData[]): {
+  patterns: CandlestickPattern[];
+  trend: string;
+} {
+  const patterns = detectCandlestickPatterns(candles);
+  const lookback = Math.min(Math.max(20, Math.floor(candles.length * 0.2)), 50);
+  const trend = candles.length >= lookback ? detectTrend(candles, lookback) : "sideways";
+  return { patterns, trend };
 }
 
 function calculateIndicators(candles: MarketData[]): TechnicalIndicatorValues {
