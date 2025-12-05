@@ -101,6 +101,69 @@ if ! check_docker; then
     exit 1
 fi
 
+# ============================================
+# STEP 1: Shutdown existing applications
+# ============================================
+log_info "Shutting down existing applications..."
+
+# Kill any process using the target port (works without Docker)
+kill_port_process() {
+    local port=$1
+    local pids=""
+    
+    # Try lsof first (more reliable)
+    if command -v lsof &>/dev/null; then
+        pids=$(lsof -ti:$port 2>/dev/null || true)
+    fi
+    
+    # Fallback to ss if lsof didn't find anything
+    if [ -z "$pids" ] && command -v ss &>/dev/null; then
+        pids=$(ss -tlnp 2>/dev/null | grep ":$port " | sed 's/.*pid=//' | cut -d',' -f1 | sort -u || true)
+    fi
+    
+    if [ -n "$pids" ]; then
+        log_warn "Found processes using port $port: $pids"
+        for pid in $pids; do
+            if [ -n "$pid" ] && [ "$pid" -gt 0 ] 2>/dev/null; then
+                log_info "Killing process $pid on port $port..."
+                kill -9 $pid 2>/dev/null || true
+            fi
+        done
+        sleep 2
+    else
+        log_info "No processes found on port $port"
+    fi
+}
+
+# Kill processes on default port and common alternatives
+kill_port_process $DEFAULT_PORT
+kill_port_process 5001
+kill_port_process 5002
+
+# Stop any existing TradeViewMon containers
+log_info "Stopping TradeViewMon containers..."
+docker compose -f deploy/docker-compose.yml down 2>/dev/null || true
+docker stop tradeviewmon 2>/dev/null || true
+docker stop tradeviewmon-db 2>/dev/null || true
+docker rm -f tradeviewmon 2>/dev/null || true
+docker rm -f tradeviewmon-db 2>/dev/null || true
+
+# Also stop any Docker containers that might be using these ports
+for port in $DEFAULT_PORT 5001 5002; do
+    container=$(docker ps --filter "publish=$port" --format "{{.ID}}" 2>/dev/null || true)
+    if [ -n "$container" ]; then
+        log_info "Stopping Docker container using port $port..."
+        docker stop $container 2>/dev/null || true
+        docker rm -f $container 2>/dev/null || true
+    fi
+done
+
+# Clean up any dangling containers with tradeviewmon in the name
+docker ps -a --filter "name=tradeviewmon" --format "{{.ID}}" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
+
+log_info "Existing applications stopped"
+echo ""
+
 # Git pull to get latest code (unless skipped)
 if [ "$SKIP_PULL" = false ] && [ -d ".git" ]; then
     log_info "Pulling latest code from repository..."
@@ -208,15 +271,6 @@ fi
 # Export variables for docker-compose
 export APP_PORT
 export USE_HTTPS
-
-log_info "Stopping existing containers..."
-docker compose -f deploy/docker-compose.yml down 2>/dev/null || true
-
-# Force remove any leftover containers with the same names
-docker stop tradeviewmon 2>/dev/null || true
-docker stop tradeviewmon-db 2>/dev/null || true
-docker rm -f tradeviewmon 2>/dev/null || true
-docker rm -f tradeviewmon-db 2>/dev/null || true
 
 log_info "Building and starting services..."
 docker compose -f deploy/docker-compose.yml up -d --build

@@ -41,12 +41,23 @@ chmod +x deploy/*.sh
 
 ## What the Script Does
 
-1. **Port Detection**: Checks if port 5000 (or specified port) is in use by Docker or other services
-2. **Auto Port Selection**: If the port is busy, automatically finds the next available port
-3. **Nginx Check**: Detects if Nginx is installed, installs if missing
-4. **Docker Check**: Detects if Docker is installed, installs if missing
-5. **SSL Setup**: Uses Certbot to obtain and configure Let's Encrypt SSL certificates
-6. **App Deployment**: Builds and runs the application in a Docker container
+1. **Automatic Shutdown**: Stops all existing TradeViewMon containers and kills any processes using ports 5000-5002
+2. **Port Detection**: Checks if port 5000 (or specified port) is in use by Docker or other services
+3. **Auto Port Selection**: If the port is busy, automatically finds the next available port
+4. **Nginx Check**: Detects if Nginx is installed
+5. **Docker Check**: Detects if Docker is installed
+6. **SSL Setup**: Uses Certbot to obtain and configure Let's Encrypt SSL certificates
+7. **App Deployment**: Builds and runs the application in a Docker container
+
+### Automatic Shutdown Details
+
+When you run `./deploy/deploy.sh`, it automatically:
+- Stops and removes existing `tradeviewmon` and `tradeviewmon-db` Docker containers
+- Kills any process running on ports 5000, 5001, and 5002
+- Removes any Docker containers publishing to those ports
+- Cleans up dangling containers with "tradeviewmon" in the name
+
+This ensures a clean deployment without port conflicts.
 
 ## Environment Variables
 
