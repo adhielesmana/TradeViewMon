@@ -187,7 +187,7 @@ export async function analyzeWithAI(
     const prompt = buildAnalysisPrompt(context);
     
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",  // Cheapest option: $0.15/1M input, $0.60/1M output
+      model: "gpt-5-nano",  // Cheapest option: $0.05/1M input, $0.40/1M output
       messages: [
         {
           role: "system",
