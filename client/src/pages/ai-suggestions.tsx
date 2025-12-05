@@ -314,17 +314,27 @@ export default function AiSuggestions() {
             <div className="mt-6">
               <div className="text-sm font-medium mb-3">Analysis Breakdown</div>
               <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                {latestSuggestion.reasoning.map((reason, index) => (
-                  <div key={index} className="flex items-center gap-2 p-2 rounded-md bg-background/50">
-                    <Badge variant={getSignalBadgeVariant(reason.signal)} className="capitalize">
-                      {reason.signal}
-                    </Badge>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{reason.indicator}</div>
-                      <div className="text-xs text-muted-foreground truncate">{reason.description}</div>
+                {(() => {
+                  // Filter to show only one candlestick pattern (the latest)
+                  const patternReasons = latestSuggestion.reasoning.filter(r => r.indicator === "Candlestick Patterns");
+                  const nonPatternReasons = latestSuggestion.reasoning.filter(r => r.indicator !== "Candlestick Patterns");
+                  const latestPatternReason = patternReasons.length > 0 ? patternReasons[patternReasons.length - 1] : null;
+                  const displayReasons = latestPatternReason 
+                    ? [...nonPatternReasons, latestPatternReason]
+                    : nonPatternReasons;
+                  
+                  return displayReasons.map((reason, index) => (
+                    <div key={index} className="flex items-center gap-2 p-2 rounded-md bg-background/50">
+                      <Badge variant={getSignalBadgeVariant(reason.signal)} className="capitalize">
+                        {reason.signal}
+                      </Badge>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{reason.indicator}</div>
+                        <div className="text-xs text-muted-foreground truncate">{reason.description}</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ));
+                })()}
               </div>
             </div>
 
