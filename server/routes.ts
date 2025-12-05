@@ -10,6 +10,7 @@ import { authenticateUser, seedSuperadmin, seedTestUsers, findUserById, findUser
 import type { SafeUser } from "@shared/schema";
 import { predictionEngine } from "./prediction-engine";
 import { generateUnifiedSignal, convertToLegacyIndicatorSignal, convertToMultiFactorAnalysis } from "./unified-signal-generator";
+import { encrypt, decrypt, maskApiKey } from "./encryption";
 import { z } from "zod";
 
 const updateUserSchema = z.object({
@@ -1243,15 +1244,48 @@ export async function registerRoutes(
       // Get Finnhub API key status from service
       const finnhubKeyStatus = marketDataService.getFinnhubKeyStatus();
       
-      // Get OpenAI API key status (environment variable only - secure)
-      const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-      const openaiKeyStatus = {
-        isConfigured: !!openaiKey && openaiKey !== "not-configured",
-        source: openaiKey ? "environment" : "not_set",
-        maskedValue: openaiKey && openaiKey !== "not-configured" 
-          ? `****${openaiKey.slice(-4)}` 
-          : null
-      };
+      // Get OpenAI API key status - check environment first, then database
+      const envOpenaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      let openaiKeyStatus;
+      
+      if (envOpenaiKey && envOpenaiKey !== "not-configured") {
+        // Environment variable takes precedence
+        openaiKeyStatus = {
+          isConfigured: true,
+          source: "environment",
+          maskedValue: maskApiKey(envOpenaiKey),
+          isEditable: false
+        };
+      } else {
+        // Check database for encrypted key
+        const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
+        if (encryptedKey) {
+          try {
+            const decryptedKey = decrypt(encryptedKey);
+            openaiKeyStatus = {
+              isConfigured: true,
+              source: "database",
+              maskedValue: maskApiKey(decryptedKey),
+              isEditable: true
+            };
+          } catch (e) {
+            console.error("Failed to decrypt OpenAI key:", e);
+            openaiKeyStatus = {
+              isConfigured: false,
+              source: "not_set",
+              maskedValue: null,
+              isEditable: true
+            };
+          }
+        } else {
+          openaiKeyStatus = {
+            isConfigured: false,
+            source: "not_set",
+            maskedValue: null,
+            isEditable: true
+          };
+        }
+      }
       
       res.json({
         finnhubApiKey: finnhubKeyStatus,
@@ -1288,6 +1322,70 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error saving Finnhub API key:", error);
       res.status(500).json({ error: "Failed to save API key" });
+    }
+  });
+
+  app.post("/api/settings/openai-key", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      // Check if environment variable is set - if so, don't allow database override
+      const envKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      if (envKey && envKey !== "not-configured") {
+        return res.status(400).json({ 
+          error: "OpenAI API key is set via environment variable and cannot be changed through the UI. Remove the environment variable to use the database setting." 
+        });
+      }
+      
+      const { apiKey } = req.body;
+      
+      if (typeof apiKey !== "string") {
+        return res.status(400).json({ error: "API key must be a string" });
+      }
+      
+      const trimmedKey = apiKey.trim();
+      
+      if (!trimmedKey) {
+        return res.status(400).json({ error: "API key cannot be empty" });
+      }
+      
+      // Validate OpenAI key format (should start with sk-)
+      if (!trimmedKey.startsWith("sk-")) {
+        return res.status(400).json({ error: "Invalid OpenAI API key format. Key should start with 'sk-'" });
+      }
+      
+      // Encrypt and save to database
+      const encryptedKey = encrypt(trimmedKey);
+      await storage.setSetting("OPENAI_API_KEY_ENCRYPTED", encryptedKey);
+      
+      res.json({ 
+        success: true, 
+        message: "OpenAI API key saved successfully. AI-enhanced auto-trading is now available."
+      });
+    } catch (error) {
+      console.error("Error saving OpenAI API key:", error);
+      res.status(500).json({ error: "Failed to save API key" });
+    }
+  });
+
+  app.delete("/api/settings/openai-key", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      // Check if environment variable is set
+      const envKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      if (envKey && envKey !== "not-configured") {
+        return res.status(400).json({ 
+          error: "OpenAI API key is set via environment variable and cannot be removed through the UI." 
+        });
+      }
+      
+      // Remove from database
+      await storage.setSetting("OPENAI_API_KEY_ENCRYPTED", null);
+      
+      res.json({ 
+        success: true, 
+        message: "OpenAI API key removed. AI-enhanced auto-trading will fall back to technical analysis only."
+      });
+    } catch (error) {
+      console.error("Error removing OpenAI API key:", error);
+      res.status(500).json({ error: "Failed to remove API key" });
     }
   });
 
