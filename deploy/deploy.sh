@@ -263,6 +263,17 @@ for i in {1..30}; do
     sleep 2
 done
 
+# ============================================
+# STEP: Sync Database Schema
+# ============================================
+log_info "Syncing database schema..."
+if docker exec tradeviewmon npm run db:push 2>/dev/null; then
+    log_info "Database schema synced successfully"
+else
+    log_warn "Database schema sync failed or not needed. You may need to run manually:"
+    log_warn "  docker exec tradeviewmon npm run db:push"
+fi
+
 # Configure Nginx if domain is provided
 if [ -n "$DOMAIN" ]; then
     if command -v nginx &> /dev/null; then
