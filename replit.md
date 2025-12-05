@@ -128,7 +128,9 @@ Preferred communication style: Simple, everyday language.
    - Persists across server restarts for seamless price flow
 
 6. **app_settings**: Application configuration
-   - Stores: key-value pairs for app settings (e.g., FINNHUB_API_KEY)
+   - Stores: key-value pairs for app settings (e.g., FINNHUB_API_KEY, OPENAI_API_KEY)
+   - API keys are encrypted at rest using AES-256-GCM before storage
+   - Encryption key derived from SESSION_SECRET using PBKDF2
    - API keys saved here persist across server restarts
    - Environment variables take precedence over database values
 
@@ -229,5 +231,6 @@ chmod +x deploy/*.sh
 
 **Environment Variables Required:**
 - `DATABASE_URL` - PostgreSQL connection string
-- `SESSION_SECRET` - Secure session encryption key
-- `FINNHUB_API_KEY` - Finnhub API key for stock data (optional)
+- `SESSION_SECRET` - Secure session encryption key (also used for API key encryption)
+- `FINNHUB_API_KEY` - Finnhub API key for stock data (optional, can be configured via Settings UI)
+- `AI_INTEGRATIONS_OPENAI_API_KEY` - OpenAI API key for AI-enhanced trading (optional, can be configured via Settings UI)
