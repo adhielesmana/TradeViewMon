@@ -58,7 +58,20 @@ PORT=5000
 DATABASE_URL=postgresql://user:password@host:5432/database
 SESSION_SECRET=your-secure-secret-key
 FINNHUB_API_KEY=your-finnhub-api-key
+
+# Required for AI-enhanced auto-trading features
+AI_INTEGRATIONS_OPENAI_API_KEY=your-openai-api-key
 ```
+
+### API Keys Required
+
+| Key | Required | Purpose |
+|-----|----------|---------|
+| `SESSION_SECRET` | Yes | Session encryption (auto-generated) |
+| `AI_INTEGRATIONS_OPENAI_API_KEY` | Yes* | AI-enhanced auto-trading filter |
+| `FINNHUB_API_KEY` | No | Real-time stock data for GDX, SPX, etc. |
+
+*Required if using AI-enhanced auto-trading. Get your key at: https://platform.openai.com/api-keys
 
 ## Using Docker Compose
 

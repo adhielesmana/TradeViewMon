@@ -2,10 +2,18 @@ import OpenAI from "openai";
 import type { MarketData } from "@shared/schema";
 import { generateUnifiedSignal, type UnifiedSignalResult } from "./unified-signal-generator";
 
+// Check for OpenAI API key on startup
+const hasOpenAIKey = !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+if (!hasOpenAIKey) {
+  console.warn("[AI Analyzer] WARNING: AI_INTEGRATIONS_OPENAI_API_KEY not configured");
+  console.warn("[AI Analyzer] AI-enhanced auto-trading will fall back to technical analysis");
+  console.warn("[AI Analyzer] To enable AI features, set this environment variable with your OpenAI API key");
+}
+
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "not-configured"
 });
 
 export interface AITradingAnalysis {

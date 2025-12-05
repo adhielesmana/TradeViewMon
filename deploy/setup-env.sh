@@ -42,8 +42,13 @@ POSTGRES_DB=tradeviewmon
 # Security
 SESSION_SECRET=$SESSION_SECRET
 
-# API Keys - Add your Finnhub API key here (copy from Replit secrets)
+# API Keys - Add your keys here
 FINNHUB_API_KEY=
+
+# OpenAI API Key for AI Trading Features
+# Required for AI-enhanced auto-trading and market analysis
+# Get your API key from: https://platform.openai.com/api-keys
+AI_INTEGRATIONS_OPENAI_API_KEY=
 EOF
 
 chmod 600 $ENV_FILE
@@ -52,10 +57,16 @@ log_info "Environment file created: $ENV_FILE"
 log_info ""
 log_info "Database will be automatically deployed via Docker"
 log_info ""
-log_warn "OPTIONAL: Add your Finnhub API key to .env.production"
-log_warn "  You can copy it from your Replit secrets and add it to the file:"
-log_warn "  nano .env.production"
-log_warn "  Then add your key to: FINNHUB_API_KEY=your_key_here"
+log_warn "IMPORTANT: Configure API keys in .env.production:"
+log_warn ""
+log_warn "  1. FINNHUB_API_KEY (optional) - For real-time stock data"
+log_warn "     Get free key: https://finnhub.io/"
+log_warn ""
+log_warn "  2. AI_INTEGRATIONS_OPENAI_API_KEY (required for AI features)"
+log_warn "     Required for AI-enhanced auto-trading"
+log_warn "     Get your key: https://platform.openai.com/api-keys"
+log_warn ""
+log_warn "  Edit the file: nano .env.production"
 log_info ""
 log_info "Ready to deploy! Run:"
 log_info "  ./deploy/deploy.sh --domain your-domain.com --email your@email.com"
