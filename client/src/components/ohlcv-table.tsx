@@ -79,7 +79,7 @@ export function OHLCVTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.map((candle, index) => {
+              {[...data].reverse().map((candle, index) => {
                 const change = candle.close - candle.open;
                 const changePercent = (change / candle.open) * 100;
                 const isPositive = change >= 0;

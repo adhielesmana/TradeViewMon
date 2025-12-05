@@ -7,7 +7,7 @@ import { technicalIndicators } from "./technical-indicators";
 import { wsService } from "./websocket";
 import { backtestingEngine, type BacktestConfig } from "./backtesting";
 import { authenticateUser, seedSuperadmin, seedTestUsers, findUserById, findUserByUsername, createUser } from "./auth";
-import type { SafeUser } from "@shared/schema";
+import type { SafeUser, InsertMarketData } from "@shared/schema";
 import { predictionEngine } from "./prediction-engine";
 import { generateUnifiedSignal, convertToLegacyIndicatorSignal, convertToMultiFactorAnalysis, detectAllCandlestickPatterns } from "./unified-signal-generator";
 import { encrypt, decrypt, maskApiKey } from "./encryption";
@@ -47,7 +47,7 @@ async function ensureHistoricalData(symbol: string): Promise<void> {
   console.log(`[Routes] Seeding historical data for ${symbol}...`);
   
   // Generate 1 hour of historical data for the symbol
-  const historicalData = await marketDataService.generateHistoricalData(1, symbol);
+  const historicalData: InsertMarketData[] = await marketDataService.generateHistoricalData(1, symbol);
   
   // Insert in batches
   const batchSize = 500;
@@ -58,7 +58,7 @@ async function ensureHistoricalData(symbol: string): Promise<void> {
   
   // Save price state
   if (historicalData.length > 0) {
-    const lastCandle = historicalData[historicalData.length - 1];
+    const lastCandle = historicalData[historicalData.length - 1] as InsertMarketData;
     await storage.upsertPriceState(symbol, lastCandle.open, lastCandle.close, lastCandle.timestamp);
   }
   
@@ -983,7 +983,7 @@ export async function registerRoutes(
           ))[0]?.timestamp
         : null;
       
-      const historicalData = await marketDataService.generateHistoricalData(days);
+      const historicalData: InsertMarketData[] = await marketDataService.generateHistoricalData(days);
       
       // Filter out data that already exists (compare by timestamp rounded to minute)
       const existingTimestamps = new Set(
@@ -994,8 +994,8 @@ export async function registerRoutes(
         )).map(d => new Date(d.timestamp).toISOString().slice(0, 16))
       );
       
-      const newData = historicalData.filter(d => 
-        !existingTimestamps.has(new Date(d.timestamp).toISOString().slice(0, 16))
+      const newData = historicalData.filter((d) => 
+        !existingTimestamps.has(new Date((d as InsertMarketData).timestamp).toISOString().slice(0, 16))
       );
       
       if (newData.length > 0) {
