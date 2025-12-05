@@ -81,6 +81,20 @@ Preferred communication style: Simple, everyday language.
 - Outputs: predicted price, direction (UP/DOWN/NEUTRAL), confidence score, and multi-factor analysis breakdown
 - Configurable match threshold (default 0.5%) for accuracy determination
 
+**AI Trading Analyzer** (`server/ai-trading-analyzer.ts`): Enhanced AI filter using GPT-5-nano for trade validation:
+- Receives complete Analysis Breakdown with 6 technical indicators:
+  - EMA Crossover: Status (BULLISH/BEARISH/NEUTRAL) + description
+  - RSI: Overbought/Oversold/Neutral zone with value
+  - MACD: Histogram direction and momentum
+  - Stochastic: %K/%D positioning
+  - Price Trend: 1-hour price movement
+  - Candlestick Patterns: Detected patterns
+- Counts bullish vs bearish vs neutral signals for context
+- Includes raw indicator values (EMA 12/26, RSI, MACD line/signal/histogram, Stochastic %K/%D, ATR)
+- Provides buy/sell targets from technical analysis
+- Strict decision rules: Only trades when LOW risk, signals agree, volatility < 0.8%
+- Model: gpt-5-nano ($0.05/1M input, $0.40/1M output - cheapest option)
+
 **Market Data Service**: Multi-provider abstracted service layer supporting:
 - **Gold-API.com Integration**: Free real-time prices for XAU (Gold), XAG (Silver), BTC (Bitcoin)
   - Endpoint: `https://api.gold-api.com/price/{symbol}`

@@ -295,44 +295,105 @@ function buildAnalysisPrompt(context: MarketContext): string {
   const { symbol, currentPrice, priceChange1h, priceChange24h, volatility, trend, technicalSignal } = context;
   
   const indicators = technicalSignal.indicators;
-  const reasons = technicalSignal.reasons.map(r => `- ${r.indicator}: ${r.description} (${r.signal})`).join("\n");
+  
+  // Build comprehensive Analysis Breakdown matching UI display
+  const emaSpread = indicators.ema12 - indicators.ema26;
+  const emaSpreadPct = (emaSpread / indicators.ema26) * 100;
+  const emaCrossStatus = Math.abs(emaSpreadPct) < 0.1 ? "NEUTRAL" : (emaSpreadPct > 0.1 ? "BULLISH" : "BEARISH");
+  const emaDescription = Math.abs(emaSpreadPct) < 0.1 
+    ? "EMA12 and EMA26 are converging" 
+    : (emaSpreadPct > 0.1 ? "EMA12 crossed above EMA26 (bullish)" : "EMA12 crossed below EMA26 (bearish)");
+  
+  const rsiStatus = indicators.rsi14 < 30 ? "BULLISH" : (indicators.rsi14 > 70 ? "BEARISH" : "NEUTRAL");
+  const rsiDescription = indicators.rsi14 < 30 
+    ? `RSI (${indicators.rsi14.toFixed(1)}) oversold - potential reversal up`
+    : (indicators.rsi14 > 70 
+        ? `RSI (${indicators.rsi14.toFixed(1)}) overbought - potential reversal down`
+        : `RSI (${indicators.rsi14.toFixed(1)}) in neutral zone`);
+  
+  const macdStatus = indicators.macdHistogram > 0.05 ? "BULLISH" : (indicators.macdHistogram < -0.05 ? "BEARISH" : "NEUTRAL");
+  const macdDescription = indicators.macdHistogram > 0.05
+    ? `MACD histogram positive (${indicators.macdHistogram.toFixed(3)}), momentum bullish`
+    : (indicators.macdHistogram < -0.05
+        ? `MACD histogram negative (${indicators.macdHistogram.toFixed(3)}), momentum bearish`
+        : `MACD histogram near zero (${indicators.macdHistogram.toFixed(3)}), no clear momentum`);
+  
+  const stochStatus = indicators.stochK < 20 ? "BULLISH" : (indicators.stochK > 80 ? "BEARISH" : "NEUTRAL");
+  const stochDescription = indicators.stochK < 20
+    ? `Stochastic %K (${indicators.stochK.toFixed(1)}) oversold zone`
+    : (indicators.stochK > 80
+        ? `Stochastic %K (${indicators.stochK.toFixed(1)}) overbought zone`
+        : `Stochastic %K (${indicators.stochK.toFixed(1)}) in neutral range`);
+  
+  const priceChangeStatus = priceChange1h > 0.5 ? "BULLISH" : (priceChange1h < -0.5 ? "BEARISH" : "NEUTRAL");
+  const priceDescription = Math.abs(priceChange1h) < 0.1
+    ? `Price relatively stable (${priceChange1h.toFixed(2)}%)`
+    : `Price ${priceChange1h > 0 ? 'up' : 'down'} ${Math.abs(priceChange1h).toFixed(2)}% in last hour`;
+  
+  // Detect candlestick patterns from signal reasons
+  const patternReason = technicalSignal.reasons.find(r => r.indicator === "Pattern");
+  const patternStatus = patternReason?.signal === "bullish" ? "BULLISH" : (patternReason?.signal === "bearish" ? "BEARISH" : "NEUTRAL");
+  const patternDescription = patternReason?.description || "No significant candlestick patterns detected";
+  
+  // Count bullish vs bearish signals for AI context
+  const analysisBreakdown = [
+    { name: "EMA Crossover", status: emaCrossStatus, description: emaDescription },
+    { name: "RSI", status: rsiStatus, description: rsiDescription },
+    { name: "MACD", status: macdStatus, description: macdDescription },
+    { name: "Stochastic", status: stochStatus, description: stochDescription },
+    { name: "Price Trend", status: priceChangeStatus, description: priceDescription },
+    { name: "Candlestick Patterns", status: patternStatus, description: patternDescription },
+  ];
+  
+  const bullishCount = analysisBreakdown.filter(a => a.status === "BULLISH").length;
+  const bearishCount = analysisBreakdown.filter(a => a.status === "BEARISH").length;
+  const neutralCount = analysisBreakdown.filter(a => a.status === "NEUTRAL").length;
+  
+  const breakdownText = analysisBreakdown.map(a => `  [${a.status}] ${a.name}: ${a.description}`).join("\n");
   
   return `Analyze this trading opportunity for ${symbol}:
 
 CURRENT MARKET STATE:
-- Price: $${currentPrice.toFixed(2)}
-- 1-Hour Change: ${priceChange1h.toFixed(2)}%
+- Current Price: $${currentPrice.toFixed(2)}
+- 1-Hour Change: ${priceChange1h >= 0 ? '+' : ''}${priceChange1h.toFixed(2)}%
+- 24-Hour Change: ${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}%
 - Volatility (1h): ${volatility.toFixed(3)}%
 - Overall Trend: ${trend}
 
-TECHNICAL INDICATORS:
-- EMA12: ${indicators.ema12.toFixed(2)} | EMA26: ${indicators.ema26.toFixed(2)}
+RAW TECHNICAL INDICATOR VALUES:
+- EMA 12/26: ${indicators.ema12.toFixed(2)} / ${indicators.ema26.toFixed(2)} (spread: ${emaSpread >= 0 ? '+' : ''}${emaSpread.toFixed(2)})
 - RSI(14): ${indicators.rsi14.toFixed(1)}
-- MACD Line: ${indicators.macdLine.toFixed(3)} | Signal: ${indicators.macdSignal.toFixed(3)} | Histogram: ${indicators.macdHistogram.toFixed(3)}
-- Stochastic %K: ${indicators.stochK.toFixed(1)}
-- ATR(14): ${indicators.atr.toFixed(2)}
+- MACD: Line ${indicators.macdLine.toFixed(3)} | Signal ${indicators.macdSignal.toFixed(3)} | Histogram ${indicators.macdHistogram.toFixed(3)}
+- Stochastic: %K ${indicators.stochK.toFixed(1)} | %D ${indicators.stochD.toFixed(1)}
+- ATR(14): ${indicators.atr.toFixed(2)} (average price movement)
 
-SIGNAL ANALYSIS:
-${reasons}
+ANALYSIS BREAKDOWN (${bullishCount} Bullish, ${bearishCount} Bearish, ${neutralCount} Neutral):
+${breakdownText}
 
-Technical Signal: ${technicalSignal.decision} (Confidence: ${technicalSignal.confidence}%)
-Bullish Score: ${technicalSignal.bullishScore} | Bearish Score: ${technicalSignal.bearishScore} | Net: ${technicalSignal.netScore}
+TECHNICAL SIGNAL SUMMARY:
+- Decision: ${technicalSignal.decision}
+- Confidence: ${technicalSignal.confidence}%
+- Bullish Score: ${technicalSignal.bullishScore} | Bearish Score: ${technicalSignal.bearishScore} | Net Score: ${technicalSignal.netScore}
+- Buy Target: ${technicalSignal.targets.buyTarget ? '$' + technicalSignal.targets.buyTarget.toFixed(2) : 'N/A'}
+- Sell Target: ${technicalSignal.targets.sellTarget ? '$' + technicalSignal.targets.sellTarget.toFixed(2) : 'N/A'}
 
-Provide your analysis in this exact JSON format:
+Based on all the above data, provide your trading analysis in this exact JSON format:
 {
   "direction": "BUY" or "SELL" or "HOLD",
-  "confidence": 0-100 (be conservative, only high confidence for clear setups),
+  "confidence": 0-100 (be conservative - only high confidence when multiple indicators align),
   "riskLevel": "LOW" or "MEDIUM" or "HIGH",
-  "reasoning": "Brief explanation of your decision",
-  "suggestedAction": "Specific action recommendation"
+  "reasoning": "Brief explanation referencing specific indicators that influenced your decision",
+  "suggestedAction": "Specific action recommendation with entry/exit context"
 }
 
-IMPORTANT RULES:
-1. Only recommend BUY/SELL if confidence >= 65%
-2. Assign HIGH risk if volatility > 0.5% or conflicting signals
-3. Prefer HOLD during sideways trends unless signals are very strong
-4. Consider if the move has already happened (avoid chasing)
-5. RSI extremes (>75 or <25) with diverging MACD = reversal risk`;
+DECISION RULES:
+1. HOLD if indicators are mixed (similar bullish/bearish count) - wait for clarity
+2. BUY only if: RSI not overbought, MACD positive or turning positive, price trend supports
+3. SELL only if: RSI not oversold, MACD negative or turning negative, price trend supports
+4. HIGH risk if: volatility > 0.5%, conflicting indicators, or extreme RSI with no confirmation
+5. LOW risk only if: 3+ indicators agree, moderate volatility, clear trend direction
+6. Consider if the move already happened - avoid chasing extended moves
+7. Weight MACD and EMA crossover heavily as primary trend indicators`;
 }
 
 function validateDirection(direction: string): "BUY" | "SELL" | "HOLD" {
