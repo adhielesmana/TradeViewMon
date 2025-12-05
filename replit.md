@@ -256,6 +256,7 @@ chmod +x deploy/*.sh
 - `OPENAI_API_KEY` - OpenAI API key for AI-enhanced trading (optional, can be configured via Settings UI)
 
 **Note on OpenAI Integration:**
-- For self-hosted deployments, use the standard `OPENAI_API_KEY` environment variable
-- For Replit deployments, the app also supports `AI_INTEGRATIONS_OPENAI_API_KEY` (Replit's managed integration)
-- Priority: `OPENAI_API_KEY` > `AI_INTEGRATIONS_OPENAI_API_KEY` > database (Settings page)
+- OpenAI API key is configured via the **Settings page** in the application UI (stored encrypted in database)
+- Database key takes priority over environment variables
+- Priority: database (Settings page) > `AI_INTEGRATIONS_OPENAI_API_KEY` (Replit) > `OPENAI_API_KEY` (env override)
+- No manual .env configuration needed for OpenAI - just use the Settings page after deployment

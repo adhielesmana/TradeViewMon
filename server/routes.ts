@@ -1244,50 +1244,24 @@ export async function registerRoutes(
       // Get Finnhub API key status from service
       const finnhubKeyStatus = marketDataService.getFinnhubKeyStatus();
       
-      // Get OpenAI API key status - check environment first, then database
-      // Priority: OPENAI_API_KEY (self-hosted) > AI_INTEGRATIONS_OPENAI_API_KEY (Replit) > database
-      const standardOpenaiKey = process.env.OPENAI_API_KEY;
+      // Get OpenAI API key status - database takes priority, then environment fallback
+      // Priority: database (Settings page) > AI_INTEGRATIONS_OPENAI_API_KEY (Replit) > OPENAI_API_KEY (env override)
       const replitOpenaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
       let openaiKeyStatus;
       
-      if (standardOpenaiKey && standardOpenaiKey !== "not-configured") {
-        // Standard OPENAI_API_KEY for self-hosted deployments
-        openaiKeyStatus = {
-          isConfigured: true,
-          source: "environment",
-          maskedValue: maskApiKey(standardOpenaiKey),
-          isEditable: false
-        };
-      } else if (replitOpenaiKey && replitOpenaiKey !== "not-configured") {
-        // Replit's managed OpenAI integration
-        openaiKeyStatus = {
-          isConfigured: true,
-          source: "environment",
-          maskedValue: maskApiKey(replitOpenaiKey),
-          isEditable: false
-        };
-      } else {
-        // Check database for encrypted key
-        const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
-        if (encryptedKey) {
-          try {
-            const decryptedKey = decrypt(encryptedKey);
-            openaiKeyStatus = {
-              isConfigured: true,
-              source: "database",
-              maskedValue: maskApiKey(decryptedKey),
-              isEditable: true
-            };
-          } catch (e) {
-            console.error("Failed to decrypt OpenAI key:", e);
-            openaiKeyStatus = {
-              isConfigured: false,
-              source: "not_set",
-              maskedValue: null,
-              isEditable: true
-            };
-          }
-        } else {
+      // Check database first (primary source via Settings page)
+      const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
+      if (encryptedKey) {
+        try {
+          const decryptedKey = decrypt(encryptedKey);
+          openaiKeyStatus = {
+            isConfigured: true,
+            source: "database",
+            maskedValue: maskApiKey(decryptedKey),
+            isEditable: true
+          };
+        } catch (e) {
+          console.error("Failed to decrypt OpenAI key:", e);
           openaiKeyStatus = {
             isConfigured: false,
             source: "not_set",
@@ -1295,6 +1269,22 @@ export async function registerRoutes(
             isEditable: true
           };
         }
+      } else if (replitOpenaiKey && replitOpenaiKey !== "not-configured") {
+        // Replit's managed OpenAI integration (fallback)
+        openaiKeyStatus = {
+          isConfigured: true,
+          source: "environment",
+          maskedValue: maskApiKey(replitOpenaiKey),
+          isEditable: true  // Can still override with database key
+        };
+      } else {
+        // No key configured anywhere
+        openaiKeyStatus = {
+          isConfigured: false,
+          source: "not_set",
+          maskedValue: null,
+          isEditable: true
+        };
       }
       
       res.json({
@@ -1337,14 +1327,8 @@ export async function registerRoutes(
 
   app.post("/api/settings/openai-key", requireAuth, requireRole(["superadmin"]), async (req, res) => {
     try {
-      // Check if environment variable is set - if so, don't allow database override
-      const standardKey = process.env.OPENAI_API_KEY;
-      const replitKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-      if ((standardKey && standardKey !== "not-configured") || (replitKey && replitKey !== "not-configured")) {
-        return res.status(400).json({ 
-          error: "OpenAI API key is set via environment variable and cannot be changed through the UI. Remove the environment variable to use the database setting." 
-        });
-      }
+      // Database key takes priority, so always allow saving via Settings UI
+      // This will override any environment variable since database is checked first
       
       const { apiKey } = req.body;
       
@@ -1379,16 +1363,7 @@ export async function registerRoutes(
 
   app.delete("/api/settings/openai-key", requireAuth, requireRole(["superadmin"]), async (req, res) => {
     try {
-      // Check if environment variable is set
-      const standardKey = process.env.OPENAI_API_KEY;
-      const replitKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-      if ((standardKey && standardKey !== "not-configured") || (replitKey && replitKey !== "not-configured")) {
-        return res.status(400).json({ 
-          error: "OpenAI API key is set via environment variable and cannot be removed through the UI." 
-        });
-      }
-      
-      // Remove from database
+      // Remove from database - this will fall back to environment variable if set
       await storage.setSetting("OPENAI_API_KEY_ENCRYPTED", null);
       
       res.json({ 

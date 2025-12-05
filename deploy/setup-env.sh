@@ -42,13 +42,13 @@ POSTGRES_DB=tradeviewmon
 # Security
 SESSION_SECRET=$SESSION_SECRET
 
-# API Keys - Add your keys here
+# API Keys - Add your keys here (optional - can also configure via Settings UI)
 FINNHUB_API_KEY=
 
-# OpenAI API Key for AI Trading Features
-# Required for AI-enhanced auto-trading and market analysis
-# Get your API key from: https://platform.openai.com/api-keys
-OPENAI_API_KEY=
+# OpenAI API Key - Configure via Settings page after deployment
+# The app reads the OpenAI key from the database (Settings page) by default
+# Only set this if you want to override the database setting
+# OPENAI_API_KEY=
 EOF
 
 chmod 600 $ENV_FILE
@@ -57,16 +57,15 @@ log_info "Environment file created: $ENV_FILE"
 log_info ""
 log_info "Database will be automatically deployed via Docker"
 log_info ""
-log_warn "IMPORTANT: Configure API keys in .env.production:"
+log_warn "OPTIONAL: Configure Finnhub API key in .env.production:"
 log_warn ""
-log_warn "  1. FINNHUB_API_KEY (optional) - For real-time stock data"
-log_warn "     Get free key: https://finnhub.io/"
+log_warn "  FINNHUB_API_KEY (optional) - For real-time stock data"
+log_warn "  Get free key: https://finnhub.io/"
 log_warn ""
-log_warn "  2. OPENAI_API_KEY (required for AI features)"
-log_warn "     Required for AI-enhanced auto-trading"
-log_warn "     Get your key: https://platform.openai.com/api-keys"
-log_warn ""
-log_warn "  Edit the file: nano .env.production"
+log_info "OpenAI API Key: Configure via Settings page after deployment"
+log_info "  1. Log in as superadmin"
+log_info "  2. Go to Settings page"
+log_info "  3. Enter your OpenAI key (encrypted and stored in database)"
 log_info ""
 log_info "Ready to deploy! Run:"
 log_info "  ./deploy/deploy.sh --domain your-domain.com --email your@email.com"

@@ -69,9 +69,6 @@ PORT=5000
 DATABASE_URL=postgresql://user:password@host:5432/database
 SESSION_SECRET=your-secure-secret-key
 FINNHUB_API_KEY=your-finnhub-api-key
-
-# Required for AI-enhanced auto-trading features
-OPENAI_API_KEY=your-openai-api-key
 ```
 
 ### API Keys Required
@@ -79,12 +76,24 @@ OPENAI_API_KEY=your-openai-api-key
 | Key | Required | Purpose |
 |-----|----------|---------|
 | `SESSION_SECRET` | Yes | Session encryption (auto-generated) |
-| `OPENAI_API_KEY` | Yes* | AI-enhanced auto-trading filter |
 | `FINNHUB_API_KEY` | No | Real-time stock data for GDX, SPX, etc. |
 
-*Required if using AI-enhanced auto-trading. Get your key at: https://platform.openai.com/api-keys
+### OpenAI API Key Configuration
 
-**Note**: The app also supports `AI_INTEGRATIONS_OPENAI_API_KEY` for Replit deployments, but for self-hosted production deployments, use the standard `OPENAI_API_KEY` environment variable.
+The OpenAI API key for AI-enhanced auto-trading is configured via the **Settings page** in the application UI, not through environment variables. 
+
+After deployment:
+1. Log in as superadmin
+2. Go to Settings page
+3. Enter your OpenAI API key
+4. The key is encrypted and stored securely in the database
+
+This approach means:
+- No need to edit `.env` files for OpenAI
+- Key persists in the database across deployments
+- Can be updated anytime through the UI
+
+Get your OpenAI key at: https://platform.openai.com/api-keys
 
 ## Using Docker Compose
 
