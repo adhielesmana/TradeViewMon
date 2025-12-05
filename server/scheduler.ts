@@ -24,31 +24,36 @@ function getPipValue(symbol: string): number {
 }
 
 // Calculate stop loss and take profit prices based on mode (pips or percentage)
-// Always uses 1:2 ratio (SL:TP)
+// Default 1:2 ratio (SL:TP) but allows custom TP value
 function calculateSlTpPrices(
   entryPrice: number,
   tradeType: 'BUY' | 'SELL',
   mode: string, // 'pips' or 'percentage'
   stopLossValue: number, // pips or percentage value
-  symbol: string
+  symbol: string,
+  takeProfitValue?: number // optional custom TP value (defaults to 2x SL)
 ): { stopLoss: number | undefined; takeProfit: number | undefined } {
   if (!stopLossValue || stopLossValue <= 0) {
     return { stopLoss: undefined, takeProfit: undefined };
   }
   
   let slDistance: number;
+  let tpDistance: number;
   
   if (mode === 'percentage') {
     // Calculate distance as percentage of entry price
     slDistance = entryPrice * (stopLossValue / 100);
+    // Use custom TP value or default to 2x SL
+    const effectiveTpValue = takeProfitValue && takeProfitValue > 0 ? takeProfitValue : stopLossValue * 2;
+    tpDistance = entryPrice * (effectiveTpValue / 100);
   } else {
     // Calculate distance using pips
     const pipValue = getPipValue(symbol);
     slDistance = stopLossValue * pipValue;
+    // Use custom TP value or default to 2x SL
+    const effectiveTpValue = takeProfitValue && takeProfitValue > 0 ? takeProfitValue : stopLossValue * 2;
+    tpDistance = effectiveTpValue * pipValue;
   }
-  
-  // Take profit is always 2x stop loss (1:2 ratio)
-  const tpDistance = slDistance * 2;
   
   let stopLoss: number;
   let takeProfit: number;
@@ -624,16 +629,18 @@ class Scheduler {
           // Use the trade units directly as quantity
           const quantity = tradeUnits;
           
-          // Calculate stop loss and take profit based on mode (pips/percentage) with 1:2 ratio
+          // Calculate stop loss and take profit based on mode (pips/percentage)
           const tradeType = suggestion.decision as 'BUY' | 'SELL';
           const slTpMode = settings.slTpMode || 'pips';
           const stopLossValue = settings.stopLossValue || 1;
+          const takeProfitValue = settings.takeProfitValue || stopLossValue * 2; // Default to 2x SL (1:2 ratio)
           const { stopLoss, takeProfit } = calculateSlTpPrices(
             currentPrice,
             tradeType,
             slTpMode,
             stopLossValue,
-            settings.symbol
+            settings.symbol,
+            takeProfitValue
           );
           
           // Open the trade with isAutoTrade flag and SL/TP

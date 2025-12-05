@@ -254,9 +254,10 @@ export default function LiveDemo() {
   const [autoTradeSymbol, setAutoTradeSymbol] = useState("");
   const [autoTradeSlTpMode, setAutoTradeSlTpMode] = useState<"pips" | "percentage">("pips");
   const [autoTradeStopLossValue, setAutoTradeStopLossValue] = useState("");
+  const [autoTradeTakeProfitValue, setAutoTradeTakeProfitValue] = useState("");
 
   const autoTradeMutation = useMutation({
-    mutationFn: (data: { isEnabled?: boolean; tradeUnits?: number; symbol?: string; slTpMode?: string; stopLossValue?: number }) =>
+    mutationFn: (data: { isEnabled?: boolean; tradeUnits?: number; symbol?: string; slTpMode?: string; stopLossValue?: number; takeProfitValue?: number }) =>
       apiRequest("PATCH", "/api/demo/auto-trade", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/auto-trade"] });
@@ -808,6 +809,7 @@ export default function LiveDemo() {
                 setAutoTradeSymbol(autoTradeSettings.symbol);
                 setAutoTradeSlTpMode((autoTradeSettings.slTpMode as "pips" | "percentage") || "pips");
                 setAutoTradeStopLossValue(autoTradeSettings.stopLossValue?.toString() || "1");
+                setAutoTradeTakeProfitValue(autoTradeSettings.takeProfitValue?.toString() || "2");
               }
             }}>
               <DialogTrigger asChild>
@@ -866,6 +868,7 @@ export default function LiveDemo() {
                             onChange={() => {
                               setAutoTradeSlTpMode("pips");
                               setAutoTradeStopLossValue("1");
+                              setAutoTradeTakeProfitValue("2");
                             }}
                             className="w-4 h-4"
                             data-testid="radio-sl-tp-mode-pips"
@@ -881,6 +884,7 @@ export default function LiveDemo() {
                             onChange={() => {
                               setAutoTradeSlTpMode("percentage");
                               setAutoTradeStopLossValue("1");
+                              setAutoTradeTakeProfitValue("2");
                             }}
                             className="w-4 h-4"
                             data-testid="radio-sl-tp-mode-percentage"
@@ -907,13 +911,17 @@ export default function LiveDemo() {
                       </div>
                       <div>
                         <Label>Take Profit ({autoTradeSlTpMode === "pips" ? "Pips" : "%"})</Label>
-                        <div className="h-9 flex items-center px-3 bg-muted rounded-md border">
-                          <span className="text-sm font-medium">
-                            {(parseFloat(autoTradeStopLossValue) || 0) * 2} {autoTradeSlTpMode === "pips" ? "pips" : "%"}
-                          </span>
-                        </div>
+                        <Input
+                          type="number"
+                          value={autoTradeTakeProfitValue}
+                          onChange={(e) => setAutoTradeTakeProfitValue(e.target.value)}
+                          placeholder={autoTradeSlTpMode === "pips" ? "2" : "2"}
+                          min="0"
+                          step={autoTradeSlTpMode === "pips" ? "1" : "0.1"}
+                          data-testid="input-auto-trade-take-profit"
+                        />
                         <p className="text-xs text-muted-foreground mt-1">
-                          Auto: 1:2 ratio (2x SL)
+                          Suggested: {(parseFloat(autoTradeStopLossValue) || 1) * 2} (1:2 ratio)
                         </p>
                       </div>
                     </div>
@@ -950,12 +958,14 @@ export default function LiveDemo() {
                     onClick={() => {
                       const units = parseFloat(autoTradeUnits);
                       const slValue = parseFloat(autoTradeStopLossValue) || 0;
+                      const tpValue = parseFloat(autoTradeTakeProfitValue) || 0;
                       if (units >= 0.01 && autoTradeSymbol) {
                         autoTradeMutation.mutate({ 
                           tradeUnits: units, 
                           symbol: autoTradeSymbol,
                           slTpMode: autoTradeSlTpMode,
                           stopLossValue: slValue > 0 ? slValue : 1,
+                          takeProfitValue: tpValue > 0 ? tpValue : (slValue > 0 ? slValue * 2 : 2),
                         });
                         setIsAutoTradeSettingsOpen(false);
                       }
@@ -999,7 +1009,7 @@ export default function LiveDemo() {
             <div>
               <span className="text-muted-foreground">TP:</span>{" "}
               <span className="font-medium text-green-500">
-                {(autoTradeSettings?.stopLossValue || 1) * 2} {autoTradeSettings?.slTpMode === "percentage" ? "%" : "pips"}
+                {autoTradeSettings?.takeProfitValue || (autoTradeSettings?.stopLossValue || 1) * 2} {autoTradeSettings?.slTpMode === "percentage" ? "%" : "pips"}
               </span>
             </div>
           </div>
