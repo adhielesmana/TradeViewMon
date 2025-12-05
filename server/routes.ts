@@ -1176,9 +1176,9 @@ export async function registerRoutes(
   app.patch("/api/demo/auto-trade", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId!;
-      const { isEnabled, tradeUnits, symbol } = req.body;
+      const { isEnabled, tradeUnits, symbol, slTpMode, stopLossValue } = req.body;
       
-      const updateData: { isEnabled?: boolean; tradeUnits?: number; symbol?: string } = {};
+      const updateData: { isEnabled?: boolean; tradeUnits?: number; symbol?: string; slTpMode?: string; stopLossValue?: number } = {};
       
       if (typeof isEnabled === "boolean") {
         updateData.isEnabled = isEnabled;
@@ -1190,6 +1190,14 @@ export async function registerRoutes(
       
       if (typeof symbol === "string" && symbol.length > 0) {
         updateData.symbol = symbol;
+      }
+      
+      if (typeof slTpMode === "string" && (slTpMode === "pips" || slTpMode === "percentage")) {
+        updateData.slTpMode = slTpMode;
+      }
+      
+      if (typeof stopLossValue === "number" && stopLossValue >= 0) {
+        updateData.stopLossValue = stopLossValue;
       }
       
       const settings = await storage.updateAutoTradeSettings(userId, updateData);
