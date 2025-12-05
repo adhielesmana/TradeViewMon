@@ -1,20 +1,63 @@
 import OpenAI from "openai";
 import type { MarketData } from "@shared/schema";
 import { generateUnifiedSignal, type UnifiedSignalResult } from "./unified-signal-generator";
+import { storage } from "./storage";
+import { decrypt } from "./encryption";
 
-// Check for OpenAI API key on startup
-const hasOpenAIKey = !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-if (!hasOpenAIKey) {
-  console.warn("[AI Analyzer] WARNING: AI_INTEGRATIONS_OPENAI_API_KEY not configured");
-  console.warn("[AI Analyzer] AI-enhanced auto-trading will fall back to technical analysis");
-  console.warn("[AI Analyzer] To enable AI features, set this environment variable with your OpenAI API key");
+// Cache for OpenAI client to avoid recreating on every call
+let cachedOpenAIClient: OpenAI | null = null;
+let cachedApiKey: string | null = null;
+
+async function getOpenAIKey(): Promise<string | null> {
+  // Environment variable takes precedence
+  const envKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  if (envKey && envKey !== "not-configured") {
+    return envKey;
+  }
+  
+  // Check database for encrypted key
+  try {
+    const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
+    if (encryptedKey) {
+      return decrypt(encryptedKey);
+    }
+  } catch (e) {
+    console.error("[AI Analyzer] Failed to retrieve OpenAI key from database:", e);
+  }
+  
+  return null;
 }
 
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "not-configured"
-});
+async function getOpenAIClient(): Promise<OpenAI | null> {
+  const apiKey = await getOpenAIKey();
+  
+  if (!apiKey) {
+    cachedOpenAIClient = null;
+    cachedApiKey = null;
+    return null;
+  }
+  
+  // Return cached client if key hasn't changed
+  if (cachedOpenAIClient && cachedApiKey === apiKey) {
+    return cachedOpenAIClient;
+  }
+  
+  // Create new client with updated key
+  cachedApiKey = apiKey;
+  cachedOpenAIClient = new OpenAI({
+    baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    apiKey: apiKey
+  });
+  
+  return cachedOpenAIClient;
+}
+
+// Check for OpenAI API key on startup (async check happens on first use)
+const envKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+if (!envKey || envKey === "not-configured") {
+  console.log("[AI Analyzer] OpenAI API key not in environment - will check database on first use");
+  console.log("[AI Analyzer] Configure via Settings page or set AI_INTEGRATIONS_OPENAI_API_KEY");
+}
 
 export interface AITradingAnalysis {
   shouldTrade: boolean;
@@ -104,6 +147,43 @@ export async function analyzeWithAI(
   const context = buildMarketContext(symbol, candles, technicalSignal);
   
   try {
+    // Get OpenAI client dynamically (checks env first, then database)
+    const openai = await getOpenAIClient();
+    
+    if (!openai) {
+      console.log("[AI Analyzer] No OpenAI API key configured");
+      
+      // No API key available - check if AI filter is required
+      if (minConfidence > 0) {
+        console.log("[AI Analyzer] AI unavailable and minConfidence is set - blocking trade for safety");
+        return {
+          shouldTrade: false,
+          direction: "HOLD",
+          confidence: 0,
+          reasoning: "AI analysis unavailable - no API key configured. Set key in Settings or environment.",
+          riskLevel: "HIGH",
+          suggestedAction: "Configure OpenAI API key in Settings to enable AI-enhanced trading",
+          technicalSignal,
+          aiEnhanced: false,
+        };
+      }
+      
+      // Fallback to technical analysis only when no AI confidence requirement is set
+      const fallbackConfidence = technicalSignal.confidence;
+      const shouldTrade = technicalSignal.decision !== "HOLD" && fallbackConfidence >= 50;
+      
+      return {
+        shouldTrade,
+        direction: technicalSignal.decision,
+        confidence: fallbackConfidence,
+        reasoning: "Using technical analysis (no OpenAI API key configured)",
+        riskLevel: fallbackConfidence >= 70 ? "LOW" : fallbackConfidence >= 50 ? "MEDIUM" : "HIGH",
+        suggestedAction: shouldTrade ? `Execute ${technicalSignal.decision} based on technical signals` : "Hold - low confidence",
+        technicalSignal,
+        aiEnhanced: false,
+      };
+    }
+    
     const prompt = buildAnalysisPrompt(context);
     
     const response = await openai.chat.completions.create({
