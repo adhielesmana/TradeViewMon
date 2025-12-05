@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MarketChart } from "@/components/market-chart";
 import { OHLCVTable } from "@/components/ohlcv-table";
@@ -7,12 +7,27 @@ import { StatCard } from "@/components/stat-card";
 import { ExportDropdown } from "@/components/export-dropdown";
 import { TrendingUp, TrendingDown, BarChart2, Calendar } from "lucide-react";
 import { useSymbol } from "@/lib/symbol-context";
+import { useWebSocket, type WSMessage } from "@/hooks/use-websocket";
+import { queryClient } from "@/lib/queryClient";
 import type { MarketData } from "@shared/schema";
 
 export default function Historical() {
   const { currentSymbol } = useSymbol();
   const symbol = currentSymbol.symbol;
   const [timeFilter, setTimeFilter] = useState("1M");
+
+  const handleWSMessage = useCallback((message: WSMessage) => {
+    const matchesSymbol = !message.symbol || message.symbol === symbol;
+    
+    if (message.type === "market_update" && matchesSymbol) {
+      queryClient.invalidateQueries({ queryKey: ["/api/market/historical", { symbol, period: timeFilter }] });
+    }
+  }, [symbol, timeFilter]);
+
+  useWebSocket({
+    symbol,
+    onMessage: handleWSMessage,
+  });
 
   const { data: historicalData, isLoading } = useQuery<MarketData[]>({
     queryKey: ["/api/market/historical", { symbol, period: timeFilter }],
