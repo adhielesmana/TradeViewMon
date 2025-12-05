@@ -71,7 +71,7 @@ Preferred communication style: Simple, everyday language.
   - Stochastic: 15 weight (oversold <20, overbought >80)
   - Price Trend: 15 weight (0.5% threshold for significant moves)
   - Candlestick Patterns: 8×strength (hammer, engulfing, doji, etc.)
-- Decision thresholds: BUY (netScore > 20), SELL (netScore < -20), HOLD otherwise
+- **STRICT Decision thresholds**: BUY (netScore > 40), SELL (netScore < -40), HOLD otherwise (raised from ±20 for reduced false signals)
 - ATR-based target price calculations for entry/exit points
 
 **Prediction Engine**: Enhanced ensemble approach with multi-factor analysis:
@@ -89,9 +89,15 @@ Preferred communication style: Simple, everyday language.
   - Stochastic: %K/%D positioning
   - Price Trend: 1-hour price movement
   - Candlestick Patterns: Detected patterns
+- **Prediction Model Integration**: Latest predictions + historical accuracy stats inform AI decisions:
+  - High accuracy (>90%): AI matches direction to prediction
+  - Medium accuracy (70-90%): Prediction used as confirming factor
+  - Low accuracy (<70%): Prediction discounted, rely on technicals
+  - Conflict handling: If high-accuracy prediction conflicts with technicals, prefer HOLD
 - Counts bullish vs bearish vs neutral signals for context
 - Includes raw indicator values (EMA 12/26, RSI, MACD line/signal/histogram, Stochastic %K/%D, ATR)
 - Provides buy/sell targets from technical analysis
+- **STRICT Fallback Rules**: When AI unavailable or no API key, defaults to HOLD unless technical confidence >=80%
 - Strict decision rules: Only trades when LOW risk, signals agree, volatility < 0.8%
 - Model: gpt-5-nano ($0.05/1M input, $0.40/1M output - cheapest option)
 
