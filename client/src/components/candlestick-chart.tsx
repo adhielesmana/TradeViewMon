@@ -69,41 +69,69 @@ export function CandlestickChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  // Use useLayoutEffect for synchronous measurement before paint
+  // Mark as mounted after first render
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Measure container width with multiple fallback strategies
   useLayoutEffect(() => {
-    if (!containerRef.current) return;
-    
-    const updateWidth = () => {
+    const measureWidth = () => {
       if (containerRef.current) {
-        // Use getBoundingClientRect for more accurate measurement
         const rect = containerRef.current.getBoundingClientRect();
-        const width = rect.width || containerRef.current.clientWidth;
+        const width = rect.width || containerRef.current.clientWidth || containerRef.current.offsetWidth;
         if (width > 0) {
           setContainerWidth(width);
+          return true;
         }
       }
+      return false;
     };
     
-    // Immediate measurement
-    updateWidth();
+    // Try immediate measurement
+    measureWidth();
     
-    // Also try after a microtask to catch layout changes
-    requestAnimationFrame(updateWidth);
-    
-    // Use ResizeObserver for proper container resize detection
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const width = entry.contentRect.width;
-        if (width > 0) {
-          setContainerWidth(width);
-        }
+    // Try again after animation frame
+    const raf1 = requestAnimationFrame(() => {
+      if (!measureWidth()) {
+        // Try once more after another frame
+        requestAnimationFrame(measureWidth);
       }
     });
     
-    resizeObserver.observe(containerRef.current);
+    // Fallback: try after a short delay (for slow renders)
+    const timeout = setTimeout(measureWidth, 50);
     
-    return () => resizeObserver.disconnect();
+    // Setup ResizeObserver for ongoing updates
+    if (containerRef.current && !resizeObserverRef.current) {
+      resizeObserverRef.current = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const width = entry.contentRect.width;
+          if (width > 0) {
+            setContainerWidth(width);
+          }
+        }
+      });
+      resizeObserverRef.current.observe(containerRef.current);
+    }
+    
+    return () => {
+      cancelAnimationFrame(raf1);
+      clearTimeout(timeout);
+    };
+  }, [mounted, data.length]); // Re-measure when data arrives or component mounts
+
+  // Cleanup ResizeObserver on unmount
+  useEffect(() => {
+    return () => {
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+        resizeObserverRef.current = null;
+      }
+    };
   }, []);
 
   const chartData = useMemo<CandleData[]>(() => {
