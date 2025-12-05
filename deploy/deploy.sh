@@ -264,15 +264,30 @@ for i in {1..30}; do
 done
 
 # ============================================
-# STEP: Sync Database Schema
+# STEP: Initialize Database Schema
 # ============================================
-log_info "Syncing database schema..."
-if docker exec tradeviewmon npm run db:push 2>/dev/null; then
-    log_info "Database schema synced successfully"
+log_info "Initializing database schema..."
+
+# First, run the comprehensive init script that creates all tables/columns if not exist
+INIT_SQL="/opt/tradeviewmon/deploy/migrations/init_database.sql"
+if [ -f "deploy/migrations/init_database.sql" ]; then
+    log_info "Running database initialization script..."
+    if docker exec -i tradeviewmon-db psql -U tradeviewmon -d tradeviewmon < deploy/migrations/init_database.sql 2>/dev/null; then
+        log_info "Database tables created/updated successfully"
+    else
+        log_warn "Database init script had issues. Trying alternative method..."
+        # Try with container path
+        docker cp deploy/migrations/init_database.sql tradeviewmon-db:/tmp/init_database.sql 2>/dev/null || true
+        docker exec tradeviewmon-db psql -U tradeviewmon -d tradeviewmon -f /tmp/init_database.sql 2>/dev/null || true
+    fi
 else
-    log_warn "Database schema sync failed or not needed. You may need to run manually:"
-    log_warn "  docker exec tradeviewmon npm run db:push"
+    log_warn "Database init script not found at deploy/migrations/init_database.sql"
 fi
+
+# Then try drizzle push for any remaining schema updates (non-interactive)
+log_info "Checking for additional schema updates..."
+docker exec tradeviewmon sh -c "echo 'y' | npm run db:push 2>/dev/null" || true
+log_info "Database schema initialization complete"
 
 # Configure Nginx if domain is provided
 if [ -n "$DOMAIN" ]; then

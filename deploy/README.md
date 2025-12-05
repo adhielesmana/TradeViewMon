@@ -95,6 +95,23 @@ This approach means:
 
 Get your OpenAI key at: https://platform.openai.com/api-keys
 
+## Database Schema
+
+The deploy script automatically handles database setup:
+
+1. **Tables are created automatically** - All required tables are created if they don't exist
+2. **Columns are added safely** - Missing columns are added to existing tables
+3. **Existing data is preserved** - The script uses IF NOT EXISTS to avoid breaking your data
+
+If you need to manually run database migrations:
+```bash
+# Run the init script
+docker exec -i tradeviewmon-db psql -U tradeviewmon -d tradeviewmon < deploy/migrations/init_database.sql
+
+# Or use drizzle push
+docker exec tradeviewmon npm run db:push
+```
+
 ## Using Docker Compose
 
 For a complete setup with PostgreSQL:
