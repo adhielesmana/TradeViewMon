@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, useState } from "react";
+import { useMemo, useRef, useEffect, useLayoutEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -70,26 +70,33 @@ export function CandlestickChart({
   const [containerWidth, setContainerWidth] = useState(0);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
 
-  useEffect(() => {
+  // Use useLayoutEffect for synchronous measurement before paint
+  useLayoutEffect(() => {
     if (!containerRef.current) return;
     
     const updateWidth = () => {
       if (containerRef.current) {
-        const width = containerRef.current.clientWidth;
+        // Use getBoundingClientRect for more accurate measurement
+        const rect = containerRef.current.getBoundingClientRect();
+        const width = rect.width || containerRef.current.clientWidth;
         if (width > 0) {
           setContainerWidth(width);
         }
       }
     };
     
-    // Initial measurement
+    // Immediate measurement
     updateWidth();
+    
+    // Also try after a microtask to catch layout changes
+    requestAnimationFrame(updateWidth);
     
     // Use ResizeObserver for proper container resize detection
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        if (entry.contentRect.width > 0) {
-          setContainerWidth(entry.contentRect.width);
+        const width = entry.contentRect.width;
+        if (width > 0) {
+          setContainerWidth(width);
         }
       }
     });
