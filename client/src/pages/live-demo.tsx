@@ -1078,13 +1078,13 @@ export default function LiveDemo() {
             <div>
               <span className="text-muted-foreground">SL:</span>{" "}
               <span className="font-medium text-red-500">
-                {autoTradeSettings?.stopLossValue || (autoTradeSettings?.slTpMode === "atr" ? 1.5 : 1)} {autoTradeSettings?.slTpMode === "atr" ? "× ATR" : autoTradeSettings?.slTpMode === "percentage" ? "%" : "pips"}
+                {autoTradeSettings?.stopLossValue || (autoTradeSettings?.slTpMode === "atr" ? 1.5 : 1)}{autoTradeSettings?.slTpMode === "atr" ? "× ATR" : autoTradeSettings?.slTpMode === "percentage" ? "%" : autoTradeSettings?.slTpMode === "pips" ? " pips" : "× ATR"}
               </span>
             </div>
             <div>
               <span className="text-muted-foreground">TP:</span>{" "}
               <span className="font-medium text-green-500">
-                {autoTradeSettings?.takeProfitValue || (autoTradeSettings?.stopLossValue || (autoTradeSettings?.slTpMode === "atr" ? 1.5 : 1)) * 2} {autoTradeSettings?.slTpMode === "atr" ? "× ATR" : autoTradeSettings?.slTpMode === "percentage" ? "%" : "pips"}
+                {autoTradeSettings?.takeProfitValue || (autoTradeSettings?.stopLossValue || (autoTradeSettings?.slTpMode === "atr" ? 1.5 : 1)) * 2}{autoTradeSettings?.slTpMode === "atr" ? "× ATR" : autoTradeSettings?.slTpMode === "percentage" ? "%" : autoTradeSettings?.slTpMode === "pips" ? " pips" : "× ATR"}
               </span>
             </div>
             {autoTradeSettings?.useAiFilter && (

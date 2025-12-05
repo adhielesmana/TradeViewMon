@@ -70,6 +70,21 @@ export interface AITradingAnalysis {
   aiEnhanced: boolean;
 }
 
+export interface PredictionContext {
+  latestPrediction: {
+    predictedPrice: number | null;
+    predictedDirection: string;
+    confidence: number | null;
+    timeframe: string;
+  } | null;
+  recentAccuracy: {
+    totalPredictions: number;
+    matchCount: number;
+    accuracyPercent: number;
+    averageError: number;
+  };
+}
+
 export interface MarketContext {
   symbol: string;
   currentPrice: number;
@@ -78,6 +93,7 @@ export interface MarketContext {
   volatility: number;
   trend: "UPTREND" | "DOWNTREND" | "SIDEWAYS";
   technicalSignal: UnifiedSignalResult;
+  prediction: PredictionContext;
 }
 
 function calculateVolatility(candles: MarketData[]): number {
@@ -108,10 +124,46 @@ function determineTrend(candles: MarketData[]): "UPTREND" | "DOWNTREND" | "SIDEW
   return "SIDEWAYS";
 }
 
-function buildMarketContext(symbol: string, candles: MarketData[], technicalSignal: UnifiedSignalResult): MarketContext {
+async function buildMarketContext(symbol: string, candles: MarketData[], technicalSignal: UnifiedSignalResult): Promise<MarketContext> {
   const currentPrice = candles[candles.length - 1]?.close || 0;
   const hourAgoPrice = candles.length >= 60 ? candles[candles.length - 60]?.close || currentPrice : currentPrice;
   const dayAgoPrice = candles.length >= 1440 ? candles[candles.length - 1440]?.close || currentPrice : candles[0]?.close || currentPrice;
+  
+  // Fetch prediction data from storage
+  let predictionContext: PredictionContext = {
+    latestPrediction: null,
+    recentAccuracy: {
+      totalPredictions: 0,
+      matchCount: 0,
+      accuracyPercent: 0,
+      averageError: 0,
+    }
+  };
+  
+  try {
+    // Get latest predictions for this symbol
+    const recentPredictions = await storage.getRecentPredictions(symbol, 10, "1min");
+    if (recentPredictions.length > 0) {
+      const latest = recentPredictions[0];
+      predictionContext.latestPrediction = {
+        predictedPrice: latest.predictedPrice,
+        predictedDirection: latest.predictedDirection,
+        confidence: latest.confidence,
+        timeframe: latest.timeframe,
+      };
+    }
+    
+    // Get accuracy stats
+    const accuracyStats = await storage.getAccuracyStats(symbol);
+    predictionContext.recentAccuracy = {
+      totalPredictions: accuracyStats.totalPredictions,
+      matchCount: accuracyStats.matchCount,
+      accuracyPercent: accuracyStats.accuracyPercent,
+      averageError: accuracyStats.averageError,
+    };
+  } catch (e) {
+    console.error("[AI Analyzer] Failed to fetch prediction data:", e);
+  }
   
   return {
     symbol,
@@ -121,6 +173,7 @@ function buildMarketContext(symbol: string, candles: MarketData[], technicalSign
     volatility: calculateVolatility(candles.slice(-60)),
     trend: determineTrend(candles),
     technicalSignal,
+    prediction: predictionContext,
   };
 }
 
@@ -144,7 +197,7 @@ export async function analyzeWithAI(
     };
   }
 
-  const context = buildMarketContext(symbol, candles, technicalSignal);
+  const context = await buildMarketContext(symbol, candles, technicalSignal);
   
   try {
     // Get OpenAI client dynamically (checks env first, then database)
@@ -168,17 +221,24 @@ export async function analyzeWithAI(
         };
       }
       
-      // Fallback to technical analysis only when no AI confidence requirement is set
+      // STRICT FALLBACK: When no OpenAI key configured, only allow very high-confidence trades
       const fallbackConfidence = technicalSignal.confidence;
-      const shouldTrade = technicalSignal.decision !== "HOLD" && fallbackConfidence >= 50;
+      const veryHighConfidence = fallbackConfidence >= 80;
+      const shouldTrade = veryHighConfidence && technicalSignal.decision !== "HOLD";
+      
+      console.log(`[AI Analyzer] No OpenAI key fallback - tech confidence: ${fallbackConfidence}, allowing trade: ${shouldTrade}`);
       
       return {
         shouldTrade,
-        direction: technicalSignal.decision,
-        confidence: fallbackConfidence,
-        reasoning: "Using technical analysis (no OpenAI API key configured)",
-        riskLevel: fallbackConfidence >= 70 ? "LOW" : fallbackConfidence >= 50 ? "MEDIUM" : "HIGH",
-        suggestedAction: shouldTrade ? `Execute ${technicalSignal.decision} based on technical signals` : "Hold - low confidence",
+        direction: shouldTrade ? technicalSignal.decision : "HOLD",
+        confidence: shouldTrade ? fallbackConfidence : 0,
+        reasoning: shouldTrade 
+          ? `Using technical analysis only (very high confidence ${fallbackConfidence}%, no AI key)`
+          : "No OpenAI API key - defaulting to HOLD for safety (tech confidence too low to trade without AI)",
+        riskLevel: shouldTrade ? "MEDIUM" : "HIGH",
+        suggestedAction: shouldTrade 
+          ? `Execute ${technicalSignal.decision} based on strong technical signals`
+          : "Configure OpenAI API key in Settings to enable AI-enhanced trading",
         technicalSignal,
         aiEnhanced: false,
       };
@@ -274,17 +334,25 @@ Always respond in valid JSON format.`
       };
     }
     
-    // Fallback to technical analysis only when no AI confidence requirement is set
+    // STRICT FALLBACK: When AI is unavailable, default to NO TRADE for safety.
+    // Only allow very high-confidence technical signals (>=80) to proceed without AI validation.
     const fallbackConfidence = technicalSignal.confidence;
-    const shouldTrade = technicalSignal.decision !== "HOLD" && fallbackConfidence >= 50;
+    const veryHighConfidence = fallbackConfidence >= 80;
+    const shouldTrade = veryHighConfidence && technicalSignal.decision !== "HOLD";
+    
+    console.log(`[AI Analyzer] AI unavailable fallback - tech confidence: ${fallbackConfidence}, allowing trade: ${shouldTrade}`);
     
     return {
       shouldTrade,
-      direction: technicalSignal.decision,
-      confidence: fallbackConfidence,
-      reasoning: "Using technical analysis (AI unavailable, no minConfidence set)",
-      riskLevel: fallbackConfidence >= 70 ? "LOW" : fallbackConfidence >= 50 ? "MEDIUM" : "HIGH",
-      suggestedAction: shouldTrade ? `Execute ${technicalSignal.decision} based on technical signals` : "Hold - low confidence",
+      direction: shouldTrade ? technicalSignal.decision : "HOLD",
+      confidence: shouldTrade ? fallbackConfidence : 0,
+      reasoning: shouldTrade 
+        ? `Using technical analysis only (very high confidence ${fallbackConfidence}%)`
+        : "AI unavailable - defaulting to HOLD for safety (tech confidence too low to trade without AI validation)",
+      riskLevel: shouldTrade ? "MEDIUM" : "HIGH",
+      suggestedAction: shouldTrade 
+        ? `Execute ${technicalSignal.decision} based on strong technical signals`
+        : "Wait for AI service to become available",
       technicalSignal,
       aiEnhanced: false,
     };
@@ -292,7 +360,7 @@ Always respond in valid JSON format.`
 }
 
 function buildAnalysisPrompt(context: MarketContext): string {
-  const { symbol, currentPrice, priceChange1h, priceChange24h, volatility, trend, technicalSignal } = context;
+  const { symbol, currentPrice, priceChange1h, priceChange24h, volatility, trend, technicalSignal, prediction } = context;
   
   const indicators = technicalSignal.indicators;
   
@@ -377,23 +445,38 @@ TECHNICAL SIGNAL SUMMARY:
 - Buy Target: ${technicalSignal.targets.buyTarget ? '$' + technicalSignal.targets.buyTarget.toFixed(2) : 'N/A'}
 - Sell Target: ${technicalSignal.targets.sellTarget ? '$' + technicalSignal.targets.sellTarget.toFixed(2) : 'N/A'}
 
-Based on all the above data, provide your trading analysis in this exact JSON format:
+PREDICTION MODEL DATA:
+${prediction.latestPrediction ? `- Latest Prediction: $${prediction.latestPrediction.predictedPrice?.toFixed(2) || 'N/A'} (${prediction.latestPrediction.predictedDirection})
+- Prediction Confidence: ${prediction.latestPrediction.confidence?.toFixed(1) || 'N/A'}%
+- Price Delta: ${prediction.latestPrediction.predictedPrice ? (prediction.latestPrediction.predictedPrice > currentPrice ? '+' : '') + (prediction.latestPrediction.predictedPrice - currentPrice).toFixed(2) : 'N/A'}` : '- No recent prediction available'}
+- Historical Accuracy: ${prediction.recentAccuracy.accuracyPercent.toFixed(1)}% (${prediction.recentAccuracy.matchCount}/${prediction.recentAccuracy.totalPredictions} predictions matched)
+- Average Prediction Error: ${prediction.recentAccuracy.averageError.toFixed(3)}%
+
+Based on all the above data (technical indicators + prediction model), provide your trading analysis in this exact JSON format:
 {
   "direction": "BUY" or "SELL" or "HOLD",
-  "confidence": 0-100 (be conservative - only high confidence when multiple indicators align),
+  "confidence": 0-100 (be conservative - only high confidence when BOTH technical and prediction signals align),
   "riskLevel": "LOW" or "MEDIUM" or "HIGH",
-  "reasoning": "Brief explanation referencing specific indicators that influenced your decision",
+  "reasoning": "Brief explanation referencing specific indicators AND prediction data that influenced your decision",
   "suggestedAction": "Specific action recommendation with entry/exit context"
 }
 
-DECISION RULES:
+DECISION RULES (Technical Analysis):
 1. HOLD if indicators are mixed (similar bullish/bearish count) - wait for clarity
 2. BUY only if: RSI not overbought, MACD positive or turning positive, price trend supports
 3. SELL only if: RSI not oversold, MACD negative or turning negative, price trend supports
 4. HIGH risk if: volatility > 0.5%, conflicting indicators, or extreme RSI with no confirmation
 5. LOW risk only if: 3+ indicators agree, moderate volatility, clear trend direction
 6. Consider if the move already happened - avoid chasing extended moves
-7. Weight MACD and EMA crossover heavily as primary trend indicators`;
+7. Weight MACD and EMA crossover heavily as primary trend indicators
+
+DECISION RULES (Prediction Model - CRITICAL):
+8. CHECK PREDICTION ACCURACY FIRST: If historical accuracy is >90%, prediction is HIGHLY reliable - match your direction to it
+9. If prediction accuracy is 70-90%, use prediction as a confirming factor (not primary driver)
+10. If prediction accuracy is <70%, discount prediction data and rely on technicals alone
+11. PREDICTION-TECHNICAL CONFLICT: If high-accuracy prediction (>90%) conflicts with technical signal, prefer HOLD
+12. BOOST CONFIDENCE: When high-accuracy prediction aligns with technical signal, add 10-15% to confidence
+13. Always mention prediction direction and accuracy in your reasoning when accuracy is >80%`;
 }
 
 function validateDirection(direction: string): "BUY" | "SELL" | "HOLD" {
