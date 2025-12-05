@@ -599,20 +599,21 @@ class Scheduler {
   private async processAutoTrades(): Promise<void> {
     try {
       const enabledSettings = await storage.getAllEnabledAutoTradeSettings();
+      console.log(`[AutoTrade] Processing ${enabledSettings.length} enabled auto-trade settings`);
       
       for (const settings of enabledSettings) {
         try {
-          // Get the latest AI suggestion for the configured symbol
-          const suggestion = await storage.getLatestAiSuggestion(settings.symbol);
+          // Get the latest actionable (BUY/SELL) AI suggestion within the last 5 minutes
+          // This prevents missing trade signals when newer HOLD suggestions exist
+          const suggestion = await storage.getLatestActionableAiSuggestion(settings.symbol, 5);
           
           if (!suggestion) {
+            // Only log every few cycles to reduce noise
+            console.log(`[AutoTrade] No actionable BUY/SELL signal for ${settings.symbol} in last 5 minutes`);
             continue;
           }
           
-          // Only trade on BUY or SELL, HOLD does nothing
-          if (suggestion.decision === "HOLD") {
-            continue;
-          }
+          console.log(`[AutoTrade] Actionable signal for ${settings.symbol}: ${suggestion.decision} (confidence: ${suggestion.confidence}%, generated ${new Date(suggestion.generatedAt || 0).toISOString()})`)
           
           // Check if we already traded on this suggestion (avoid duplicate trades)
           if (settings.lastTradeAt && suggestion.createdAt) {

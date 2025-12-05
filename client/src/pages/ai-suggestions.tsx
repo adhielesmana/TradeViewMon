@@ -388,66 +388,67 @@ export default function AiSuggestions() {
           </CardHeader>
           <CardContent>
             {patternData && patternData.patterns && patternData.patterns.length > 0 ? (
-              <div className="space-y-3">
-                <div className="text-sm text-muted-foreground mb-4">
-                  Current Trend: <Badge variant="outline" className="ml-2 capitalize">{patternData.trend}</Badge>
-                </div>
-                {patternData.patterns.map((pattern, index) => (
-                  <div 
-                    key={index} 
-                    className={`p-3 rounded-lg border ${
-                      pattern.type === "bullish" 
-                        ? "bg-green-500/10 border-green-500/30" 
-                        : pattern.type === "bearish"
-                        ? "bg-red-500/10 border-red-500/30"
-                        : "bg-yellow-500/10 border-yellow-500/30"
-                    }`}
-                    data-testid={`pattern-${pattern.name.toLowerCase().replace(/\s+/g, '-')}-${index}`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={`font-medium ${
-                        pattern.type === "bullish" ? "text-green-500" 
-                        : pattern.type === "bearish" ? "text-red-500" 
-                        : "text-yellow-500"
-                      }`}>
-                        {pattern.name}
-                      </span>
-                      <Badge 
-                        variant={pattern.type === "bullish" ? "default" : pattern.type === "bearish" ? "destructive" : "secondary"}
-                        className="text-xs"
-                      >
-                        {pattern.type}
-                      </Badge>
+              (() => {
+                const latestPattern = patternData.patterns[patternData.patterns.length - 1];
+                return (
+                  <div className="space-y-3">
+                    <div className="text-sm text-muted-foreground mb-4">
+                      Current Trend: <Badge variant="outline" className="ml-2 capitalize">{patternData.trend}</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">{pattern.description}</p>
-                    {pattern.timestamp && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {format(new Date(pattern.timestamp), "HH:mm:ss")}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-1 mt-2">
-                      <span className="text-xs text-muted-foreground">Strength:</span>
-                      {[...Array(5)].map((_, i) => (
-                        <div 
-                          key={i} 
-                          className={`w-2 h-2 rounded-full ${
-                            i < pattern.strength 
-                              ? pattern.type === "bullish" ? "bg-green-500" 
-                                : pattern.type === "bearish" ? "bg-red-500" 
-                                : "bg-yellow-500"
-                              : "bg-muted"
-                          }`}
-                        />
-                      ))}
+                    <div 
+                      className={`p-4 rounded-lg border ${
+                        latestPattern.type === "bullish" 
+                          ? "bg-green-500/10 border-green-500/30" 
+                          : latestPattern.type === "bearish"
+                          ? "bg-red-500/10 border-red-500/30"
+                          : "bg-yellow-500/10 border-yellow-500/30"
+                      }`}
+                      data-testid={`pattern-${latestPattern.name.toLowerCase().replace(/\s+/g, '-')}-latest`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-lg font-semibold ${
+                          latestPattern.type === "bullish" ? "text-green-500" 
+                          : latestPattern.type === "bearish" ? "text-red-500" 
+                          : "text-yellow-500"
+                        }`}>
+                          {latestPattern.name}
+                        </span>
+                        <Badge 
+                          variant={latestPattern.type === "bullish" ? "default" : latestPattern.type === "bearish" ? "destructive" : "secondary"}
+                        >
+                          {latestPattern.type}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-3">{latestPattern.description}</p>
+                      {latestPattern.timestamp && (
+                        <p className="text-xs text-muted-foreground mb-3">
+                          Detected at: {format(new Date(latestPattern.timestamp), "HH:mm:ss")}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Strength:</span>
+                        {[...Array(5)].map((_, i) => (
+                          <div 
+                            key={i} 
+                            className={`w-3 h-3 rounded-full ${
+                              i < latestPattern.strength 
+                                ? latestPattern.type === "bullish" ? "bg-green-500" 
+                                  : latestPattern.type === "bearish" ? "bg-red-500" 
+                                  : "bg-yellow-500"
+                                : "bg-muted"
+                            }`}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })()
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p>No significant patterns detected</p>
-                <p className="text-xs mt-1">Patterns are scanned across the last 3 hours</p>
+                <p className="text-xs mt-1">Patterns are scanned from last 5 minutes</p>
               </div>
             )}
           </CardContent>

@@ -187,13 +187,31 @@ function detectTrend(candles: MarketData[], lookback: number = 10): "uptrend" | 
   return "sideways";
 }
 
-function detectCandlestickPatterns(candles: MarketData[]): CandlestickPattern[] {
+function detectCandlestickPatterns(candles: MarketData[], maxAgeMinutes: number = 5): CandlestickPattern[] {
   if (candles.length < 3) return [];
   
   const patterns: CandlestickPattern[] = [];
-  const scanLength = Math.min(20, candles.length);
   
-  for (let i = candles.length - scanLength; i < candles.length; i++) {
+  // Filter candles to only those within the specified time window (1-5 minutes)
+  const now = Date.now();
+  const cutoffTime = now - (maxAgeMinutes * 60 * 1000);
+  
+  // Find the index where recent candles start (within maxAgeMinutes)
+  let startIndex = candles.length - 1;
+  for (let i = candles.length - 1; i >= 0; i--) {
+    const candleTime = candles[i].timestamp ? new Date(candles[i].timestamp).getTime() : 0;
+    if (candleTime >= cutoffTime) {
+      startIndex = i;
+    } else {
+      break;
+    }
+  }
+  
+  // Ensure we have at least 1 candle to analyze, but cap at 5 most recent
+  const recentCandlesCount = candles.length - startIndex;
+  const effectiveStartIndex = Math.max(startIndex, candles.length - Math.min(5, recentCandlesCount || 5));
+  
+  for (let i = effectiveStartIndex; i < candles.length; i++) {
     if (i < 1) continue;
     
     const localTrend = detectTrend(candles.slice(0, i + 1), 10);

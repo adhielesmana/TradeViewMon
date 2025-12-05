@@ -19,7 +19,7 @@ import {
   type AutoTradeSetting, type UpdateAutoTradeSetting
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, gte, lte, and, sql, inArray, isNull } from "drizzle-orm";
+import { eq, desc, gte, lte, and, or, sql, inArray, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // Market Data
@@ -71,6 +71,7 @@ export interface IStorage {
   // AI Suggestions
   insertAiSuggestion(suggestion: InsertAiSuggestion): Promise<AiSuggestion>;
   getLatestAiSuggestion(symbol: string): Promise<AiSuggestion | null>;
+  getLatestActionableAiSuggestion(symbol: string, maxAgeMinutes?: number): Promise<AiSuggestion | null>;
   getRecentAiSuggestions(symbol: string, limit?: number): Promise<AiSuggestion[]>;
   getUnevaluatedSuggestions(olderThanMinutes?: number): Promise<AiSuggestion[]>;
   evaluateAiSuggestion(id: number, actualPrice: number, wasAccurate: boolean, profitLoss: number): Promise<AiSuggestion | null>;
@@ -508,6 +509,23 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.select()
       .from(aiSuggestions)
       .where(eq(aiSuggestions.symbol, symbol))
+      .orderBy(desc(aiSuggestions.generatedAt))
+      .limit(1);
+    return result || null;
+  }
+
+  async getLatestActionableAiSuggestion(symbol: string, maxAgeMinutes: number = 5): Promise<AiSuggestion | null> {
+    const cutoffTime = new Date(Date.now() - maxAgeMinutes * 60 * 1000);
+    const [result] = await db.select()
+      .from(aiSuggestions)
+      .where(and(
+        eq(aiSuggestions.symbol, symbol),
+        or(
+          eq(aiSuggestions.decision, 'BUY'),
+          eq(aiSuggestions.decision, 'SELL')
+        ),
+        gte(aiSuggestions.generatedAt, cutoffTime)
+      ))
       .orderBy(desc(aiSuggestions.generatedAt))
       .limit(1);
     return result || null;

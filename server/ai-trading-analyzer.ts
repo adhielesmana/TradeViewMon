@@ -421,10 +421,11 @@ function buildAnalysisPrompt(context: MarketContext): string {
     ? `Price relatively stable (${priceChange1h.toFixed(2)}%)`
     : `Price ${priceChange1h > 0 ? 'up' : 'down'} ${Math.abs(priceChange1h).toFixed(2)}% in last hour`;
   
-  // Detect candlestick patterns from signal reasons
-  const patternReason = technicalSignal.reasons.find(r => r.indicator === "Pattern");
-  const patternStatus = patternReason?.signal === "bullish" ? "BULLISH" : (patternReason?.signal === "bearish" ? "BEARISH" : "NEUTRAL");
-  const patternDescription = patternReason?.description || "No significant candlestick patterns detected";
+  // Detect candlestick patterns from signal reasons (only from last 1-5 minute candles)
+  const patternReasons = technicalSignal.reasons.filter(r => r.indicator === "Candlestick Patterns" && r.signal !== "neutral");
+  const latestPattern = patternReasons.length > 0 ? patternReasons[patternReasons.length - 1] : null;
+  const patternStatus = latestPattern?.signal === "bullish" ? "BULLISH" : (latestPattern?.signal === "bearish" ? "BEARISH" : "NEUTRAL");
+  const patternDescription = latestPattern?.description || "No significant candlestick patterns in last 5 minutes";
   
   // Count bullish vs bearish signals for AI context
   const analysisBreakdown = [
