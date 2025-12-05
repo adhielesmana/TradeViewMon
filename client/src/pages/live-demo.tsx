@@ -255,9 +255,11 @@ export default function LiveDemo() {
   const [autoTradeSlTpMode, setAutoTradeSlTpMode] = useState<"pips" | "percentage">("pips");
   const [autoTradeStopLossValue, setAutoTradeStopLossValue] = useState("");
   const [autoTradeTakeProfitValue, setAutoTradeTakeProfitValue] = useState("");
+  const [autoTradeUseAiFilter, setAutoTradeUseAiFilter] = useState(false);
+  const [autoTradeMinConfidence, setAutoTradeMinConfidence] = useState("60");
 
   const autoTradeMutation = useMutation({
-    mutationFn: (data: { isEnabled?: boolean; tradeUnits?: number; symbol?: string; slTpMode?: string; stopLossValue?: number; takeProfitValue?: number }) =>
+    mutationFn: (data: { isEnabled?: boolean; tradeUnits?: number; symbol?: string; slTpMode?: string; stopLossValue?: number; takeProfitValue?: number; useAiFilter?: boolean; minConfidence?: number }) =>
       apiRequest("PATCH", "/api/demo/auto-trade", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/auto-trade"] });
@@ -810,6 +812,8 @@ export default function LiveDemo() {
                 setAutoTradeSlTpMode((autoTradeSettings.slTpMode as "pips" | "percentage") || "pips");
                 setAutoTradeStopLossValue(autoTradeSettings.stopLossValue?.toString() || "1");
                 setAutoTradeTakeProfitValue(autoTradeSettings.takeProfitValue?.toString() || "2");
+                setAutoTradeUseAiFilter(autoTradeSettings.useAiFilter ?? false);
+                setAutoTradeMinConfidence(autoTradeSettings.minConfidence?.toString() || "60");
               }
             }}>
               <DialogTrigger asChild>
@@ -926,6 +930,53 @@ export default function LiveDemo() {
                       </div>
                     </div>
                   </div>
+                  
+                  {/* AI Filter Settings */}
+                  <div className="space-y-3 border-t pt-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base font-medium">AI Trade Filter</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Use AI to validate trades before execution
+                        </p>
+                      </div>
+                      <Switch
+                        checked={autoTradeUseAiFilter}
+                        onCheckedChange={setAutoTradeUseAiFilter}
+                        data-testid="switch-ai-filter"
+                      />
+                    </div>
+                    
+                    {autoTradeUseAiFilter && (
+                      <div>
+                        <Label>Minimum AI Confidence (%)</Label>
+                        <Input
+                          type="number"
+                          value={autoTradeMinConfidence}
+                          onChange={(e) => setAutoTradeMinConfidence(e.target.value)}
+                          placeholder="60"
+                          min="0"
+                          max="100"
+                          step="5"
+                          data-testid="input-min-confidence"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Only trade when AI confidence is at least {autoTradeMinConfidence}%
+                        </p>
+                      </div>
+                    )}
+                    
+                    <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-md text-xs text-blue-600 dark:text-blue-400">
+                      <strong>How AI Filter Works:</strong>
+                      <ul className="mt-1 space-y-1 list-disc pl-4">
+                        <li>AI analyzes market conditions before each trade</li>
+                        <li>Blocks trades when confidence is too low</li>
+                        <li>Helps filter out low-probability signals</li>
+                        <li>May reduce trade frequency but improve win rate</li>
+                      </ul>
+                    </div>
+                  </div>
+                  
                   {autoTradeSettings && (
                     <div className="bg-muted/50 p-3 rounded-md space-y-1 text-sm">
                       <div className="flex justify-between">
@@ -959,6 +1010,7 @@ export default function LiveDemo() {
                       const units = parseFloat(autoTradeUnits);
                       const slValue = parseFloat(autoTradeStopLossValue) || 0;
                       const tpValue = parseFloat(autoTradeTakeProfitValue) || 0;
+                      const minConf = parseInt(autoTradeMinConfidence) || 0;
                       if (units >= 0.01 && autoTradeSymbol) {
                         autoTradeMutation.mutate({ 
                           tradeUnits: units, 
@@ -966,6 +1018,8 @@ export default function LiveDemo() {
                           slTpMode: autoTradeSlTpMode,
                           stopLossValue: slValue > 0 ? slValue : 1,
                           takeProfitValue: tpValue > 0 ? tpValue : (slValue > 0 ? slValue * 2 : 2),
+                          useAiFilter: autoTradeUseAiFilter,
+                          minConfidence: autoTradeUseAiFilter ? (minConf > 0 ? minConf : 60) : 0,
                         });
                         setIsAutoTradeSettingsOpen(false);
                       }
@@ -1012,6 +1066,14 @@ export default function LiveDemo() {
                 {autoTradeSettings?.takeProfitValue || (autoTradeSettings?.stopLossValue || 1) * 2} {autoTradeSettings?.slTpMode === "percentage" ? "%" : "pips"}
               </span>
             </div>
+            {autoTradeSettings?.useAiFilter && (
+              <div>
+                <span className="text-muted-foreground">AI Filter:</span>{" "}
+                <Badge variant="outline" className="text-blue-500 border-blue-500" data-testid="badge-ai-filter">
+                  {autoTradeSettings?.minConfidence || 60}% min
+                </Badge>
+              </div>
+            )}
           </div>
           {(autoTradeSettings?.closedAutoTrades || 0) > 0 && (
             <div className="flex flex-wrap gap-4 items-center text-sm mt-2 pt-2 border-t">
@@ -1045,7 +1107,10 @@ export default function LiveDemo() {
           )}
           {autoTradeSettings?.isEnabled && (
             <p className="text-xs text-muted-foreground mt-2">
-              Auto-trading will execute BUY/SELL trades when AI suggestions are generated. HOLD suggestions are ignored.
+              {autoTradeSettings?.useAiFilter 
+                ? `Auto-trading with AI filter enabled. Trades require ${autoTradeSettings?.minConfidence || 60}% AI confidence.`
+                : "Auto-trading will execute BUY/SELL trades when AI suggestions are generated. HOLD suggestions are ignored."
+              }
             </p>
           )}
         </CardContent>

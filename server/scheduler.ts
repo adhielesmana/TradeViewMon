@@ -4,6 +4,7 @@ import { predictionEngine } from "./prediction-engine";
 import { marketDataService } from "./market-data-service";
 import { wsService } from "./websocket";
 import { generateAiSuggestion, toInsertSuggestion, evaluateSuggestion } from "./ai-suggestion-engine";
+import { analyzeWithAI } from "./ai-trading-analyzer";
 
 // Pip value for each symbol (1 pip = this amount in price)
 // Standard forex pip values based on instrument type
@@ -602,6 +603,48 @@ class Scheduler {
             // Skip if we already traded within the last 30 seconds after this suggestion
             if (lastTradeTime >= suggestionTime - 30000) {
               continue;
+            }
+          }
+          
+          // AI Filter: If enabled, use AI analyzer to validate the trade
+          const useAiFilter = settings.useAiFilter ?? false;
+          const minConfidence = settings.minConfidence ?? 0;
+          
+          if (useAiFilter || minConfidence > 0) {
+            try {
+              // Get recent candles for AI analysis
+              const candles = await storage.getRecentMarketData(settings.symbol, 100);
+              
+              if (candles.length >= 30) {
+                // Use user's configured minConfidence directly
+                // When minConfidence is 0, AI can fall back to technical analysis if OpenAI fails
+                const aiAnalysis = await analyzeWithAI(
+                  settings.symbol,
+                  candles,
+                  minConfidence
+                );
+                
+                // Skip trade if AI says not to trade
+                if (!aiAnalysis.shouldTrade) {
+                  console.log(`[AutoTrade] AI filter blocked trade for ${settings.symbol}: ${aiAnalysis.reasoning} (confidence: ${aiAnalysis.confidence}%)`);
+                  continue;
+                }
+                
+                // If AI direction differs from suggestion, skip
+                if (aiAnalysis.direction !== suggestion.decision) {
+                  console.log(`[AutoTrade] AI direction mismatch: AI says ${aiAnalysis.direction}, suggestion says ${suggestion.decision}`);
+                  continue;
+                }
+                
+                console.log(`[AutoTrade] AI approved trade: ${aiAnalysis.direction} with ${aiAnalysis.confidence}% confidence - ${aiAnalysis.reasoning}`);
+              }
+            } catch (aiError) {
+              console.error(`[AutoTrade] AI analysis error, proceeding with caution:`, aiError);
+              // Continue with trade if AI fails but minConfidence is 0
+              if (minConfidence > 0) {
+                console.log(`[AutoTrade] Skipping trade due to AI error and minConfidence requirement`);
+                continue;
+              }
             }
           }
           
