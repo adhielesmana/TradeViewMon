@@ -1193,7 +1193,7 @@ export async function registerRoutes(
         updateData.symbol = symbol;
       }
       
-      if (typeof slTpMode === "string" && (slTpMode === "pips" || slTpMode === "percentage")) {
+      if (typeof slTpMode === "string" && (slTpMode === "pips" || slTpMode === "percentage" || slTpMode === "atr")) {
         updateData.slTpMode = slTpMode;
       }
       

@@ -211,18 +211,44 @@ Always respond in valid JSON format.`
     
     const confidence = Math.min(Math.max(aiAnalysis.confidence || 0, 0), 100);
     const direction = validateDirection(aiAnalysis.direction);
+    const riskLevel = validateRiskLevel(aiAnalysis.riskLevel);
+    
+    // STRICTER AI FILTER: Multiple conditions must be met
+    // 1. Confidence must meet minimum threshold
+    // 2. Direction must not be HOLD
+    // 3. Risk level must be LOW (not MEDIUM or HIGH)
+    // 4. AI and technical signals must agree on direction
+    // 5. Technical signal must also have sufficient confidence (>= 50%)
+    // 6. Volatility must not be extreme (< 0.8%)
+    const isLowRisk = riskLevel === "LOW";
+    const signalsAgree = signalsAlign(direction, technicalSignal.decision);
+    const technicallyStrong = technicalSignal.confidence >= 50;
+    const lowVolatility = context.volatility < 0.8;
     
     const shouldTrade = confidence >= minConfidence && 
                         direction !== "HOLD" && 
-                        aiAnalysis.riskLevel !== "HIGH" &&
-                        signalsAlign(direction, technicalSignal.decision);
+                        isLowRisk &&
+                        signalsAgree &&
+                        technicallyStrong &&
+                        lowVolatility;
+    
+    // Log decision details for transparency
+    if (!shouldTrade && direction !== "HOLD") {
+      const reasons: string[] = [];
+      if (confidence < minConfidence) reasons.push(`confidence ${confidence} < ${minConfidence}`);
+      if (!isLowRisk) reasons.push(`risk level is ${riskLevel}`);
+      if (!signalsAgree) reasons.push(`AI (${direction}) != Technical (${technicalSignal.decision})`);
+      if (!technicallyStrong) reasons.push(`tech confidence ${technicalSignal.confidence} < 50`);
+      if (!lowVolatility) reasons.push(`volatility ${context.volatility.toFixed(3)} >= 0.8%`);
+      console.log(`[AI Filter] Blocked trade for ${context.symbol}: ${reasons.join(", ")}`);
+    }
     
     return {
       shouldTrade,
       direction,
       confidence,
       reasoning: aiAnalysis.reasoning || "AI analysis completed",
-      riskLevel: validateRiskLevel(aiAnalysis.riskLevel),
+      riskLevel,
       suggestedAction: aiAnalysis.suggestedAction || (shouldTrade ? `Execute ${direction} order` : "Wait for better opportunity"),
       technicalSignal,
       aiEnhanced: true,

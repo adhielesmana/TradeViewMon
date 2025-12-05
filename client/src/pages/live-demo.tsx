@@ -252,7 +252,7 @@ export default function LiveDemo() {
   const [isAutoTradeSettingsOpen, setIsAutoTradeSettingsOpen] = useState(false);
   const [autoTradeUnits, setAutoTradeUnits] = useState("");
   const [autoTradeSymbol, setAutoTradeSymbol] = useState("");
-  const [autoTradeSlTpMode, setAutoTradeSlTpMode] = useState<"pips" | "percentage">("pips");
+  const [autoTradeSlTpMode, setAutoTradeSlTpMode] = useState<"pips" | "percentage" | "atr">("atr");
   const [autoTradeStopLossValue, setAutoTradeStopLossValue] = useState("");
   const [autoTradeTakeProfitValue, setAutoTradeTakeProfitValue] = useState("");
   const [autoTradeUseAiFilter, setAutoTradeUseAiFilter] = useState(false);
@@ -809,9 +809,9 @@ export default function LiveDemo() {
               if (open && autoTradeSettings) {
                 setAutoTradeUnits(autoTradeSettings.tradeUnits.toString());
                 setAutoTradeSymbol(autoTradeSettings.symbol);
-                setAutoTradeSlTpMode((autoTradeSettings.slTpMode as "pips" | "percentage") || "pips");
-                setAutoTradeStopLossValue(autoTradeSettings.stopLossValue?.toString() || "1");
-                setAutoTradeTakeProfitValue(autoTradeSettings.takeProfitValue?.toString() || "2");
+                setAutoTradeSlTpMode((autoTradeSettings.slTpMode as "pips" | "percentage" | "atr") || "atr");
+                setAutoTradeStopLossValue(autoTradeSettings.stopLossValue?.toString() || "1.5");
+                setAutoTradeTakeProfitValue(autoTradeSettings.takeProfitValue?.toString() || "3");
                 setAutoTradeUseAiFilter(autoTradeSettings.useAiFilter ?? false);
                 setAutoTradeMinConfidence(autoTradeSettings.minConfidence?.toString() || "60");
               }
@@ -867,6 +867,22 @@ export default function LiveDemo() {
                           <input
                             type="radio"
                             name="slTpMode"
+                            value="atr"
+                            checked={autoTradeSlTpMode === "atr"}
+                            onChange={() => {
+                              setAutoTradeSlTpMode("atr");
+                              setAutoTradeStopLossValue("1.5");
+                              setAutoTradeTakeProfitValue("3");
+                            }}
+                            className="w-4 h-4"
+                            data-testid="radio-sl-tp-mode-atr"
+                          />
+                          <span className="text-sm">ATR (Recommended)</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="slTpMode"
                             value="pips"
                             checked={autoTradeSlTpMode === "pips"}
                             onChange={() => {
@@ -896,36 +912,41 @@ export default function LiveDemo() {
                           <span className="text-sm">Percentage</span>
                         </label>
                       </div>
+                      {autoTradeSlTpMode === "atr" && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ATR adapts to market volatility - stops wider in volatile markets, tighter in calm markets
+                        </p>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label>Stop Loss ({autoTradeSlTpMode === "pips" ? "Pips" : "%"})</Label>
+                        <Label>Stop Loss ({autoTradeSlTpMode === "atr" ? "ATR×" : autoTradeSlTpMode === "pips" ? "Pips" : "%"})</Label>
                         <Input
                           type="number"
                           value={autoTradeStopLossValue}
                           onChange={(e) => setAutoTradeStopLossValue(e.target.value)}
-                          placeholder={autoTradeSlTpMode === "pips" ? "1" : "1"}
+                          placeholder={autoTradeSlTpMode === "atr" ? "1.5" : "1"}
                           min="0"
-                          step={autoTradeSlTpMode === "pips" ? "1" : "0.1"}
+                          step={autoTradeSlTpMode === "atr" ? "0.5" : autoTradeSlTpMode === "pips" ? "1" : "0.1"}
                           data-testid="input-auto-trade-stop-loss"
                         />
                         <p className="text-xs text-muted-foreground mt-1">
-                          Default: {autoTradeSlTpMode === "pips" ? "1 pip" : "1%"}
+                          Default: {autoTradeSlTpMode === "atr" ? "1.5× ATR" : autoTradeSlTpMode === "pips" ? "1 pip" : "1%"}
                         </p>
                       </div>
                       <div>
-                        <Label>Take Profit ({autoTradeSlTpMode === "pips" ? "Pips" : "%"})</Label>
+                        <Label>Take Profit ({autoTradeSlTpMode === "atr" ? "ATR×" : autoTradeSlTpMode === "pips" ? "Pips" : "%"})</Label>
                         <Input
                           type="number"
                           value={autoTradeTakeProfitValue}
                           onChange={(e) => setAutoTradeTakeProfitValue(e.target.value)}
-                          placeholder={autoTradeSlTpMode === "pips" ? "2" : "2"}
+                          placeholder={autoTradeSlTpMode === "atr" ? "3" : "2"}
                           min="0"
-                          step={autoTradeSlTpMode === "pips" ? "1" : "0.1"}
+                          step={autoTradeSlTpMode === "atr" ? "0.5" : autoTradeSlTpMode === "pips" ? "1" : "0.1"}
                           data-testid="input-auto-trade-take-profit"
                         />
                         <p className="text-xs text-muted-foreground mt-1">
-                          Suggested: {(parseFloat(autoTradeStopLossValue) || 1) * 2} (1:2 ratio)
+                          Suggested: {(parseFloat(autoTradeStopLossValue) || (autoTradeSlTpMode === "atr" ? 1.5 : 1)) * 2}{autoTradeSlTpMode === "atr" ? "× ATR" : ""} (1:2 ratio)
                         </p>
                       </div>
                     </div>
@@ -1057,13 +1078,13 @@ export default function LiveDemo() {
             <div>
               <span className="text-muted-foreground">SL:</span>{" "}
               <span className="font-medium text-red-500">
-                {autoTradeSettings?.stopLossValue || 1} {autoTradeSettings?.slTpMode === "percentage" ? "%" : "pips"}
+                {autoTradeSettings?.stopLossValue || (autoTradeSettings?.slTpMode === "atr" ? 1.5 : 1)} {autoTradeSettings?.slTpMode === "atr" ? "× ATR" : autoTradeSettings?.slTpMode === "percentage" ? "%" : "pips"}
               </span>
             </div>
             <div>
               <span className="text-muted-foreground">TP:</span>{" "}
               <span className="font-medium text-green-500">
-                {autoTradeSettings?.takeProfitValue || (autoTradeSettings?.stopLossValue || 1) * 2} {autoTradeSettings?.slTpMode === "percentage" ? "%" : "pips"}
+                {autoTradeSettings?.takeProfitValue || (autoTradeSettings?.stopLossValue || (autoTradeSettings?.slTpMode === "atr" ? 1.5 : 1)) * 2} {autoTradeSettings?.slTpMode === "atr" ? "× ATR" : autoTradeSettings?.slTpMode === "percentage" ? "%" : "pips"}
               </span>
             </div>
             {autoTradeSettings?.useAiFilter && (

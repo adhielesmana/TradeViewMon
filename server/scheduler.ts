@@ -5,6 +5,7 @@ import { marketDataService } from "./market-data-service";
 import { wsService } from "./websocket";
 import { generateAiSuggestion, toInsertSuggestion, evaluateSuggestion } from "./ai-suggestion-engine";
 import { analyzeWithAI } from "./ai-trading-analyzer";
+import { generateUnifiedSignal } from "./unified-signal-generator";
 
 // Pip value for each symbol (1 pip = this amount in price)
 // Standard forex pip values based on instrument type
@@ -24,15 +25,17 @@ function getPipValue(symbol: string): number {
   }
 }
 
-// Calculate stop loss and take profit prices based on mode (pips or percentage)
+// Calculate stop loss and take profit prices based on mode (pips, percentage, or atr)
 // Default 1:2 ratio (SL:TP) but allows custom TP value
+// ATR mode: SL = 1.5x ATR, TP = 3x ATR for better volatility adaptation
 function calculateSlTpPrices(
   entryPrice: number,
   tradeType: 'BUY' | 'SELL',
-  mode: string, // 'pips' or 'percentage'
-  stopLossValue: number, // pips or percentage value
+  mode: string, // 'pips', 'percentage', or 'atr'
+  stopLossValue: number, // pips, percentage, or ATR multiplier value
   symbol: string,
-  takeProfitValue?: number // optional custom TP value (defaults to 2x SL)
+  takeProfitValue?: number, // optional custom TP value (defaults to 2x SL)
+  atr?: number // ATR value for ATR mode
 ): { stopLoss: number | undefined; takeProfit: number | undefined } {
   if (!stopLossValue || stopLossValue <= 0) {
     return { stopLoss: undefined, takeProfit: undefined };
@@ -41,7 +44,23 @@ function calculateSlTpPrices(
   let slDistance: number;
   let tpDistance: number;
   
-  if (mode === 'percentage') {
+  if (mode === 'atr') {
+    // ATR-based stop loss/take profit - adapts to market volatility
+    // Default: SL = stopLossValue × ATR, TP = takeProfitValue × ATR (or 2x SL)
+    if (!atr || atr <= 0) {
+      console.log(`[SL/TP] ATR mode requested but no ATR available, falling back to percentage mode`);
+      // Fallback to percentage mode if ATR not available
+      slDistance = entryPrice * (stopLossValue / 100);
+      const effectiveTpValue = takeProfitValue && takeProfitValue > 0 ? takeProfitValue : stopLossValue * 2;
+      tpDistance = entryPrice * (effectiveTpValue / 100);
+    } else {
+      // Use ATR multipliers: SL = stopLossValue × ATR, TP = takeProfitValue × ATR
+      slDistance = stopLossValue * atr;
+      const effectiveTpMultiplier = takeProfitValue && takeProfitValue > 0 ? takeProfitValue : stopLossValue * 2;
+      tpDistance = effectiveTpMultiplier * atr;
+      console.log(`[SL/TP] ATR mode: ATR=${atr.toFixed(4)}, SL distance=${slDistance.toFixed(4)} (${stopLossValue}x), TP distance=${tpDistance.toFixed(4)} (${effectiveTpMultiplier}x)`);
+    }
+  } else if (mode === 'percentage') {
     // Calculate distance as percentage of entry price
     slDistance = entryPrice * (stopLossValue / 100);
     // Use custom TP value or default to 2x SL
@@ -672,18 +691,31 @@ class Scheduler {
           // Use the trade units directly as quantity
           const quantity = tradeUnits;
           
-          // Calculate stop loss and take profit based on mode (pips/percentage)
+          // Calculate stop loss and take profit based on mode (pips/percentage/atr)
           const tradeType = suggestion.decision as 'BUY' | 'SELL';
-          const slTpMode = settings.slTpMode || 'pips';
-          const stopLossValue = settings.stopLossValue || 1;
-          const takeProfitValue = settings.takeProfitValue || stopLossValue * 2; // Default to 2x SL (1:2 ratio)
+          const slTpMode = settings.slTpMode || 'atr'; // Default to ATR mode for better volatility adaptation
+          const stopLossValue = settings.stopLossValue || 1.5; // Default 1.5x ATR for SL
+          const takeProfitValue = settings.takeProfitValue || 3; // Default 3x ATR for TP (1:2 ratio)
+          
+          // Get ATR from technical signal if using ATR mode
+          let atrValue: number | undefined;
+          if (slTpMode === 'atr') {
+            const atrCandles = await storage.getRecentMarketData(settings.symbol, 100);
+            if (atrCandles.length >= 30) {
+              const technicalSignal = generateUnifiedSignal(atrCandles);
+              atrValue = technicalSignal.indicators.atr;
+              console.log(`[AutoTrade] ATR for ${settings.symbol}: ${atrValue?.toFixed(4)}`);
+            }
+          }
+          
           const { stopLoss, takeProfit } = calculateSlTpPrices(
             currentPrice,
             tradeType,
             slTpMode,
             stopLossValue,
             settings.symbol,
-            takeProfitValue
+            takeProfitValue,
+            atrValue
           );
           
           // Open the trade with isAutoTrade flag and SL/TP
