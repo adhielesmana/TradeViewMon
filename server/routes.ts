@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { scheduler } from "./scheduler";
+import { scheduler, getMarketStatusForSymbol, getAllMarketStatuses } from "./scheduler";
 import { marketDataService } from "./market-data-service";
 import { technicalIndicators } from "./technical-indicators";
 import { wsService } from "./websocket";
@@ -595,6 +595,43 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching market stats:", error);
       res.status(500).json({ error: "Failed to fetch market stats" });
+    }
+  });
+
+  // Market status endpoint - returns whether market is open/closed
+  app.get("/api/market/status", (req, res) => {
+    try {
+      const symbol = req.query.symbol as string;
+      
+      if (symbol) {
+        // Get status for specific symbol
+        const status = getMarketStatusForSymbol(symbol);
+        res.json({
+          symbol,
+          isOpen: status.isOpen,
+          reason: status.reason,
+          nextOpenTime: status.nextOpenTime?.toISOString(),
+          nextCloseTime: status.nextCloseTime?.toISOString(),
+        });
+      } else {
+        // Get status for all symbols
+        const allStatuses = getAllMarketStatuses();
+        const formattedStatuses: { [key: string]: any } = {};
+        
+        for (const [sym, status] of Object.entries(allStatuses)) {
+          formattedStatuses[sym] = {
+            isOpen: status.isOpen,
+            reason: status.reason,
+            nextOpenTime: status.nextOpenTime?.toISOString(),
+            nextCloseTime: status.nextCloseTime?.toISOString(),
+          };
+        }
+        
+        res.json(formattedStatuses);
+      }
+    } catch (error) {
+      console.error("Error fetching market status:", error);
+      res.status(500).json({ error: "Failed to fetch market status" });
     }
   });
 

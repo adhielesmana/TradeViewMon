@@ -7,6 +7,103 @@ import { generateAiSuggestion, toInsertSuggestion, evaluateSuggestion } from "./
 import { analyzeWithAI } from "./ai-trading-analyzer";
 import { generateUnifiedSignal } from "./unified-signal-generator";
 
+// Market hours detection
+// Forex/Precious metals market: Sunday 5 PM EST to Friday 5 PM EST
+// Crypto (BTCUSD): 24/7
+interface MarketStatus {
+  isOpen: boolean;
+  reason: string;
+  nextOpenTime?: Date;
+  nextCloseTime?: Date;
+}
+
+function isMarketOpen(symbol: string): MarketStatus {
+  const now = new Date();
+  
+  // Convert to EST (UTC-5, accounting for DST is complex, using fixed offset)
+  const utcHours = now.getUTCHours();
+  const utcDay = now.getUTCDay(); // 0 = Sunday, 6 = Saturday
+  
+  // EST = UTC - 5 hours (standard time)
+  // During DST (March-November), EST = UTC - 4 hours
+  // For simplicity, use UTC-5 as a baseline
+  const estHour = (utcHours - 5 + 24) % 24;
+  const estDay = utcHours < 5 ? (utcDay + 6) % 7 : utcDay;
+  
+  // Crypto markets are 24/7
+  if (symbol === "BTCUSD") {
+    return {
+      isOpen: true,
+      reason: "Crypto markets are open 24/7",
+    };
+  }
+  
+  // Forex/Metals market hours:
+  // Closed: Friday 5 PM EST to Sunday 5 PM EST
+  // This means:
+  // - Friday after 5 PM EST (17:00) = closed
+  // - All day Saturday = closed
+  // - Sunday before 5 PM EST (17:00) = closed
+  
+  const isClosed = 
+    (estDay === 5 && estHour >= 17) ||  // Friday after 5 PM EST
+    (estDay === 6) ||                    // All Saturday
+    (estDay === 0 && estHour < 17);      // Sunday before 5 PM EST
+  
+  if (isClosed) {
+    // Calculate next open time (Sunday 5 PM EST)
+    const daysUntilSunday = estDay === 0 ? 0 : 7 - estDay;
+    const nextOpen = new Date(now);
+    nextOpen.setUTCDate(now.getUTCDate() + daysUntilSunday);
+    nextOpen.setUTCHours(22, 0, 0, 0); // 5 PM EST = 10 PM UTC (17 + 5 = 22)
+    
+    return {
+      isOpen: false,
+      reason: "Market closed for weekend (Friday 5PM - Sunday 5PM EST)",
+      nextOpenTime: nextOpen,
+    };
+  }
+  
+  // Calculate next close time (Friday 5 PM EST)
+  const daysUntilFriday = (5 - estDay + 7) % 7 || 7;
+  const nextClose = new Date(now);
+  nextClose.setUTCDate(now.getUTCDate() + (estDay === 5 ? 0 : daysUntilFriday));
+  nextClose.setUTCHours(22, 0, 0, 0); // 5 PM EST = 10 PM UTC
+  
+  return {
+    isOpen: true,
+    reason: "Market is open",
+    nextCloseTime: nextClose,
+  };
+}
+
+// Track global market status for broadcasting
+let currentMarketStatus: { [symbol: string]: MarketStatus } = {};
+
+function getMarketStatus(symbol: string): MarketStatus {
+  if (!currentMarketStatus[symbol]) {
+    currentMarketStatus[symbol] = isMarketOpen(symbol);
+  }
+  return currentMarketStatus[symbol];
+}
+
+function updateAllMarketStatus(): void {
+  const symbols = marketDataService.getSupportedSymbols();
+  for (const symbol of symbols) {
+    currentMarketStatus[symbol] = isMarketOpen(symbol);
+  }
+}
+
+// Export market status functions for use in routes
+export function getMarketStatusForSymbol(symbol: string): MarketStatus {
+  return isMarketOpen(symbol);
+}
+
+export function getAllMarketStatuses(): { [symbol: string]: MarketStatus } {
+  updateAllMarketStatus();
+  return { ...currentMarketStatus };
+}
+
 // Pip value for each symbol (1 pip = this amount in price)
 // Standard forex pip values based on instrument type
 function getPipValue(symbol: string): number {
@@ -301,6 +398,9 @@ class Scheduler {
 
   private async runCycle(): Promise<void> {
     const allSymbols = marketDataService.getSupportedSymbols();
+    
+    // Update all market status at the start of each cycle
+    updateAllMarketStatus();
 
     try {
       await this.updateApiStatus("healthy");
@@ -308,6 +408,7 @@ class Scheduler {
       // Process all symbols - fetch market data for each
       for (const symbol of allSymbols) {
         try {
+          const marketStatus = getMarketStatus(symbol);
           const savedPriceState = await storage.getPriceState(symbol);
           let lastClosePrice: number | undefined;
           
@@ -318,25 +419,68 @@ class Scheduler {
             lastClosePrice = lastData.length > 0 ? lastData[0].close : undefined;
           }
 
-          const candle = await marketDataService.fetchLatestCandle(symbol, lastClosePrice);
-          await storage.insertMarketData(candle);
+          let candle;
           
+          if (marketStatus.isOpen) {
+            // Market is OPEN - fetch real data from API
+            candle = await marketDataService.fetchLatestCandle(symbol, lastClosePrice);
+          } else {
+            // Market is CLOSED - generate offline candle with last known price
+            // This saves API calls and server resources during weekends
+            if (!lastClosePrice) {
+              console.log(`[Scheduler] ${symbol} market closed, no previous data to generate offline candle`);
+              continue;
+            }
+            
+            const now = new Date();
+            now.setSeconds(0, 0);
+            
+            // Create a flat candle with last close price (no movement during market closure)
+            candle = {
+              symbol,
+              timestamp: now,
+              open: lastClosePrice,
+              high: lastClosePrice,
+              low: lastClosePrice,
+              close: lastClosePrice,
+              volume: 0, // No volume during market closure
+              interval: "1min" as const,
+            };
+            
+            // Log market closed status periodically (every 10 minutes)
+            const minuteNow = now.getMinutes();
+            if (minuteNow % 10 === 0) {
+              console.log(`[Scheduler] ${symbol} MARKET CLOSED - using offline mode (price: $${lastClosePrice.toFixed(2)})`);
+            }
+          }
+          
+          await storage.insertMarketData(candle);
           await storage.upsertPriceState(symbol, candle.open, candle.close, candle.timestamp);
 
           // Check and update open positions - trigger stop loss / take profit if needed
+          // Note: During market closure, prices don't move so no SL/TP will trigger
           await storage.updateOpenPositionPrices(symbol, candle.close);
 
           const recentData = await storage.getRecentMarketData(symbol, 60);
           const stats = await storage.getMarketStats(symbol);
 
+          // Include market status in the broadcast
           wsService.broadcastMarketUpdate(symbol, {
             candle,
             stats,
             recentCount: recentData.length,
+            marketStatus: {
+              isOpen: marketStatus.isOpen,
+              reason: marketStatus.reason,
+              nextOpenTime: marketStatus.nextOpenTime?.toISOString(),
+              nextCloseTime: marketStatus.nextCloseTime?.toISOString(),
+            },
           });
           
-          // Small delay between API calls to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Only delay between API calls if market is open (no delay needed for offline mode)
+          if (marketStatus.isOpen) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
         } catch (symbolError) {
           console.error(`[Scheduler] Error fetching ${symbol}:`, symbolError);
         }
