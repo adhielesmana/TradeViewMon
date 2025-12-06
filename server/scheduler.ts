@@ -692,6 +692,26 @@ class Scheduler {
           // Use the trade units directly as quantity
           const quantity = tradeUnits;
           
+          // DUPLICATE TRADE PREVENTION: Check if there's already an open auto-trade at similar price
+          const openPositions = await storage.getDemoPositions(settings.userId, 'open');
+          const existingAutoTrade = openPositions.find(pos => 
+            pos.symbol === settings.symbol && 
+            pos.isAutoTrade === true
+          );
+          
+          if (existingAutoTrade) {
+            // Calculate price tolerance (0.05% of current price, or use pip-based tolerance)
+            const pipValue = getPipValue(settings.symbol);
+            const priceTolerance = Math.max(currentPrice * 0.0005, pipValue * 2); // 0.05% or 2 pips minimum
+            const priceDifference = Math.abs(existingAutoTrade.entryPrice - currentPrice);
+            
+            if (priceDifference <= priceTolerance) {
+              console.log(`[AutoTrade] Skipping duplicate trade for ${settings.symbol}: Open position exists at $${existingAutoTrade.entryPrice.toFixed(2)} (current: $${currentPrice.toFixed(2)}, diff: $${priceDifference.toFixed(4)}, tolerance: $${priceTolerance.toFixed(4)})`);
+              continue;
+            }
+            console.log(`[AutoTrade] Existing position at $${existingAutoTrade.entryPrice.toFixed(2)}, but price moved significantly to $${currentPrice.toFixed(2)} (diff: $${priceDifference.toFixed(4)} > tolerance: $${priceTolerance.toFixed(4)})`);
+          }
+          
           // Calculate stop loss and take profit based on mode (pips/percentage/atr)
           const tradeType = suggestion.decision as 'BUY' | 'SELL';
           const slTpMode = settings.slTpMode || 'atr'; // Default to ATR mode for better volatility adaptation
