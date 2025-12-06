@@ -51,9 +51,26 @@ function isMarketOpen(symbol: string): MarketStatus {
     (estDay === 0 && estHour < 17);      // Sunday before 5 PM EST
   
   if (isClosed) {
-    // Calculate next open time (Sunday 5 PM EST)
-    const daysUntilSunday = estDay === 0 ? 0 : 7 - estDay;
+    // Calculate next open time (Sunday 5 PM EST = 10 PM UTC)
+    // We need to find the next Sunday 10 PM UTC
     const nextOpen = new Date(now);
+    
+    // Get current UTC day
+    const currentUtcDay = now.getUTCDay(); // 0 = Sunday
+    
+    // Calculate days until next Sunday (in UTC terms)
+    let daysUntilSunday: number;
+    if (currentUtcDay === 0) {
+      // It's Sunday in UTC - check if we're past 10 PM UTC
+      if (now.getUTCHours() >= 22) {
+        daysUntilSunday = 7; // Next Sunday
+      } else {
+        daysUntilSunday = 0; // This Sunday
+      }
+    } else {
+      daysUntilSunday = 7 - currentUtcDay; // Days until Sunday
+    }
+    
     nextOpen.setUTCDate(now.getUTCDate() + daysUntilSunday);
     nextOpen.setUTCHours(22, 0, 0, 0); // 5 PM EST = 10 PM UTC (17 + 5 = 22)
     
