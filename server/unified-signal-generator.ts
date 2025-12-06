@@ -687,22 +687,40 @@ export function generateUnifiedSignal(candles: MarketData[]): UnifiedSignalResul
   
   const patterns = indicators.candlestickPatterns;
   if (patterns.length > 0) {
+    // Calculate scores from ALL patterns for signal accuracy
+    let totalPatternWeight = 0;
+    let dominantType: "bullish" | "bearish" | "neutral" = "neutral";
+    let bullishPatternWeight = 0;
+    let bearishPatternWeight = 0;
+    
     for (const pattern of patterns) {
       const patternWeight = pattern.strength * WEIGHTS.CANDLESTICK_BASE;
-      
-      reasons.push({
-        indicator: `Candlestick Patterns`,
-        signal: pattern.type,
-        description: pattern.description,
-        weight: patternWeight,
-      });
+      totalPatternWeight += patternWeight;
       
       if (pattern.type === "bullish") {
         bullishScore += patternWeight;
+        bullishPatternWeight += patternWeight;
       } else if (pattern.type === "bearish") {
         bearishScore += patternWeight;
+        bearishPatternWeight += patternWeight;
       }
     }
+    
+    // Determine dominant pattern type
+    if (bullishPatternWeight > bearishPatternWeight) {
+      dominantType = "bullish";
+    } else if (bearishPatternWeight > bullishPatternWeight) {
+      dominantType = "bearish";
+    }
+    
+    // Add ONLY ONE candlestick pattern entry (most recent) to reasons for display
+    const latestPattern = patterns[patterns.length - 1];
+    reasons.push({
+      indicator: "Candlestick Patterns",
+      signal: latestPattern.type,
+      description: `${latestPattern.name}: ${latestPattern.description}`,
+      weight: latestPattern.strength * WEIGHTS.CANDLESTICK_BASE,
+    });
   } else {
     reasons.push({
       indicator: "Candlestick Patterns",
