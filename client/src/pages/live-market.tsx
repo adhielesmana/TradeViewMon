@@ -7,12 +7,19 @@ import { PriceDisplay } from "@/components/price-display";
 import { CandlestickChart, type TimeframeOption } from "@/components/candlestick-chart";
 import { StatCard } from "@/components/stat-card";
 import { StatusIndicator } from "@/components/status-indicator";
-import { Activity, Volume2, TrendingUp, TrendingDown, Clock, BarChart3, Gauge, Wifi, WifiOff } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { Activity, Volume2, TrendingUp, TrendingDown, Clock, BarChart3, Gauge, Wifi, WifiOff, Moon, Sun } from "lucide-react";
+import { formatDistanceToNow, format } from "date-fns";
 import { useSymbol } from "@/lib/symbol-context";
 import { useWebSocket, type WSMessage, type WSConnectionStatus } from "@/hooks/use-websocket";
 import { queryClient } from "@/lib/queryClient";
 import type { MarketData, MarketStats } from "@shared/schema";
+
+interface MarketStatus {
+  isOpen: boolean;
+  reason: string;
+  nextOpenTime?: string;
+  nextCloseTime?: string;
+}
 
 interface IndicatorData {
   timestamp: string;
@@ -89,6 +96,12 @@ export default function LiveMarket() {
     refetchInterval: isConnected ? false : 30000,
   });
 
+  // Market status query (open/closed)
+  const { data: marketStatus } = useQuery<MarketStatus>({
+    queryKey: ["/api/market/status", { symbol }],
+    refetchInterval: 60000, // Check market status every minute
+  });
+
   const lastUpdate = marketData?.[marketData.length - 1]?.timestamp;
   const signal = indicatorsData?.signal;
   const latest = indicatorsData?.latest;
@@ -102,31 +115,67 @@ export default function LiveMarket() {
             Real-time price monitoring and market analysis
           </p>
         </div>
-        <div 
-          className="flex items-center gap-3 rounded-md bg-card px-3 py-2 border border-card-border cursor-pointer hover-elevate"
-          onClick={wsStatus !== "connected" ? reconnect : undefined}
-          data-testid="status-websocket"
-        >
-          {wsStatus === "connected" ? (
-            <Wifi className="h-4 w-4 text-profit" />
-          ) : wsStatus === "connecting" ? (
-            <Wifi className="h-4 w-4 text-yellow-500 animate-pulse" />
-          ) : (
-            <WifiOff className="h-4 w-4 text-loss" />
+        <div className="flex items-center gap-3">
+          {/* Market Status Badge */}
+          {marketStatus && (
+            <div 
+              className={`flex items-center gap-2 rounded-md px-3 py-2 border ${
+                marketStatus.isOpen 
+                  ? "bg-profit/10 border-profit/30 text-profit" 
+                  : "bg-muted border-muted-foreground/30 text-muted-foreground"
+              }`}
+              data-testid="status-market"
+            >
+              {marketStatus.isOpen ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+              <div className="flex flex-col">
+                <span className="text-xs font-medium">
+                  {marketStatus.isOpen ? "Market Open" : "Market Closed"}
+                </span>
+                {!marketStatus.isOpen && marketStatus.nextOpenTime && (
+                  <span className="text-xs opacity-80">
+                    Opens {format(new Date(marketStatus.nextOpenTime), "EEE h:mm a")}
+                  </span>
+                )}
+                {marketStatus.isOpen && marketStatus.nextCloseTime && (
+                  <span className="text-xs opacity-80">
+                    Closes {format(new Date(marketStatus.nextCloseTime), "EEE h:mm a")}
+                  </span>
+                )}
+              </div>
+            </div>
           )}
-          <StatusIndicator status={getConnectionStatusColor(wsStatus)} size="sm" />
-          <div className="flex flex-col">
-            <span className="text-xs font-medium">
-              {wsStatus === "connected" ? "Live" : wsStatus === "connecting" ? "Connecting..." : "Offline"}
-            </span>
-            {lastUpdate && wsStatus === "connected" && (
-              <span className="text-xs text-muted-foreground">
-                Updated {formatDistanceToNow(new Date(lastUpdate), { addSuffix: true })}
+
+          {/* WebSocket Status */}
+          <div 
+            className="flex items-center gap-3 rounded-md bg-card px-3 py-2 border border-card-border cursor-pointer hover-elevate"
+            onClick={wsStatus !== "connected" ? reconnect : undefined}
+            data-testid="status-websocket"
+          >
+            {wsStatus === "connected" ? (
+              <Wifi className="h-4 w-4 text-profit" />
+            ) : wsStatus === "connecting" ? (
+              <Wifi className="h-4 w-4 text-yellow-500 animate-pulse" />
+            ) : (
+              <WifiOff className="h-4 w-4 text-loss" />
+            )}
+            <StatusIndicator status={getConnectionStatusColor(wsStatus)} size="sm" />
+            <div className="flex flex-col">
+              <span className="text-xs font-medium">
+                {wsStatus === "connected" ? "Live" : wsStatus === "connecting" ? "Connecting..." : "Offline"}
               </span>
-            )}
-            {wsStatus !== "connected" && wsStatus !== "connecting" && (
-              <span className="text-xs text-muted-foreground">Click to reconnect</span>
-            )}
+              {lastUpdate && wsStatus === "connected" && (
+                <span className="text-xs text-muted-foreground">
+                  Updated {formatDistanceToNow(new Date(lastUpdate), { addSuffix: true })}
+                </span>
+              )}
+              {wsStatus !== "connected" && wsStatus !== "connecting" && (
+                <span className="text-xs text-muted-foreground">Click to reconnect</span>
+              )}
+            </div>
           </div>
         </div>
       </div>
