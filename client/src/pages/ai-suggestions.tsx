@@ -53,6 +53,7 @@ interface TechnicalIndicators {
   stochD: number;
   atr: number;
   currentPrice: number;
+  candlestickPatterns?: CandlestickPattern[];
 }
 
 interface AiSuggestion {
@@ -137,7 +138,6 @@ export default function AiSuggestions() {
       queryClient.invalidateQueries({ queryKey: ["/api/suggestions/recent", { symbol, limit: 10 }] });
     } else if (message.type === "market_update" && matchesSymbol) {
       queryClient.invalidateQueries({ queryKey: ["/api/market/candles", { symbol, timeframe: chartTimeframe }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/market/patterns", { symbol, timeframe: chartTimeframe }] });
     }
   }, [symbol, chartTimeframe]);
 
@@ -166,10 +166,28 @@ export default function AiSuggestions() {
     refetchInterval: 60000,
   });
 
-  const { data: patternData } = useQuery<{ patterns: CandlestickPattern[]; trend: string }>({
-    queryKey: ["/api/market/patterns", { symbol, timeframe: chartTimeframe }],
-    refetchInterval: 60000,
-  });
+  // Extract pattern info from the reasoning to ensure consistency
+  // Use filter().at(-1) to get the LAST matching entry (most recent), same as Analysis Breakdown
+  const patternReasons = latestSuggestion?.reasoning?.filter(r => r.indicator === "Candlestick Patterns") || [];
+  const patternFromReasoning = patternReasons.at(-1);
+  // Show pattern card for both bullish/bearish AND neutral patterns to match Analysis Breakdown display
+  const patternData = patternFromReasoning && latestSuggestion
+    ? {
+        // Parse pattern name from description (format: "PatternName: description")
+        patternName: patternFromReasoning.description.includes(":") 
+          ? patternFromReasoning.description.split(":")[0]?.trim() || "Pattern"
+          : patternFromReasoning.description.split(" - ")[0]?.trim() || "Pattern",
+        patternType: patternFromReasoning.signal as "bullish" | "bearish" | "neutral",
+        patternDescription: patternFromReasoning.description,
+        patternStrength: Math.min(5, Math.ceil(patternFromReasoning.weight / 8)), // Convert weight to 1-5 strength
+        // Derive trend from suggestion decision
+        trend: latestSuggestion.decision === "BUY" ? "uptrend" 
+             : latestSuggestion.decision === "SELL" ? "downtrend" 
+             : "sideways",
+        // Keep track of whether it's a real pattern or just "no patterns detected"
+        isRealPattern: !patternFromReasoning.description.toLowerCase().includes("no significant")
+      }
+    : null;
 
   const [countdown, setCountdown] = useState(60);
 
@@ -397,63 +415,53 @@ export default function AiSuggestions() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {patternData && patternData.patterns && patternData.patterns.length > 0 ? (
-              (() => {
-                const latestPattern = patternData.patterns[patternData.patterns.length - 1];
-                return (
-                  <div className="space-y-3">
-                    <div className="text-sm text-muted-foreground mb-4">
-                      Current Trend: <Badge variant="outline" className="ml-2 capitalize">{patternData.trend}</Badge>
-                    </div>
-                    <div 
-                      className={`p-4 rounded-lg border ${
-                        latestPattern.type === "bullish" 
-                          ? "bg-green-500/10 border-green-500/30" 
-                          : latestPattern.type === "bearish"
-                          ? "bg-red-500/10 border-red-500/30"
-                          : "bg-yellow-500/10 border-yellow-500/30"
-                      }`}
-                      data-testid={`pattern-${latestPattern.name.toLowerCase().replace(/\s+/g, '-')}-latest`}
+            {patternData && patternData.isRealPattern ? (
+              <div className="space-y-3">
+                <div className="text-sm text-muted-foreground mb-4">
+                  Current Trend: <Badge variant="outline" className="ml-2 capitalize">{patternData.trend}</Badge>
+                </div>
+                <div 
+                  className={`p-4 rounded-lg border ${
+                    patternData.patternType === "bullish" 
+                      ? "bg-green-500/10 border-green-500/30" 
+                      : patternData.patternType === "bearish"
+                      ? "bg-red-500/10 border-red-500/30"
+                      : "bg-yellow-500/10 border-yellow-500/30"
+                  }`}
+                  data-testid={`pattern-${patternData.patternName.toLowerCase().replace(/\s+/g, '-')}-latest`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-lg font-semibold ${
+                      patternData.patternType === "bullish" ? "text-green-500" 
+                      : patternData.patternType === "bearish" ? "text-red-500" 
+                      : "text-yellow-500"
+                    }`}>
+                      {patternData.patternName}
+                    </span>
+                    <Badge 
+                      variant={patternData.patternType === "bullish" ? "default" : patternData.patternType === "bearish" ? "destructive" : "secondary"}
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className={`text-lg font-semibold ${
-                          latestPattern.type === "bullish" ? "text-green-500" 
-                          : latestPattern.type === "bearish" ? "text-red-500" 
-                          : "text-yellow-500"
-                        }`}>
-                          {latestPattern.name}
-                        </span>
-                        <Badge 
-                          variant={latestPattern.type === "bullish" ? "default" : latestPattern.type === "bearish" ? "destructive" : "secondary"}
-                        >
-                          {latestPattern.type}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-3">{latestPattern.description}</p>
-                      {latestPattern.timestamp && (
-                        <p className="text-xs text-muted-foreground mb-3">
-                          Detected at: {format(new Date(latestPattern.timestamp), "HH:mm:ss")}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Strength:</span>
-                        {[...Array(5)].map((_, i) => (
-                          <div 
-                            key={i} 
-                            className={`w-3 h-3 rounded-full ${
-                              i < latestPattern.strength 
-                                ? latestPattern.type === "bullish" ? "bg-green-500" 
-                                  : latestPattern.type === "bearish" ? "bg-red-500" 
-                                  : "bg-yellow-500"
-                                : "bg-muted"
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    </div>
+                      {patternData.patternType}
+                    </Badge>
                   </div>
-                );
-              })()
+                  <p className="text-sm text-muted-foreground mb-3">{patternData.patternDescription}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Strength:</span>
+                    {[...Array(5)].map((_, i) => (
+                      <div 
+                        key={i} 
+                        className={`w-3 h-3 rounded-full ${
+                          i < patternData.patternStrength 
+                            ? patternData.patternType === "bullish" ? "bg-green-500" 
+                              : patternData.patternType === "bearish" ? "bg-red-500" 
+                              : "bg-yellow-500"
+                            : "bg-muted"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />

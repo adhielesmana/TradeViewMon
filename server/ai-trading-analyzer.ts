@@ -296,17 +296,24 @@ Always respond in valid JSON format.`
     const direction = validateDirection(aiAnalysis.direction);
     const riskLevel = validateRiskLevel(aiAnalysis.riskLevel);
     
-    // STRICTER AI FILTER: Multiple conditions must be met
+    // AI FILTER CONDITIONS (adaptive based on asset type)
     // 1. Confidence must meet minimum threshold
     // 2. Direction must not be HOLD
-    // 3. Risk level must be LOW (not MEDIUM or HIGH)
+    // 3. Risk level must be LOW (MEDIUM allowed if confidence >= 80%)
     // 4. AI and technical signals must agree on direction
-    // 5. Technical signal must also have sufficient confidence (>= 50%)
-    // 6. Volatility must not be extreme (< 0.8%)
-    const isLowRisk = riskLevel === "LOW";
+    // 5. Technical signal must also have sufficient confidence (>= 40% for crypto, >= 50% for forex)
+    // 6. Volatility must be acceptable (< 1.5% for crypto, < 0.8% for forex/metals)
+    
+    const isCrypto = context.symbol === "BTCUSD";
+    
+    // Adaptive thresholds for different asset classes
+    const volatilityThreshold = isCrypto ? 1.5 : 0.8;  // Crypto is naturally more volatile
+    const techConfidenceThreshold = isCrypto ? 40 : 50; // Lower tech threshold for volatile crypto
+    
+    const isLowRisk = riskLevel === "LOW" || (riskLevel === "MEDIUM" && confidence >= 80);
     const signalsAgree = signalsAlign(direction, technicalSignal.decision);
-    const technicallyStrong = technicalSignal.confidence >= 50;
-    const lowVolatility = context.volatility < 0.8;
+    const technicallyStrong = technicalSignal.confidence >= techConfidenceThreshold;
+    const lowVolatility = context.volatility < volatilityThreshold;
     
     const shouldTrade = confidence >= minConfidence && 
                         direction !== "HOLD" && 
@@ -315,15 +322,32 @@ Always respond in valid JSON format.`
                         technicallyStrong &&
                         lowVolatility;
     
-    // Log decision details for transparency
-    if (!shouldTrade && direction !== "HOLD") {
-      const reasons: string[] = [];
-      if (confidence < minConfidence) reasons.push(`confidence ${confidence} < ${minConfidence}`);
-      if (!isLowRisk) reasons.push(`risk level is ${riskLevel}`);
-      if (!signalsAgree) reasons.push(`AI (${direction}) != Technical (${technicalSignal.decision})`);
-      if (!technicallyStrong) reasons.push(`tech confidence ${technicalSignal.confidence} < 50`);
-      if (!lowVolatility) reasons.push(`volatility ${context.volatility.toFixed(3)} >= 0.8%`);
-      console.log(`[AI Filter] Blocked trade for ${context.symbol}: ${reasons.join(", ")}`);
+    // Always log decision details for transparency
+    const riskRequirement = confidence >= 80 ? "LOW or MEDIUM" : "LOW only";
+    const conditionStatus = {
+      confidence: `${confidence}% (min: ${minConfidence}%) ${confidence >= minConfidence ? '✓' : '✗'}`,
+      direction: `${direction} ${direction !== "HOLD" ? '✓' : '✗ (HOLD)'}`,
+      riskLevel: `${riskLevel} ${isLowRisk ? '✓' : `✗ (need ${riskRequirement})`}`,
+      signalAlign: `AI=${direction} vs Tech=${technicalSignal.decision} ${signalsAgree ? '✓' : '✗'}`,
+      techConfidence: `${technicalSignal.confidence}% ${technicallyStrong ? '✓' : `✗ (need ≥${techConfidenceThreshold}%)`}`,
+      volatility: `${(context.volatility * 100).toFixed(2)}% ${lowVolatility ? '✓' : `✗ (need <${volatilityThreshold}%)`}`,
+    };
+    
+    const assetType = isCrypto ? "[CRYPTO]" : "[FOREX]";
+    
+    if (shouldTrade) {
+      console.log(`[AI Filter] ${assetType} ✓ APPROVED trade for ${context.symbol}: ${direction} at ${confidence}% confidence`);
+      console.log(`  Conditions: ${JSON.stringify(conditionStatus)}`);
+    } else if (direction !== "HOLD") {
+      const failedConditions: string[] = [];
+      if (confidence < minConfidence) failedConditions.push(`confidence ${confidence}% < ${minConfidence}%`);
+      if (!isLowRisk) failedConditions.push(`risk=${riskLevel} (need ${riskRequirement})`);
+      if (!signalsAgree) failedConditions.push(`signals mismatch: AI=${direction} vs Tech=${technicalSignal.decision}`);
+      if (!technicallyStrong) failedConditions.push(`tech confidence ${technicalSignal.confidence}% < ${techConfidenceThreshold}%`);
+      if (!lowVolatility) failedConditions.push(`volatility ${(context.volatility * 100).toFixed(2)}% >= ${volatilityThreshold}%`);
+      console.log(`[AI Filter] ${assetType} ✗ BLOCKED ${direction} trade for ${context.symbol}: ${failedConditions.join(", ")}`);
+    } else {
+      console.log(`[AI Filter] ${assetType} → HOLD decision for ${context.symbol} (no trade signal from AI)`);
     }
     
     return {
