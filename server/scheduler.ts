@@ -787,11 +787,12 @@ class Scheduler {
             }
           }
           
-          // AI Filter: If enabled, use AI analyzer to validate the trade
+          // AI Filter: ONLY run when explicitly enabled via toggle
+          // The minConfidence setting only affects the threshold when AI filter is ON
           const useAiFilter = settings.useAiFilter ?? false;
           const minConfidence = settings.minConfidence ?? 0;
           
-          if (useAiFilter || minConfidence > 0) {
+          if (useAiFilter) {
             try {
               // Get recent candles for AI analysis
               const candles = await storage.getRecentMarketData(settings.symbol, 100);
