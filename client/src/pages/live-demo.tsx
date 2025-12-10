@@ -424,10 +424,14 @@ export default function LiveDemo() {
     }
   };
 
-  const handleCloseTrade = (positionId: number) => {
-    if (currentPrice) {
-      closeTradeMutation.mutate({ positionId, exitPrice: currentPrice.price });
-    }
+  const handleCloseTrade = (positionId: number, position: DemoPosition) => {
+    // Use the position's OWN current price for the exit, NOT the selected chart's price
+    // This ensures XAUUSD positions close at XAUUSD prices, not BTCUSD prices
+    const exitPrice = position.symbol === selectedSymbol && currentPrice 
+      ? currentPrice.price 
+      : position.currentPrice || position.entryPrice;
+    
+    closeTradeMutation.mutate({ positionId, exitPrice });
   };
 
   const calculateEquityCurve = () => {
@@ -1352,7 +1356,7 @@ export default function LiveDemo() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleCloseTrade(position.id)}
+                            onClick={() => handleCloseTrade(position.id, position)}
                             disabled={closeTradeMutation.isPending}
                             data-testid={`button-close-position-${position.id}`}
                           >
