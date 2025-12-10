@@ -69,9 +69,10 @@ const THRESHOLDS = {
   STOCH_OVERSOLD: 20,
   STOCH_OVERBOUGHT: 80,
   PRICE_TREND_THRESHOLD: 0.5,
-  // Raised from ±20 to ±40 to require multi-factor agreement for stronger signals
-  BUY_THRESHOLD: 40,
-  SELL_THRESHOLD: -40,
+  // Lowered from ±40 to ±25 for more actionable signals when indicators align
+  // This prevents high-confidence signals from being stuck as HOLD
+  BUY_THRESHOLD: 25,
+  SELL_THRESHOLD: -25,
 };
 
 function calculateEMA(prices: number[], period: number): number {
