@@ -56,6 +56,22 @@ interface TechnicalIndicators {
   candlestickPatterns?: CandlestickPattern[];
 }
 
+interface PrecisionTradePlan {
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit1: number;
+  takeProfit2: number;
+  takeProfit3: number;
+  riskRewardRatio: number;
+  supportLevel: number;
+  resistanceLevel: number;
+  signalType: "immediate" | "pending";
+  validUntil: string;
+  riskAmount: number;
+  potentialReward: number;
+  analysis: string;
+}
+
 interface AiSuggestion {
   id: number;
   symbol: string;
@@ -72,6 +88,18 @@ interface AiSuggestion {
   actualPrice: number | null;
   wasAccurate: boolean | null;
   profitLoss: number | null;
+  // Precision Trade Plan fields
+  entryPrice: number | null;
+  stopLoss: number | null;
+  takeProfit1: number | null;
+  takeProfit2: number | null;
+  takeProfit3: number | null;
+  riskRewardRatio: number | null;
+  supportLevel: number | null;
+  resistanceLevel: number | null;
+  signalType: string | null;
+  validUntil: string | null;
+  tradePlan: string | null;
 }
 
 function getDecisionColor(decision: string): string {
@@ -304,6 +332,99 @@ export default function AiSuggestions() {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Precision Trade Plan - Main Display */}
+            {latestSuggestion.decision !== "HOLD" && latestSuggestion.entryPrice && (
+              <div className="mb-6 p-4 rounded-lg bg-gradient-to-r from-primary/10 to-primary/5 border-2 border-primary/30">
+                <div className="flex items-center gap-2 mb-4">
+                  <Target className="h-5 w-5 text-primary" />
+                  <span className="font-bold text-lg">Precision Trade Plan</span>
+                  <Badge variant={latestSuggestion.signalType === "immediate" ? "default" : "secondary"}>
+                    {latestSuggestion.signalType === "immediate" ? "Execute Now" : "Pending Order"}
+                  </Badge>
+                  {latestSuggestion.riskRewardRatio && (
+                    <Badge variant="outline" className="ml-auto">
+                      R:R {latestSuggestion.riskRewardRatio.toFixed(1)}:1
+                    </Badge>
+                  )}
+                </div>
+                
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  {/* Entry Price */}
+                  <div className="p-3 rounded-md bg-background border-2 border-primary/50">
+                    <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" /> ENTRY PRICE
+                    </div>
+                    <div className="text-xl font-mono font-bold text-primary" data-testid="text-entry-price">
+                      ${latestSuggestion.entryPrice.toFixed(2)}
+                    </div>
+                  </div>
+                  
+                  {/* Stop Loss */}
+                  <div className="p-3 rounded-md bg-red-500/10 border-2 border-red-500/50">
+                    <div className="text-xs text-red-400 mb-1 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> STOP LOSS
+                    </div>
+                    <div className="text-xl font-mono font-bold text-red-500" data-testid="text-stop-loss">
+                      ${latestSuggestion.stopLoss?.toFixed(2) || '-'}
+                    </div>
+                  </div>
+                  
+                  {/* Take Profit 1 */}
+                  <div className="p-3 rounded-md bg-green-500/10 border-2 border-green-500/30">
+                    <div className="text-xs text-green-400 mb-1">TP1 (1R)</div>
+                    <div className="text-xl font-mono font-bold text-green-500" data-testid="text-tp1">
+                      ${latestSuggestion.takeProfit1?.toFixed(2) || '-'}
+                    </div>
+                  </div>
+                  
+                  {/* Take Profit 2 */}
+                  <div className="p-3 rounded-md bg-green-500/10 border-2 border-green-500/50">
+                    <div className="text-xs text-green-400 mb-1">TP2 (2R) - Target</div>
+                    <div className="text-xl font-mono font-bold text-green-500" data-testid="text-tp2">
+                      ${latestSuggestion.takeProfit2?.toFixed(2) || '-'}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Support/Resistance Levels */}
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <div className="p-2 rounded bg-background/50">
+                    <div className="text-xs text-muted-foreground">Support Level</div>
+                    <div className="font-mono text-sm" data-testid="text-support">
+                      ${latestSuggestion.supportLevel?.toFixed(2) || '-'}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded bg-background/50">
+                    <div className="text-xs text-muted-foreground">Resistance Level</div>
+                    <div className="font-mono text-sm" data-testid="text-resistance">
+                      ${latestSuggestion.resistanceLevel?.toFixed(2) || '-'}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded bg-background/50">
+                    <div className="text-xs text-muted-foreground">TP3 (Extended)</div>
+                    <div className="font-mono text-sm text-green-400" data-testid="text-tp3">
+                      ${latestSuggestion.takeProfit3?.toFixed(2) || '-'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* HOLD Signal Display */}
+            {latestSuggestion.decision === "HOLD" && (
+              <div className="mb-6 p-4 rounded-lg bg-yellow-500/10 border-2 border-yellow-500/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <Minus className="h-5 w-5 text-yellow-500" />
+                  <span className="font-bold text-lg text-yellow-500">No Trade Signal</span>
+                </div>
+                <p className="text-muted-foreground">
+                  Market conditions are unclear. Wait for a stronger BUY or SELL signal before entering a position.
+                  Support: ${latestSuggestion.supportLevel?.toFixed(2) || latestSuggestion.buyTarget?.toFixed(2) || '-'} | 
+                  Resistance: ${latestSuggestion.resistanceLevel?.toFixed(2) || latestSuggestion.sellTarget?.toFixed(2) || '-'}
+                </p>
+              </div>
+            )}
+
             <div className="grid gap-6 md:grid-cols-3">
               <div>
                 <div className="text-sm text-muted-foreground mb-1">Current Price</div>

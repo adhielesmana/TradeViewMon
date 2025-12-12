@@ -1,5 +1,5 @@
 import type { MarketData, InsertAiSuggestion } from "@shared/schema";
-import { generateUnifiedSignal } from "./unified-signal-generator";
+import { generateUnifiedSignal, type PrecisionTradePlan } from "./unified-signal-generator";
 
 interface TechnicalIndicators {
   ema12: number;
@@ -37,6 +37,7 @@ export interface AiSuggestionResult {
   currentPrice: number;
   reasoning: SuggestionReason[];
   indicators: TechnicalIndicators;
+  tradePlan: PrecisionTradePlan | null;
 }
 
 export function generateAiSuggestion(candles: MarketData[], symbol: string): AiSuggestionResult {
@@ -76,10 +77,13 @@ export function generateAiSuggestion(candles: MarketData[], symbol: string): AiS
     currentPrice: unifiedResult.indicators.currentPrice,
     reasoning: reasons,
     indicators,
+    tradePlan: unifiedResult.tradePlan,
   };
 }
 
 export function toInsertSuggestion(result: AiSuggestionResult, symbol: string): InsertAiSuggestion {
+  const tradePlan = result.tradePlan;
+  
   return {
     symbol,
     generatedAt: new Date(),
@@ -91,6 +95,18 @@ export function toInsertSuggestion(result: AiSuggestionResult, symbol: string): 
     reasoning: JSON.stringify(result.reasoning),
     indicators: JSON.stringify(result.indicators),
     isEvaluated: false,
+    // Precision trade plan fields
+    entryPrice: tradePlan?.entryPrice ?? null,
+    stopLoss: tradePlan?.stopLoss ?? null,
+    takeProfit1: tradePlan?.takeProfit1 ?? null,
+    takeProfit2: tradePlan?.takeProfit2 ?? null,
+    takeProfit3: tradePlan?.takeProfit3 ?? null,
+    riskRewardRatio: tradePlan?.riskRewardRatio ?? null,
+    supportLevel: tradePlan?.supportLevel ?? null,
+    resistanceLevel: tradePlan?.resistanceLevel ?? null,
+    signalType: tradePlan?.signalType ?? "immediate",
+    validUntil: tradePlan?.validUntil ?? null,
+    tradePlan: tradePlan ? JSON.stringify(tradePlan) : null,
   };
 }
 

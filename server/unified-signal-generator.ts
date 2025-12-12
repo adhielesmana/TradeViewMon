@@ -1,5 +1,21 @@
 import type { MarketData } from "@shared/schema";
 
+export interface PrecisionTradePlan {
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit1: number; // Conservative TP (1R)
+  takeProfit2: number; // Standard TP (2R)
+  takeProfit3: number; // Extended TP (3R)
+  riskRewardRatio: number;
+  supportLevel: number;
+  resistanceLevel: number;
+  signalType: "immediate" | "pending";
+  validUntil: Date;
+  riskAmount: number; // Distance from entry to SL
+  potentialReward: number; // Distance from entry to TP2
+  analysis: string; // Human-readable trade rationale
+}
+
 export interface UnifiedSignalResult {
   decision: "BUY" | "SELL" | "HOLD";
   confidence: number;
@@ -12,6 +28,7 @@ export interface UnifiedSignalResult {
     buyTarget: number | null;
     sellTarget: number | null;
   };
+  tradePlan: PrecisionTradePlan | null;
 }
 
 export interface SignalReason {
@@ -74,6 +91,202 @@ const THRESHOLDS = {
   BUY_THRESHOLD: 25,
   SELL_THRESHOLD: -25,
 };
+
+// Support/Resistance Detection using swing highs/lows
+interface SupportResistance {
+  support: number;
+  resistance: number;
+  supportStrength: number;
+  resistanceStrength: number;
+}
+
+function detectSupportResistance(candles: MarketData[], lookback: number = 50): SupportResistance {
+  if (candles.length < 10) {
+    const lastClose = candles[candles.length - 1]?.close || 0;
+    return {
+      support: lastClose * 0.98,
+      resistance: lastClose * 1.02,
+      supportStrength: 1,
+      resistanceStrength: 1,
+    };
+  }
+
+  const recentCandles = candles.slice(-Math.min(lookback, candles.length));
+  const currentPrice = recentCandles[recentCandles.length - 1].close;
+  
+  // Find swing highs and lows (local extremes)
+  const swingHighs: number[] = [];
+  const swingLows: number[] = [];
+  
+  for (let i = 2; i < recentCandles.length - 2; i++) {
+    const prev2 = recentCandles[i - 2];
+    const prev1 = recentCandles[i - 1];
+    const curr = recentCandles[i];
+    const next1 = recentCandles[i + 1];
+    const next2 = recentCandles[i + 2];
+    
+    // Swing high: current high is higher than surrounding 2 candles
+    if (curr.high > prev1.high && curr.high > prev2.high && 
+        curr.high > next1.high && curr.high > next2.high) {
+      swingHighs.push(curr.high);
+    }
+    
+    // Swing low: current low is lower than surrounding 2 candles
+    if (curr.low < prev1.low && curr.low < prev2.low && 
+        curr.low < next1.low && curr.low < next2.low) {
+      swingLows.push(curr.low);
+    }
+  }
+  
+  // If we don't have enough swing points, use min/max of recent data
+  if (swingHighs.length === 0) {
+    swingHighs.push(Math.max(...recentCandles.map(c => c.high)));
+  }
+  if (swingLows.length === 0) {
+    swingLows.push(Math.min(...recentCandles.map(c => c.low)));
+  }
+  
+  // Find nearest support (below current price)
+  const supportsBelow = swingLows.filter(s => s < currentPrice);
+  const support = supportsBelow.length > 0 
+    ? Math.max(...supportsBelow) 
+    : currentPrice - (currentPrice * 0.02);
+  
+  // Find nearest resistance (above current price)
+  const resistancesAbove = swingHighs.filter(r => r > currentPrice);
+  const resistance = resistancesAbove.length > 0 
+    ? Math.min(...resistancesAbove) 
+    : currentPrice + (currentPrice * 0.02);
+  
+  // Calculate strength based on how many times price has touched these levels
+  const supportTouches = recentCandles.filter(c => 
+    Math.abs(c.low - support) / support < 0.005
+  ).length;
+  const resistanceTouches = recentCandles.filter(c => 
+    Math.abs(c.high - resistance) / resistance < 0.005
+  ).length;
+  
+  return {
+    support: Math.round(support * 100) / 100,
+    resistance: Math.round(resistance * 100) / 100,
+    supportStrength: Math.min(supportTouches + 1, 5),
+    resistanceStrength: Math.min(resistanceTouches + 1, 5),
+  };
+}
+
+function calculatePrecisionTradePlan(
+  decision: "BUY" | "SELL" | "HOLD",
+  currentPrice: number,
+  atr: number,
+  supportResistance: SupportResistance,
+  confidence: number,
+  reasons: SignalReason[]
+): PrecisionTradePlan | null {
+  if (decision === "HOLD") {
+    return null;
+  }
+  
+  const { support, resistance } = supportResistance;
+  
+  let entryPrice: number;
+  let stopLoss: number;
+  let takeProfit1: number;
+  let takeProfit2: number;
+  let takeProfit3: number;
+  let riskAmount: number;
+  let signalType: "immediate" | "pending" = "immediate";
+  let analysis: string;
+  
+  if (decision === "BUY") {
+    // For BUY: entry at current or slight pullback, SL below support, TP at resistance
+    const distanceToSupport = currentPrice - support;
+    
+    // If price is near support (within 1 ATR), use immediate entry
+    // Otherwise, suggest pending order at better price
+    if (distanceToSupport < atr * 1.5) {
+      entryPrice = currentPrice;
+      signalType = "immediate";
+    } else {
+      // Suggest entry at a pullback level (midway to support)
+      entryPrice = currentPrice - (distanceToSupport * 0.3);
+      signalType = "pending";
+    }
+    
+    // Stop loss: below support by 0.5 ATR for safety buffer
+    stopLoss = support - (atr * 0.5);
+    riskAmount = entryPrice - stopLoss;
+    
+    // Take profits based on risk multiples and resistance
+    takeProfit1 = entryPrice + riskAmount; // 1R (1:1 risk/reward)
+    takeProfit2 = Math.min(entryPrice + (riskAmount * 2), resistance); // 2R or resistance
+    takeProfit3 = entryPrice + (riskAmount * 3); // 3R extended target
+    
+    // Ensure TP2 is at least at resistance level if resistance is close
+    if (resistance < takeProfit2) {
+      takeProfit2 = resistance;
+    }
+    
+    analysis = `BUY Signal: ${signalType === "immediate" ? "Enter now" : `Set buy order at $${entryPrice.toFixed(2)}`}. ` +
+      `Price near support at $${support.toFixed(2)}. ` +
+      `Risk $${riskAmount.toFixed(2)} per unit. ` +
+      `Target resistance at $${resistance.toFixed(2)}.`;
+      
+  } else { // SELL
+    // For SELL: entry at current or slight rally, SL above resistance, TP at support
+    const distanceToResistance = resistance - currentPrice;
+    
+    if (distanceToResistance < atr * 1.5) {
+      entryPrice = currentPrice;
+      signalType = "immediate";
+    } else {
+      // Suggest entry at a rally level (midway to resistance)
+      entryPrice = currentPrice + (distanceToResistance * 0.3);
+      signalType = "pending";
+    }
+    
+    // Stop loss: above resistance by 0.5 ATR for safety buffer
+    stopLoss = resistance + (atr * 0.5);
+    riskAmount = stopLoss - entryPrice;
+    
+    // Take profits based on risk multiples and support
+    takeProfit1 = entryPrice - riskAmount; // 1R
+    takeProfit2 = Math.max(entryPrice - (riskAmount * 2), support); // 2R or support
+    takeProfit3 = entryPrice - (riskAmount * 3); // 3R extended target
+    
+    // Ensure TP2 is at least at support level if support is close
+    if (support > takeProfit2) {
+      takeProfit2 = support;
+    }
+    
+    analysis = `SELL Signal: ${signalType === "immediate" ? "Enter now" : `Set sell order at $${entryPrice.toFixed(2)}`}. ` +
+      `Price near resistance at $${resistance.toFixed(2)}. ` +
+      `Risk $${riskAmount.toFixed(2)} per unit. ` +
+      `Target support at $${support.toFixed(2)}.`;
+  }
+  
+  // Calculate risk/reward ratio
+  const potentialReward = Math.abs(takeProfit2 - entryPrice);
+  const riskRewardRatio = riskAmount > 0 ? Math.round((potentialReward / riskAmount) * 10) / 10 : 0;
+  
+  // Valid for 1 hour
+  const validUntil = new Date(Date.now() + 60 * 60 * 1000);
+  
+  return {
+    entryPrice: Math.round(entryPrice * 100) / 100,
+    stopLoss: Math.round(stopLoss * 100) / 100,
+    takeProfit1: Math.round(takeProfit1 * 100) / 100,
+    takeProfit2: Math.round(takeProfit2 * 100) / 100,
+    takeProfit3: Math.round(takeProfit3 * 100) / 100,
+    riskRewardRatio,
+    supportLevel: support,
+    resistanceLevel: resistance,
+    signalType,
+    validUntil,
+    riskAmount: Math.round(riskAmount * 100) / 100,
+    potentialReward: Math.round(potentialReward * 100) / 100,
+    analysis,
+  };
+}
 
 function calculateEMA(prices: number[], period: number): number {
   if (prices.length < period) return prices[prices.length - 1] || 0;
@@ -744,19 +957,43 @@ export function generateUnifiedSignal(candles: MarketData[]): UnifiedSignalResul
     decision = "HOLD";
   }
   
+  // Detect support and resistance levels
+  const supportResistance = detectSupportResistance(candles);
+  
+  // Calculate precision trade plan with specific entry/SL/TP
+  const tradePlan = calculatePrecisionTradePlan(
+    decision,
+    indicators.currentPrice,
+    indicators.atr,
+    supportResistance,
+    confidence,
+    reasons
+  );
+  
   const atrMultiplier = 1.5;
   let buyTarget: number | null = null;
   let sellTarget: number | null = null;
   
-  if (decision === "BUY") {
-    buyTarget = indicators.currentPrice;
-    sellTarget = indicators.currentPrice + (indicators.atr * atrMultiplier * 2);
-  } else if (decision === "SELL") {
-    sellTarget = indicators.currentPrice;
-    buyTarget = indicators.currentPrice - (indicators.atr * atrMultiplier * 2);
+  // Use trade plan values if available, otherwise calculate generic targets
+  if (tradePlan) {
+    if (decision === "BUY") {
+      buyTarget = tradePlan.entryPrice;
+      sellTarget = tradePlan.takeProfit2;
+    } else if (decision === "SELL") {
+      sellTarget = tradePlan.entryPrice;
+      buyTarget = tradePlan.takeProfit2;
+    }
   } else {
-    buyTarget = indicators.currentPrice - (indicators.atr * atrMultiplier);
-    sellTarget = indicators.currentPrice + (indicators.atr * atrMultiplier);
+    if (decision === "BUY") {
+      buyTarget = indicators.currentPrice;
+      sellTarget = indicators.currentPrice + (indicators.atr * atrMultiplier * 2);
+    } else if (decision === "SELL") {
+      sellTarget = indicators.currentPrice;
+      buyTarget = indicators.currentPrice - (indicators.atr * atrMultiplier * 2);
+    } else {
+      buyTarget = supportResistance.support;
+      sellTarget = supportResistance.resistance;
+    }
   }
   
   return {
@@ -771,6 +1008,7 @@ export function generateUnifiedSignal(candles: MarketData[]): UnifiedSignalResul
       buyTarget: buyTarget ? Math.round(buyTarget * 100) / 100 : null,
       sellTarget: sellTarget ? Math.round(sellTarget * 100) / 100 : null,
     },
+    tradePlan,
   };
 }
 

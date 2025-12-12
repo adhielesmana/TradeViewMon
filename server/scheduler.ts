@@ -716,6 +716,18 @@ class Scheduler {
             sellTarget: suggestion.sellTarget,
             currentPrice: suggestion.currentPrice,
             reasoning: suggestion.reasoning,
+            // Precision trade plan data
+            tradePlan: suggestion.tradePlan,
+            entryPrice: suggestion.tradePlan?.entryPrice,
+            stopLoss: suggestion.tradePlan?.stopLoss,
+            takeProfit1: suggestion.tradePlan?.takeProfit1,
+            takeProfit2: suggestion.tradePlan?.takeProfit2,
+            takeProfit3: suggestion.tradePlan?.takeProfit3,
+            riskRewardRatio: suggestion.tradePlan?.riskRewardRatio,
+            supportLevel: suggestion.tradePlan?.supportLevel,
+            resistanceLevel: suggestion.tradePlan?.resistanceLevel,
+            signalType: suggestion.tradePlan?.signalType,
+            analysis: suggestion.tradePlan?.analysis,
           },
         });
 
@@ -874,32 +886,50 @@ class Scheduler {
             console.log(`[AutoTrade] Existing position at $${existingAutoTrade.entryPrice.toFixed(2)}, but price moved significantly to $${currentPrice.toFixed(2)} (diff: $${priceDifference.toFixed(4)} > tolerance: $${priceTolerance.toFixed(4)})`);
           }
           
-          // Calculate stop loss and take profit based on mode (pips/percentage/atr)
+          // Calculate stop loss and take profit
+          // PRIORITY 1: Use precision trade plan from AI suggestion if available
+          // PRIORITY 2: Fall back to user's configured SL/TP calculation mode
           const tradeType = suggestion.decision as 'BUY' | 'SELL';
-          const slTpMode = settings.slTpMode || 'atr'; // Default to ATR mode for better volatility adaptation
-          const stopLossValue = settings.stopLossValue || 1.5; // Default 1.5x ATR for SL
-          const takeProfitValue = settings.takeProfitValue || 3; // Default 3x ATR for TP (1:2 ratio)
           
-          // Get ATR from technical signal if using ATR mode
-          let atrValue: number | undefined;
-          if (slTpMode === 'atr') {
-            const atrCandles = await storage.getRecentMarketData(settings.symbol, 100);
-            if (atrCandles.length >= 30) {
-              const technicalSignal = generateUnifiedSignal(atrCandles);
-              atrValue = technicalSignal.indicators.atr;
-              console.log(`[AutoTrade] ATR for ${settings.symbol}: ${atrValue?.toFixed(4)}`);
+          let stopLoss: number | undefined;
+          let takeProfit: number | undefined;
+          
+          // Check if suggestion has precision trade plan SL/TP
+          if (suggestion.stopLoss && suggestion.takeProfit2) {
+            // Use precision SL/TP from trade plan (TP2 = 2R is the main target)
+            stopLoss = suggestion.stopLoss;
+            takeProfit = suggestion.takeProfit2; // Use TP2 as primary take profit target
+            console.log(`[AutoTrade] Using precision trade plan: SL=$${stopLoss.toFixed(2)}, TP=$${takeProfit.toFixed(2)} (R:R ${suggestion.riskRewardRatio?.toFixed(1) || '?'}:1)`);
+          } else {
+            // Fall back to calculated SL/TP based on user settings
+            const slTpMode = settings.slTpMode || 'atr';
+            const stopLossValue = settings.stopLossValue || 1.5;
+            const takeProfitValue = settings.takeProfitValue || 3;
+            
+            // Get ATR from technical signal if using ATR mode
+            let atrValue: number | undefined;
+            if (slTpMode === 'atr') {
+              const atrCandles = await storage.getRecentMarketData(settings.symbol, 100);
+              if (atrCandles.length >= 30) {
+                const technicalSignal = generateUnifiedSignal(atrCandles);
+                atrValue = technicalSignal.indicators.atr;
+                console.log(`[AutoTrade] ATR for ${settings.symbol}: ${atrValue?.toFixed(4)}`);
+              }
             }
+            
+            const calculated = calculateSlTpPrices(
+              currentPrice,
+              tradeType,
+              slTpMode,
+              stopLossValue,
+              settings.symbol,
+              takeProfitValue,
+              atrValue
+            );
+            stopLoss = calculated.stopLoss;
+            takeProfit = calculated.takeProfit;
+            console.log(`[AutoTrade] Using calculated SL/TP (${slTpMode} mode): SL=$${stopLoss?.toFixed(2) || 'N/A'}, TP=$${takeProfit?.toFixed(2) || 'N/A'}`);
           }
-          
-          const { stopLoss, takeProfit } = calculateSlTpPrices(
-            currentPrice,
-            tradeType,
-            slTpMode,
-            stopLossValue,
-            settings.symbol,
-            takeProfitValue,
-            atrValue
-          );
           
           // Open the trade with isAutoTrade flag and SL/TP
           const result = await storage.openDemoTrade(
