@@ -191,15 +191,15 @@ export type SafeUser = Omit<User, "password">; // User without password for API 
 export type UserInvite = typeof userInvites.$inferSelect;
 export type InsertUserInvite = z.infer<typeof insertUserInviteSchema>;
 
-// AI Suggestions - stores AI-generated trading suggestions
+// AI Suggestions - stores AI-generated trading suggestions with precise trade plans
 export const aiSuggestions = pgTable("ai_suggestions", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   generatedAt: timestamp("generated_at").notNull(),
   decision: varchar("decision", { length: 10 }).notNull(), // 'BUY', 'SELL', 'HOLD'
   confidence: real("confidence").notNull(), // 0-100
-  buyTarget: real("buy_target"), // Target price for buy
-  sellTarget: real("sell_target"), // Target price for sell
+  buyTarget: real("buy_target"), // Target price for buy (legacy)
+  sellTarget: real("sell_target"), // Target price for sell (legacy)
   currentPrice: real("current_price").notNull(),
   reasoning: text("reasoning"), // JSON string with analysis breakdown
   indicators: text("indicators"), // JSON string with indicator values used
@@ -208,6 +208,18 @@ export const aiSuggestions = pgTable("ai_suggestions", {
   actualPrice: real("actual_price"), // Price when evaluated
   wasAccurate: boolean("was_accurate"), // Whether suggestion was profitable
   profitLoss: real("profit_loss"), // Percentage gain/loss
+  // Precision Trade Plan Fields
+  entryPrice: real("entry_price"), // Specific entry price (may differ from current)
+  stopLoss: real("stop_loss"), // Calculated stop loss level
+  takeProfit1: real("take_profit_1"), // First take profit target (conservative)
+  takeProfit2: real("take_profit_2"), // Second take profit target (aggressive)
+  takeProfit3: real("take_profit_3"), // Third take profit target (extended)
+  riskRewardRatio: real("risk_reward_ratio"), // Risk/Reward ratio (e.g., 2.0 = 1:2)
+  supportLevel: real("support_level"), // Nearest support level detected
+  resistanceLevel: real("resistance_level"), // Nearest resistance level detected
+  signalType: varchar("signal_type", { length: 20 }).default("immediate"), // 'immediate' or 'pending'
+  validUntil: timestamp("valid_until"), // Signal expiration time
+  tradePlan: text("trade_plan"), // JSON with full trade plan details
 }, (table) => [
   index("ai_suggestions_symbol_idx").on(table.symbol),
   index("ai_suggestions_generated_at_idx").on(table.generatedAt),
