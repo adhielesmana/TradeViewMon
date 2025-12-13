@@ -754,91 +754,104 @@ export default function LiveDemo() {
         </Card>
       </div>
 
-      {/* AI Suggestion Reference with Trade Plan */}
-      {aiSuggestion && (
-        <Card className={`border-2 ${aiSuggestion.decision === "BUY" ? "border-green-500/30 bg-green-500/5" : aiSuggestion.decision === "SELL" ? "border-red-500/30 bg-red-500/5" : "border-dashed"}`}>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <Brain className="h-5 w-5 text-primary" />
-              <CardTitle className="text-sm font-medium">AI Trade Signal for {selectedSymbol}</CardTitle>
-            </div>
-            <div className="flex items-center gap-2">
-              {aiSuggestion.riskRewardRatio && (
-                <Badge variant="outline">R:R {aiSuggestion.riskRewardRatio.toFixed(1)}:1</Badge>
-              )}
+      {/* AI Suggestion Reference with Trade Plan - Always Show */}
+      <Card className={`border-2 ${aiSuggestion?.decision === "BUY" ? "border-green-500/30 bg-green-500/5" : aiSuggestion?.decision === "SELL" ? "border-red-500/30 bg-red-500/5" : "border-dashed"}`}>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+          <div className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-primary" />
+            <CardTitle className="text-sm font-medium">AI Trade Signal for {selectedSymbol}</CardTitle>
+          </div>
+          <div className="flex items-center gap-2">
+            {aiSuggestion?.riskRewardRatio && (
+              <Badge variant="outline">R:R {aiSuggestion.riskRewardRatio.toFixed(1)}:1</Badge>
+            )}
+            {aiSuggestion ? (
               <Badge
                 variant={aiSuggestion.decision === "BUY" ? "default" : aiSuggestion.decision === "SELL" ? "destructive" : "secondary"}
                 data-testid="badge-ai-decision"
               >
                 {aiSuggestion.decision}
               </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {/* Trade Plan Display */}
-            {aiSuggestion.decision !== "HOLD" && aiSuggestion.entryPrice && (
-              <div className="grid gap-3 md:grid-cols-5 mb-4">
-                <div className="p-2 rounded bg-primary/10 border border-primary/30">
-                  <div className="text-xs text-muted-foreground">Entry</div>
-                  <div className="font-mono font-bold text-primary" data-testid="text-demo-entry">
-                    {formatCurrency(aiSuggestion.entryPrice)}
-                  </div>
-                </div>
-                <div className="p-2 rounded bg-red-500/10 border border-red-500/30">
-                  <div className="text-xs text-red-400">Stop Loss</div>
-                  <div className="font-mono font-bold text-red-500" data-testid="text-demo-sl">
-                    {aiSuggestion.stopLoss ? formatCurrency(aiSuggestion.stopLoss) : '-'}
-                  </div>
-                </div>
-                <div className="p-2 rounded bg-green-500/10 border border-green-500/30">
-                  <div className="text-xs text-green-400">TP1</div>
-                  <div className="font-mono font-bold text-green-500" data-testid="text-demo-tp1">
-                    {aiSuggestion.takeProfit1 ? formatCurrency(aiSuggestion.takeProfit1) : '-'}
-                  </div>
-                </div>
-                <div className="p-2 rounded bg-green-500/10 border border-green-500/40">
-                  <div className="text-xs text-green-400">TP2</div>
-                  <div className="font-mono font-bold text-green-500" data-testid="text-demo-tp2">
-                    {aiSuggestion.takeProfit2 ? formatCurrency(aiSuggestion.takeProfit2) : '-'}
-                  </div>
-                </div>
-                <div className="p-2 rounded bg-green-500/10 border border-green-500/50">
-                  <div className="text-xs text-green-400">TP3</div>
-                  <div className="font-mono font-bold text-green-400" data-testid="text-demo-tp3">
-                    {aiSuggestion.takeProfit3 ? formatCurrency(aiSuggestion.takeProfit3) : '-'}
-                  </div>
-                </div>
-              </div>
+            ) : (
+              <Badge variant="outline" data-testid="badge-ai-decision">
+                Loading...
+              </Badge>
             )}
-            
-            <div className="flex flex-wrap gap-4 items-center text-sm">
-              <div>
-                <span className="text-muted-foreground">Confidence:</span>{" "}
-                <span className="font-medium">{aiSuggestion.confidence}%</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Current:</span>{" "}
-                <span className="font-medium">{formatCurrency(aiSuggestion.currentPrice)}</span>
-              </div>
-              {aiSuggestion.supportLevel && (
-                <div>
-                  <span className="text-muted-foreground">Support:</span>{" "}
-                  <span className="font-medium">{formatCurrency(aiSuggestion.supportLevel)}</span>
-                </div>
-              )}
-              {aiSuggestion.resistanceLevel && (
-                <div>
-                  <span className="text-muted-foreground">Resistance:</span>{" "}
-                  <span className="font-medium">{formatCurrency(aiSuggestion.resistanceLevel)}</span>
-                </div>
-              )}
-              <div className="text-muted-foreground text-xs ml-auto">
-                {formatDistanceToNow(new Date(aiSuggestion.generatedAt), { addSuffix: true })}
-              </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!aiSuggestion ? (
+            <div className="text-center py-4 text-muted-foreground">
+              <p>Waiting for AI analysis...</p>
+              <p className="text-xs mt-1">Signals update every 60 seconds</p>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          ) : (
+            <>
+              {/* Trade Plan Display */}
+              {aiSuggestion.decision !== "HOLD" && aiSuggestion.entryPrice && (
+                <div className="grid gap-3 md:grid-cols-5 mb-4">
+                  <div className="p-2 rounded bg-primary/10 border border-primary/30">
+                    <div className="text-xs text-muted-foreground">Entry</div>
+                    <div className="font-mono font-bold text-primary" data-testid="text-demo-entry">
+                      {formatCurrency(aiSuggestion.entryPrice)}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded bg-red-500/10 border border-red-500/30">
+                    <div className="text-xs text-red-400">Stop Loss</div>
+                    <div className="font-mono font-bold text-red-500" data-testid="text-demo-sl">
+                      {aiSuggestion.stopLoss ? formatCurrency(aiSuggestion.stopLoss) : '-'}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded bg-green-500/10 border border-green-500/30">
+                    <div className="text-xs text-green-400">TP1</div>
+                    <div className="font-mono font-bold text-green-500" data-testid="text-demo-tp1">
+                      {aiSuggestion.takeProfit1 ? formatCurrency(aiSuggestion.takeProfit1) : '-'}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded bg-green-500/10 border border-green-500/40">
+                    <div className="text-xs text-green-400">TP2</div>
+                    <div className="font-mono font-bold text-green-500" data-testid="text-demo-tp2">
+                      {aiSuggestion.takeProfit2 ? formatCurrency(aiSuggestion.takeProfit2) : '-'}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded bg-green-500/10 border border-green-500/50">
+                    <div className="text-xs text-green-400">TP3</div>
+                    <div className="font-mono font-bold text-green-400" data-testid="text-demo-tp3">
+                      {aiSuggestion.takeProfit3 ? formatCurrency(aiSuggestion.takeProfit3) : '-'}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex flex-wrap gap-4 items-center text-sm">
+                <div>
+                  <span className="text-muted-foreground">Confidence:</span>{" "}
+                  <span className="font-medium">{aiSuggestion.confidence}%</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Current:</span>{" "}
+                  <span className="font-medium">{formatCurrency(aiSuggestion.currentPrice)}</span>
+                </div>
+                {aiSuggestion.supportLevel && (
+                  <div>
+                    <span className="text-muted-foreground">Support:</span>{" "}
+                    <span className="font-medium">{formatCurrency(aiSuggestion.supportLevel)}</span>
+                  </div>
+                )}
+                {aiSuggestion.resistanceLevel && (
+                  <div>
+                    <span className="text-muted-foreground">Resistance:</span>{" "}
+                    <span className="font-medium">{formatCurrency(aiSuggestion.resistanceLevel)}</span>
+                  </div>
+                )}
+                <div className="text-muted-foreground text-xs ml-auto">
+                  {formatDistanceToNow(new Date(aiSuggestion.generatedAt), { addSuffix: true })}
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Auto-Trade Settings */}
       <Card>
