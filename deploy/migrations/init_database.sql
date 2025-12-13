@@ -130,7 +130,17 @@ CREATE TABLE IF NOT EXISTS ai_suggestions (
     evaluated_at TIMESTAMP,
     actual_price REAL,
     was_accurate BOOLEAN,
-    profit_loss REAL
+    profit_loss REAL,
+    entry_price REAL,
+    stop_loss REAL,
+    take_profit_1 REAL,
+    take_profit_2 REAL,
+    take_profit_3 REAL,
+    risk_reward_ratio REAL,
+    support_level REAL,
+    resistance_level REAL,
+    signal_type VARCHAR(20) DEFAULT 'immediate',
+    trade_plan TEXT
 );
 
 CREATE INDEX IF NOT EXISTS ai_suggestions_symbol_idx ON ai_suggestions(symbol);
@@ -347,6 +357,47 @@ BEGIN
     -- closed_reason column in demo_positions
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='demo_positions' AND column_name='closed_reason') THEN
         ALTER TABLE demo_positions ADD COLUMN closed_reason VARCHAR(50);
+    END IF;
+    
+    -- Add precision trade plan columns to ai_suggestions
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='entry_price') THEN
+        ALTER TABLE ai_suggestions ADD COLUMN entry_price REAL;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='stop_loss') THEN
+        ALTER TABLE ai_suggestions ADD COLUMN stop_loss REAL;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='take_profit_1') THEN
+        ALTER TABLE ai_suggestions ADD COLUMN take_profit_1 REAL;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='take_profit_2') THEN
+        ALTER TABLE ai_suggestions ADD COLUMN take_profit_2 REAL;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='take_profit_3') THEN
+        ALTER TABLE ai_suggestions ADD COLUMN take_profit_3 REAL;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='risk_reward_ratio') THEN
+        ALTER TABLE ai_suggestions ADD COLUMN risk_reward_ratio REAL;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='support_level') THEN
+        ALTER TABLE ai_suggestions ADD COLUMN support_level REAL;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='resistance_level') THEN
+        ALTER TABLE ai_suggestions ADD COLUMN resistance_level REAL;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='signal_type') THEN
+        ALTER TABLE ai_suggestions ADD COLUMN signal_type VARCHAR(20) DEFAULT 'immediate';
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='trade_plan') THEN
+        ALTER TABLE ai_suggestions ADD COLUMN trade_plan TEXT;
     END IF;
 END $$;
 
