@@ -249,9 +249,11 @@ export default function LiveDemo() {
     refetchInterval: 5000,
   });
 
-  const { data: aiSuggestion } = useQuery<AiSuggestion>({
+  const { data: aiSuggestion, isLoading: aiSuggestionLoading } = useQuery<AiSuggestion>({
     queryKey: ["/api/suggestions/latest", { symbol: selectedSymbol }],
-    refetchInterval: 60000,
+    refetchInterval: 30000,
+    retry: 3,
+    retryDelay: 5000,
   });
 
   const { data: autoTradeSettings } = useQuery<AutoTradeSetting>({
@@ -774,7 +776,7 @@ export default function LiveDemo() {
               </Badge>
             ) : (
               <Badge variant="outline" data-testid="badge-ai-decision">
-                Loading...
+                {aiSuggestionLoading ? "Loading..." : "Pending"}
               </Badge>
             )}
           </div>
@@ -782,8 +784,17 @@ export default function LiveDemo() {
         <CardContent>
           {!aiSuggestion ? (
             <div className="text-center py-4 text-muted-foreground">
-              <p>Waiting for AI analysis...</p>
-              <p className="text-xs mt-1">Signals update every 60 seconds</p>
+              {aiSuggestionLoading ? (
+                <>
+                  <p>Loading AI analysis...</p>
+                  <p className="text-xs mt-1">Please wait</p>
+                </>
+              ) : (
+                <>
+                  <p>No AI signal available yet</p>
+                  <p className="text-xs mt-1">Signals generate every 60 seconds - please wait</p>
+                </>
+              )}
             </div>
           ) : (
             <>
