@@ -876,7 +876,7 @@ export default function LiveDemo() {
                   Settings
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Auto-Trade Settings</DialogTitle>
                   <DialogDescription>
@@ -1234,7 +1234,7 @@ export default function LiveDemo() {
                   <span className="text-lg">SELL</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className={tradeType === "BUY" ? "text-green-500" : "text-red-500"}>
                     {tradeType} {selectedSymbol}
