@@ -269,24 +269,34 @@ done
 log_info "Initializing database schema..."
 
 # First, run the comprehensive init script that creates all tables/columns if not exist
-INIT_SQL="/opt/tradeviewmon/deploy/migrations/init_database.sql"
 if [ -f "deploy/migrations/init_database.sql" ]; then
     log_info "Running database initialization script..."
-    if docker exec -i tradeviewmon-db psql -U tradeviewmon -d tradeviewmon < deploy/migrations/init_database.sql 2>/dev/null; then
-        log_info "Database tables created/updated successfully"
+    
+    # Copy SQL file to container first (most reliable method)
+    log_info "Copying migration file to database container..."
+    docker cp deploy/migrations/init_database.sql tradeviewmon-db:/tmp/init_database.sql
+    
+    # Execute the SQL file with verbose output
+    log_info "Executing SQL migration..."
+    if docker exec tradeviewmon-db psql -U tradeviewmon -d tradeviewmon -f /tmp/init_database.sql; then
+        log_info "Database migration executed successfully!"
     else
-        log_warn "Database init script had issues. Trying alternative method..."
-        # Try with container path
-        docker cp deploy/migrations/init_database.sql tradeviewmon-db:/tmp/init_database.sql 2>/dev/null || true
-        docker exec tradeviewmon-db psql -U tradeviewmon -d tradeviewmon -f /tmp/init_database.sql 2>/dev/null || true
+        log_error "Database migration failed! Check the SQL file for errors."
+        log_info "Attempting to show database error..."
+        docker exec tradeviewmon-db psql -U tradeviewmon -d tradeviewmon -f /tmp/init_database.sql 2>&1 || true
     fi
+    
+    # Cleanup
+    docker exec tradeviewmon-db rm -f /tmp/init_database.sql 2>/dev/null || true
 else
-    log_warn "Database init script not found at deploy/migrations/init_database.sql"
+    log_error "Database init script not found at deploy/migrations/init_database.sql"
+    log_error "Make sure you have pulled the latest code!"
+    exit 1
 fi
 
 # Then try drizzle push for any remaining schema updates (non-interactive)
-log_info "Checking for additional schema updates..."
-docker exec tradeviewmon sh -c "echo 'y' | npm run db:push 2>/dev/null" || true
+log_info "Checking for additional schema updates via Drizzle..."
+docker exec tradeviewmon sh -c "echo 'y' | npm run db:push 2>/dev/null" || log_warn "Drizzle push skipped (optional)"
 log_info "Database schema initialization complete"
 
 # Configure Nginx if domain is provided
