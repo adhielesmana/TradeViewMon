@@ -426,6 +426,19 @@ END $$;
 CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
 
 -- ============================================
+-- RESET OLD AI SUGGESTIONS WITHOUT TRADE PLANS
+-- Clear old suggestions that don't have the new precision fields
+-- so fresh ones with proper entry/SL/TP data can be generated
+-- ============================================
+DO $$
+BEGIN
+    -- Delete old suggestions that don't have the precision trade plan fields
+    -- This forces the system to generate new suggestions with proper data
+    DELETE FROM ai_suggestions WHERE entry_price IS NULL AND decision != 'HOLD';
+    RAISE NOTICE 'Cleared old suggestions without precision trade plans';
+END $$;
+
+-- ============================================
 -- SUCCESS MESSAGE
 -- ============================================
 DO $$ 

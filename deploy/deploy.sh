@@ -229,8 +229,13 @@ fi
 export APP_PORT
 export USE_HTTPS
 
-log_info "Building and starting services..."
-docker compose -f deploy/docker-compose.yml up -d --build
+log_info "Cleaning up old Docker images (to ensure fresh build)..."
+docker rmi -f tradeviewmon:latest 2>/dev/null || true
+docker builder prune -f 2>/dev/null || true
+
+log_info "Building and starting services (with no cache)..."
+docker compose -f deploy/docker-compose.yml build --no-cache
+docker compose -f deploy/docker-compose.yml up -d
 
 # Wait for services to be healthy
 log_info "Waiting for services to start..."
