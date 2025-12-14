@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS ai_suggestions (
     support_level REAL,
     resistance_level REAL,
     signal_type VARCHAR(20) DEFAULT 'immediate',
+    valid_until TIMESTAMP,
     trade_plan TEXT
 );
 
@@ -398,6 +399,10 @@ BEGIN
     
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='trade_plan') THEN
         ALTER TABLE ai_suggestions ADD COLUMN trade_plan TEXT;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='valid_until') THEN
+        ALTER TABLE ai_suggestions ADD COLUMN valid_until TIMESTAMP;
     END IF;
 END $$;
 
