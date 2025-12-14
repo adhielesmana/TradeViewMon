@@ -708,6 +708,7 @@ class Scheduler {
         wsService.broadcast({
           type: "suggestion_update",
           symbol,
+          timestamp: new Date().toISOString(),
           data: {
             id: savedSuggestion.id,
             decision: suggestion.decision,
@@ -716,7 +717,6 @@ class Scheduler {
             sellTarget: suggestion.sellTarget,
             currentPrice: suggestion.currentPrice,
             reasoning: suggestion.reasoning,
-            // Precision trade plan data
             tradePlan: suggestion.tradePlan,
             entryPrice: suggestion.tradePlan?.entryPrice,
             stopLoss: suggestion.tradePlan?.stopLoss,
@@ -789,8 +789,8 @@ class Scheduler {
           console.log(`[AutoTrade] Actionable signal for ${settings.symbol}: ${suggestion.decision} (confidence: ${suggestion.confidence}%, generated ${new Date(suggestion.generatedAt || 0).toISOString()})`)
           
           // Check if we already traded on this suggestion (avoid duplicate trades)
-          if (settings.lastTradeAt && suggestion.createdAt) {
-            const suggestionTime = new Date(suggestion.createdAt).getTime();
+          if (settings.lastTradeAt && suggestion.generatedAt) {
+            const suggestionTime = new Date(suggestion.generatedAt).getTime();
             const lastTradeTime = new Date(settings.lastTradeAt).getTime();
             
             // Skip if we already traded within the last 30 seconds after this suggestion
@@ -954,8 +954,10 @@ class Scheduler {
             // Broadcast auto-trade event via WebSocket
             wsService.broadcast({
               type: "auto_trade_executed",
-              userId: settings.userId,
+              symbol: settings.symbol,
+              timestamp: new Date().toISOString(),
               data: {
+                userId: settings.userId,
                 symbol: settings.symbol,
                 decision: suggestion.decision,
                 quantity,
@@ -1010,6 +1012,7 @@ class Scheduler {
         wsService.broadcast({
           type: "suggestion_accuracy_update",
           symbol,
+          timestamp: new Date().toISOString(),
           data: accuracy,
         });
       }

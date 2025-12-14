@@ -5,7 +5,10 @@ export type WSMessageType =
   | "market_update"
   | "prediction_update"
   | "accuracy_update"
-  | "system_status";
+  | "system_status"
+  | "suggestion_update"
+  | "auto_trade_executed"
+  | "suggestion_accuracy_update";
 
 export interface WSMessage {
   type: WSMessageType;
