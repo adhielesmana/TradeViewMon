@@ -24,8 +24,8 @@ const SYMBOL_CONFIGS: Record<string, SymbolConfig> = {
   
   // Indonesian Stocks - Simulated (Finnhub doesn't support IDX)
   DATA: { basePrice: 4060.00, volatility: 0.5, is24h: false, provider: "simulated" },
-  WIFI: { basePrice: 4100.00, volatility: 0.4, is24h: false, provider: "simulated" },
-  INET: { basePrice: 318.00, volatility: 0.4, is24h: false, provider: "simulated" },
+  WIFI: { basePrice: 3600.00, volatility: 0.4, is24h: false, provider: "simulated" },
+  INET: { basePrice: 795.00, volatility: 0.4, is24h: false, provider: "simulated" },
   
   // Indices & Commodities - Finnhub (via ETF proxies)
   SPX: { basePrice: 6050.00, volatility: 0.2, is24h: false, provider: "finnhub", finnhubSymbol: "SPY", priceMultiplier: 10 },
