@@ -117,6 +117,7 @@ export interface IStorage {
   createAutoTradeSettings(userId: string): Promise<AutoTradeSetting>;
   updateAutoTradeSettings(userId: string, settings: UpdateAutoTradeSetting): Promise<AutoTradeSetting | null>;
   getAllEnabledAutoTradeSettings(): Promise<AutoTradeSetting[]>;
+  getAllPrecisionEnabledAutoTradeSettings(): Promise<AutoTradeSetting[]>;
   recordAutoTrade(userId: string, decision: string): Promise<void>;
 }
 
@@ -1105,6 +1106,12 @@ export class DatabaseStorage implements IStorage {
     return db.select()
       .from(autoTradeSettings)
       .where(eq(autoTradeSettings.isEnabled, true));
+  }
+
+  async getAllPrecisionEnabledAutoTradeSettings(): Promise<AutoTradeSetting[]> {
+    return db.select()
+      .from(autoTradeSettings)
+      .where(eq(autoTradeSettings.usePrecisionSignals, true));
   }
 
   async recordAutoTrade(userId: string, decision: string): Promise<void> {

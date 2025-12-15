@@ -739,6 +739,9 @@ class Scheduler {
       // Process auto-trades based on AI suggestions
       await this.processAutoTrades();
       
+      // Process precision auto-trades with exact Entry/SL/TP from suggestions
+      await this.processPrecisionTrades();
+      
       // Evaluate past suggestions for all symbols
       await this.evaluateAiSuggestions();
       
@@ -972,6 +975,133 @@ class Scheduler {
       }
     } catch (error) {
       console.error("[Scheduler] Error in auto-trade processing:", error);
+    }
+  }
+
+  // Process precision auto-trades using exact Entry/SL/TP from AI suggestions
+  private async processPrecisionTrades(): Promise<void> {
+    try {
+      // Get all settings with precision signals enabled
+      const precisionSettings = await storage.getAllPrecisionEnabledAutoTradeSettings();
+      
+      if (precisionSettings.length === 0) {
+        return;
+      }
+      
+      console.log(`[PrecisionTrade] Processing ${precisionSettings.length} precision auto-trade settings`);
+      
+      for (const settings of precisionSettings) {
+        try {
+          // Get the latest actionable AI suggestion with precision trade plan
+          const suggestion = await storage.getLatestActionableAiSuggestion(settings.symbol, 5);
+          
+          if (!suggestion) {
+            continue;
+          }
+          
+          // Must have entryPrice and stopLoss for precision trades
+          if (!suggestion.entryPrice || !suggestion.stopLoss) {
+            console.log(`[PrecisionTrade] ${settings.symbol}: No precision Entry/SL available in suggestion`);
+            continue;
+          }
+          
+          // Use takeProfit1 or takeProfit2 as TP
+          const takeProfit = suggestion.takeProfit1 || suggestion.takeProfit2;
+          if (!takeProfit) {
+            console.log(`[PrecisionTrade] ${settings.symbol}: No precision Take Profit available`);
+            continue;
+          }
+          
+          // Check if we already traded on this suggestion
+          if (settings.lastPrecisionTradeAt && suggestion.generatedAt) {
+            const suggestionTime = new Date(suggestion.generatedAt).getTime();
+            const lastTradeTime = new Date(settings.lastPrecisionTradeAt).getTime();
+            
+            if (lastTradeTime >= suggestionTime - 30000) {
+              continue;
+            }
+          }
+          
+          // Get user's demo account
+          const account = await storage.getDemoAccount(settings.userId);
+          
+          if (!account) {
+            console.log(`[PrecisionTrade] No demo account for user ${settings.userId}`);
+            continue;
+          }
+          
+          const tradeUnits = settings.precisionTradeUnits || 0.01;
+          const entryPrice = suggestion.entryPrice;
+          const requiredUsd = tradeUnits * entryPrice;
+          
+          // Check balance
+          if (account.balance < requiredUsd) {
+            console.log(`[PrecisionTrade] Insufficient balance for user ${settings.userId}`);
+            continue;
+          }
+          
+          // Check for duplicate open positions
+          const openPositions = await storage.getDemoPositions(settings.userId, 'open');
+          const existingPrecisionTrade = openPositions.find(pos => 
+            pos.symbol === settings.symbol && pos.isAutoTrade === true
+          );
+          
+          if (existingPrecisionTrade) {
+            const priceTolerance = entryPrice * 0.001; // 0.1%
+            if (Math.abs(existingPrecisionTrade.entryPrice - entryPrice) <= priceTolerance) {
+              continue;
+            }
+          }
+          
+          const tradeType = suggestion.decision as 'BUY' | 'SELL';
+          
+          console.log(`[PrecisionTrade] Executing ${tradeType} for ${settings.symbol}: Entry=$${entryPrice.toFixed(2)}, SL=$${suggestion.stopLoss.toFixed(2)}, TP=$${takeProfit.toFixed(2)}`);
+          
+          // Open the precision trade
+          const result = await storage.openDemoTrade(
+            settings.userId,
+            settings.symbol,
+            tradeType,
+            entryPrice,
+            tradeUnits,
+            suggestion.stopLoss,
+            takeProfit,
+            true // isAutoTrade
+          );
+          
+          if (result) {
+            // Update lastPrecisionTradeAt
+            await storage.updateAutoTradeSettings(settings.userId, {
+              lastPrecisionTradeAt: new Date(),
+            });
+            
+            // Record the auto-trade
+            await storage.recordAutoTrade(settings.userId, suggestion.decision);
+            
+            console.log(`[PrecisionTrade] Executed ${tradeType} for user ${settings.userId}: ${tradeUnits} ${settings.symbol} @ $${entryPrice.toFixed(2)} | SL: $${suggestion.stopLoss.toFixed(2)} | TP: $${takeProfit.toFixed(2)}`);
+            
+            wsService.broadcast({
+              type: "precision_trade_executed",
+              symbol: settings.symbol,
+              timestamp: new Date().toISOString(),
+              data: {
+                userId: settings.userId,
+                symbol: settings.symbol,
+                decision: suggestion.decision,
+                quantity: tradeUnits,
+                entryPrice,
+                stopLoss: suggestion.stopLoss,
+                takeProfit,
+                riskRewardRatio: suggestion.riskRewardRatio,
+              },
+            });
+          }
+        } catch (userError) {
+          console.error(`[PrecisionTrade] Error for user ${settings.userId}:`, userError);
+        }
+      }
+    } catch (error) {
+      console.error("[Scheduler] Error in precision trade processing:", error);
     }
   }
 

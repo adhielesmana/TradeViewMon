@@ -1081,6 +1081,51 @@ export default function LiveDemo() {
                     </div>
                   </div>
                   
+                  {/* Precision Auto-Trade Settings */}
+                  <div className="space-y-3 border-t pt-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-base font-medium">Precision Auto-Trade</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Execute trades with exact AI Entry/SL/TP levels (ignores confidence)
+                        </p>
+                      </div>
+                      <Switch
+                        checked={usePrecisionSignals}
+                        onCheckedChange={setUsePrecisionSignals}
+                        data-testid="switch-precision-signals"
+                      />
+                    </div>
+                    
+                    {usePrecisionSignals && (
+                      <div>
+                        <Label>Precision Trade Size (Units)</Label>
+                        <Input
+                          type="number"
+                          value={precisionTradeUnits}
+                          onChange={(e) => setPrecisionTradeUnits(e.target.value)}
+                          placeholder="0.01"
+                          min="0.01"
+                          step="0.01"
+                          data-testid="input-precision-trade-units"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Trade size for precision signals (separate from regular auto-trade)
+                        </p>
+                      </div>
+                    )}
+                    
+                    <div className="bg-purple-500/10 border border-purple-500/20 p-3 rounded-md text-xs text-purple-600 dark:text-purple-400">
+                      <strong>How Precision Auto-Trade Works:</strong>
+                      <ul className="mt-1 space-y-1 list-disc pl-4">
+                        <li>Uses exact Entry, Stop Loss, Take Profit from AI suggestions</li>
+                        <li>Triggers on ANY BUY/SELL signal (no confidence filter)</li>
+                        <li>Independent from regular auto-trade toggle</li>
+                        <li>Best for following AI trade plans precisely</li>
+                      </ul>
+                    </div>
+                  </div>
+                  
                   {autoTradeSettings && (
                     <div className="bg-muted/50 p-3 rounded-md space-y-1 text-sm">
                       <div className="flex justify-between">
@@ -1115,6 +1160,7 @@ export default function LiveDemo() {
                       const slValue = parseFloat(autoTradeStopLossValue) || 0;
                       const tpValue = parseFloat(autoTradeTakeProfitValue) || 0;
                       const minConf = parseInt(autoTradeMinConfidence) || 0;
+                      const precisionUnits = parseFloat(precisionTradeUnits) || 0.01;
                       if (units >= 0.01 && autoTradeSymbol) {
                         autoTradeMutation.mutate({ 
                           tradeUnits: units, 
@@ -1124,6 +1170,8 @@ export default function LiveDemo() {
                           takeProfitValue: tpValue > 0 ? tpValue : (slValue > 0 ? slValue * 2 : 2),
                           useAiFilter: autoTradeUseAiFilter,
                           minConfidence: autoTradeUseAiFilter ? (minConf > 0 ? minConf : 60) : 0,
+                          usePrecisionSignals,
+                          precisionTradeUnits: precisionUnits,
                         });
                         setIsAutoTradeSettingsOpen(false);
                       }

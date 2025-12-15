@@ -472,6 +472,7 @@ export const updateAutoTradeSettingSchema = createInsertSchema(autoTradeSettings
   useAiFilter: true,
   usePrecisionSignals: true,
   precisionTradeUnits: true,
+  lastPrecisionTradeAt: true,
   stopLossPips: true,
   takeProfitPips: true,
 }).partial();

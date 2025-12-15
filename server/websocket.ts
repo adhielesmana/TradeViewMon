@@ -7,6 +7,7 @@ export type WSMessageType =
   | "accuracy_update"
   | "system_status"
   | "suggestion_update"
+  | "precision_trade_executed"
   | "auto_trade_executed"
   | "suggestion_accuracy_update";
 
