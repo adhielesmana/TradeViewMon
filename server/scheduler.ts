@@ -1,5 +1,4 @@
 import cron from "node-cron";
-import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import { predictionEngine } from "./prediction-engine";
 import { marketDataService } from "./market-data-service";
@@ -1066,19 +1065,16 @@ class Scheduler {
           
           const tradeType = suggestion.decision as 'BUY' | 'SELL';
           
-          // Generate unique batch ID for this set of trades
-          const precisionBatchId = randomUUID();
-          
-          console.log(`[PrecisionTrade] Executing ${tpTargets.length}-leg ${tradeType} for ${settings.symbol}: Entry=$${entryPrice.toFixed(2)}, SL=$${stopLoss.toFixed(2)}, BatchID=${precisionBatchId.slice(0, 8)}...`);
+          console.log(`[PrecisionTrade] Executing ${tpTargets.length} independent ${tradeType} trades for ${settings.symbol}: Entry=$${entryPrice.toFixed(2)}, SL=$${stopLoss.toFixed(2)}`);
           
           const executedTrades: { tp: number; label: string; positionId: number; entryPrice: number; stopLoss: number; quantity: number }[] = [];
           let remainingBalance = account.balance;
           
-          // Open trades for each TP target
+          // Open independent trades for each TP target
           for (const { tp, label } of tpTargets) {
-            // Verify we still have enough balance for this leg
+            // Verify we still have enough balance for this trade
             if (remainingBalance < requiredUsdPerLeg) {
-              console.log(`[PrecisionTrade] Insufficient remaining balance for ${label}, skipping remaining legs`);
+              console.log(`[PrecisionTrade] Insufficient remaining balance for ${label}, skipping remaining trades`);
               break;
             }
             
@@ -1090,8 +1086,7 @@ class Scheduler {
               tradeUnits,
               stopLoss,
               tp,
-              true, // isAutoTrade
-              precisionBatchId
+              true // isAutoTrade
             );
             
             if (result) {
@@ -1106,7 +1101,30 @@ class Scheduler {
               });
               // Update remaining balance after successful trade
               remainingBalance -= requiredUsdPerLeg;
-              console.log(`[PrecisionTrade] Leg ${label}: ${tradeUnits} ${settings.symbol} @ $${entryPrice.toFixed(2)} | SL: $${stopLoss.toFixed(2)} | TP: $${tp.toFixed(2)}`);
+              
+              // Record each trade independently
+              await storage.recordAutoTrade(settings.userId, suggestion.decision);
+              
+              console.log(`[PrecisionTrade] ${label}: ${tradeUnits} ${settings.symbol} @ $${entryPrice.toFixed(2)} | SL: $${stopLoss.toFixed(2)} | TP: $${tp.toFixed(2)}`);
+              
+              // Broadcast each trade independently
+              wsService.broadcast({
+                type: "precision_trade_executed",
+                symbol: settings.symbol,
+                timestamp: new Date().toISOString(),
+                data: {
+                  userId: settings.userId,
+                  symbol: settings.symbol,
+                  decision: suggestion.decision,
+                  quantity: tradeUnits,
+                  entryPrice,
+                  stopLoss,
+                  takeProfit: tp,
+                  positionId: result.position.id,
+                  label,
+                  riskRewardRatio: suggestion.riskRewardRatio,
+                },
+              });
             }
           }
           
@@ -1116,36 +1134,7 @@ class Scheduler {
               lastPrecisionTradeAt: new Date(),
             });
             
-            // Record the auto-trade (once per batch)
-            await storage.recordAutoTrade(settings.userId, suggestion.decision);
-            
-            console.log(`[PrecisionTrade] Executed ${executedTrades.length}/${tpTargets.length} legs for user ${settings.userId}`);
-            
-            // Broadcast all trades with complete information for each leg
-            wsService.broadcast({
-              type: "precision_trade_executed",
-              symbol: settings.symbol,
-              timestamp: new Date().toISOString(),
-              data: {
-                userId: settings.userId,
-                symbol: settings.symbol,
-                decision: suggestion.decision,
-                quantity: tradeUnits,
-                entryPrice,
-                stopLoss,
-                precisionBatchId,
-                legCount: executedTrades.length,
-                legs: executedTrades.map(t => ({
-                  label: t.label,
-                  positionId: t.positionId,
-                  entryPrice: t.entryPrice,
-                  stopLoss: t.stopLoss,
-                  takeProfit: t.tp,
-                  quantity: t.quantity,
-                })),
-                riskRewardRatio: suggestion.riskRewardRatio,
-              },
-            });
+            console.log(`[PrecisionTrade] Executed ${executedTrades.length}/${tpTargets.length} independent trades for user ${settings.userId}`);
           }
         } catch (userError) {
           console.error(`[PrecisionTrade] Error for user ${settings.userId}:`, userError);
