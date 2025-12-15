@@ -19,11 +19,13 @@ const SYMBOL_CONFIGS: Record<string, SymbolConfig> = {
   XAGUSD: { basePrice: 31.50, volatility: 0.5, is24h: true, provider: "gold-api", apiSymbol: "XAG" },
   BTCUSD: { basePrice: 97500.00, volatility: 1.5, is24h: true, provider: "gold-api", apiSymbol: "BTC" },
   
-  // Mining Stocks & Tech - Finnhub (direct symbols)
+  // Mining Stocks - Finnhub (direct symbols)
   GDX: { basePrice: 35.50, volatility: 0.4, is24h: false, provider: "finnhub", finnhubSymbol: "GDX" },
-  DATA: { basePrice: 45.00, volatility: 0.5, is24h: false, provider: "finnhub", finnhubSymbol: "DATA" },
-  WIFI: { basePrice: 28.00, volatility: 0.4, is24h: false, provider: "finnhub", finnhubSymbol: "WIFI" },
-  INET: { basePrice: 32.00, volatility: 0.4, is24h: false, provider: "finnhub", finnhubSymbol: "INET" },
+  
+  // Indonesian Stocks - Simulated (Finnhub doesn't support IDX)
+  DATA: { basePrice: 450.00, volatility: 0.5, is24h: false, provider: "simulated" },
+  WIFI: { basePrice: 4100.00, volatility: 0.4, is24h: false, provider: "simulated" },
+  INET: { basePrice: 318.00, volatility: 0.4, is24h: false, provider: "simulated" },
   
   // Indices & Commodities - Finnhub (via ETF proxies)
   SPX: { basePrice: 6050.00, volatility: 0.2, is24h: false, provider: "finnhub", finnhubSymbol: "SPY", priceMultiplier: 10 },
