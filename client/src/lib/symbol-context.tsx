@@ -5,7 +5,7 @@ const SUPPORTED_SYMBOLS = [
   { symbol: "XAGUSD", name: "Silver Spot", category: "commodities" },
   { symbol: "US10Y", name: "Treasury Yield 10Y", category: "bonds" },
   { symbol: "GDX", name: "Gold Miners ETF", category: "etf" },
-  { symbol: "DATA", name: "Indonesia Tech Data", category: "stocks" },
+  { symbol: "DATA", name: "PT Remala Abadi", category: "stocks" },
   { symbol: "WIFI", name: "PT Solusi Sinergi Digital", category: "stocks" },
   { symbol: "INET", name: "PT Sinergi Inti Andalan Prima", category: "stocks" },
   { symbol: "SPX", name: "S&P 500 Index", category: "indices" },
