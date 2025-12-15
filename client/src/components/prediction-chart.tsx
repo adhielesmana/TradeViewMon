@@ -13,12 +13,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { PredictionWithResult } from "@shared/schema";
 import { format } from "date-fns";
+import { formatPrice, getCurrencySymbol } from "@/lib/symbol-context";
 
 interface PredictionChartProps {
   predictions: PredictionWithResult[];
   isLoading?: boolean;
   height?: number;
   className?: string;
+  symbol?: string;
 }
 
 export function PredictionChart({
@@ -26,7 +28,9 @@ export function PredictionChart({
   isLoading = false,
   height = 350,
   className,
+  symbol = "XAUUSD",
 }: PredictionChartProps) {
+  const currencySymbol = getCurrencySymbol(symbol);
   const chartData = useMemo(() => {
     return predictions.map((item) => ({
       time: format(new Date(item.targetTimestamp), "HH:mm"),
@@ -104,7 +108,7 @@ export function PredictionChart({
               axisLine={false}
               tickLine={false}
               tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-              tickFormatter={(value) => `$${value.toFixed(0)}`}
+              tickFormatter={(value) => `${currencySymbol}${value.toFixed(0)}`}
               dx={-5}
               width={60}
             />
@@ -117,7 +121,7 @@ export function PredictionChart({
               }}
               labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 500 }}
               formatter={(value: number, name: string) => [
-                value ? `$${value.toFixed(2)}` : "N/A",
+                value ? formatPrice(value, symbol) : "N/A",
                 name === "predicted" ? "Predicted" : "Actual"
               ]}
             />

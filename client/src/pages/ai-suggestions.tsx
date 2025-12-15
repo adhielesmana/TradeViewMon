@@ -669,12 +669,12 @@ export default function AiSuggestions() {
                     </Badge>
                     <div>
                       <div className="text-sm font-mono">
-                        ${suggestion.currentPrice.toFixed(2)}
+                        {formatPrice(suggestion.currentPrice, symbol)}
                         {suggestion.buyTarget && (
-                          <span className="text-green-500 ml-2">Buy: ${suggestion.buyTarget.toFixed(2)}</span>
+                          <span className="text-green-500 ml-2">Buy: {formatPrice(suggestion.buyTarget, symbol)}</span>
                         )}
                         {suggestion.sellTarget && (
-                          <span className="text-red-500 ml-2">Sell: ${suggestion.sellTarget.toFixed(2)}</span>
+                          <span className="text-red-500 ml-2">Sell: {formatPrice(suggestion.sellTarget, symbol)}</span>
                         )}
                       </div>
                       <div className="text-xs text-muted-foreground">

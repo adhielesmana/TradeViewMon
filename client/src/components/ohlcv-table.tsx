@@ -13,12 +13,14 @@ import { TrendingUp, TrendingDown } from "lucide-react";
 import type { MarketData } from "@shared/schema";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { formatPrice } from "@/lib/symbol-context";
 
 interface OHLCVTableProps {
   data: MarketData[];
   isLoading?: boolean;
   maxHeight?: number;
   className?: string;
+  symbol?: string;
 }
 
 export function OHLCVTable({
@@ -26,6 +28,7 @@ export function OHLCVTable({
   isLoading = false,
   maxHeight = 400,
   className,
+  symbol = "XAUUSD",
 }: OHLCVTableProps) {
   if (isLoading) {
     return (
@@ -97,16 +100,16 @@ export function OHLCVTable({
                       </div>
                     </TableCell>
                     <TableCell className="py-2 text-right font-mono text-sm">
-                      ${candle.open.toFixed(2)}
+                      {formatPrice(candle.open, symbol)}
                     </TableCell>
                     <TableCell className="py-2 text-right font-mono text-sm text-profit">
-                      ${candle.high.toFixed(2)}
+                      {formatPrice(candle.high, symbol)}
                     </TableCell>
                     <TableCell className="py-2 text-right font-mono text-sm text-loss">
-                      ${candle.low.toFixed(2)}
+                      {formatPrice(candle.low, symbol)}
                     </TableCell>
                     <TableCell className="py-2 text-right font-mono text-sm font-medium">
-                      ${candle.close.toFixed(2)}
+                      {formatPrice(candle.close, symbol)}
                     </TableCell>
                     <TableCell className="py-2 text-right font-mono text-sm text-muted-foreground">
                       {(candle.volume / 1000).toFixed(1)}K

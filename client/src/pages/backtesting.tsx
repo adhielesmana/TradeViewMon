@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { Play, TrendingUp, TrendingDown, Target, Percent, Activity, BarChart2, Clock, AlertTriangle } from "lucide-react";
-import { useSymbol } from "@/lib/symbol-context";
+import { useSymbol, formatPrice, getCurrencySymbol } from "@/lib/symbol-context";
 import { apiRequest } from "@/lib/queryClient";
 import { format, subDays, subMonths } from "date-fns";
 
@@ -341,7 +341,7 @@ export default function Backtesting() {
                     />
                     <YAxis 
                       domain={['auto', 'auto']}
-                      tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
+                      tickFormatter={(v) => `${getCurrencySymbol(symbol)}${(v / 1000).toFixed(1)}k`}
                       tick={{ fontSize: 11 }}
                       className="text-muted-foreground"
                     />
@@ -352,7 +352,7 @@ export default function Backtesting() {
                         borderRadius: '8px',
                       }}
                       labelStyle={{ color: 'hsl(var(--foreground))' }}
-                      formatter={(value: number) => [`$${value.toLocaleString()}`, 'Equity']}
+                      formatter={(value: number) => [`${getCurrencySymbol(symbol)}${value.toLocaleString()}`, 'Equity']}
                     />
                     <ReferenceLine 
                       y={10000} 
@@ -403,10 +403,10 @@ export default function Backtesting() {
                           {format(new Date(trade.timestamp), "MM/dd HH:mm")}
                         </td>
                         <td className="py-2 text-right font-mono">
-                          ${trade.predictedPrice.toFixed(2)}
+                          {formatPrice(trade.predictedPrice, symbol)}
                         </td>
                         <td className="py-2 text-right font-mono">
-                          ${trade.actualPrice.toFixed(2)}
+                          {formatPrice(trade.actualPrice, symbol)}
                         </td>
                         <td className="py-2 text-center">
                           <div className="flex items-center justify-center gap-1">
