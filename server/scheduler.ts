@@ -128,12 +128,12 @@ function getPipValue(symbol: string): number {
     case "XAUUSD": return 0.10;      // Gold: 1 pip = $0.10
     case "XAGUSD": return 0.01;      // Silver: 1 pip = $0.01
     case "BTCUSD": return 1.00;      // Bitcoin: 1 pip = $1.00
-    case "DXY": return 0.01;         // Dollar Index: 1 pip = 0.01
+    case "DATA": return 0.01;        // Dropbox: 1 pip = $0.01
+    case "WIFI": return 0.01;        // Boingo Wireless: 1 pip = $0.01
+    case "INET": return 0.01;        // Internet Initiative Japan: 1 pip = $0.01
     case "SPX": return 0.10;         // S&P 500: 1 pip = 0.10
     case "USOIL": return 0.01;       // Crude Oil: 1 pip = $0.01
     case "GDX": return 0.01;         // Gold Miners ETF: 1 pip = $0.01
-    case "GDXJ": return 0.01;        // Junior Gold Miners: 1 pip = $0.01
-    case "NEM": return 0.01;         // Newmont: 1 pip = $0.01
     case "US10Y": return 0.01;       // 10-Year Treasury: 1 pip = 0.01
     default: return 0.01;            // Default: 1 pip = $0.01
   }

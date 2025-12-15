@@ -19,14 +19,14 @@ const SYMBOL_CONFIGS: Record<string, SymbolConfig> = {
   XAGUSD: { basePrice: 31.50, volatility: 0.5, is24h: true, provider: "gold-api", apiSymbol: "XAG" },
   BTCUSD: { basePrice: 97500.00, volatility: 1.5, is24h: true, provider: "gold-api", apiSymbol: "BTC" },
   
-  // Mining Stocks - Finnhub (direct symbols)
+  // Mining Stocks & Tech - Finnhub (direct symbols)
   GDX: { basePrice: 35.50, volatility: 0.4, is24h: false, provider: "finnhub", finnhubSymbol: "GDX" },
-  GDXJ: { basePrice: 42.00, volatility: 0.5, is24h: false, provider: "finnhub", finnhubSymbol: "GDXJ" },
-  NEM: { basePrice: 48.50, volatility: 0.4, is24h: false, provider: "finnhub", finnhubSymbol: "NEM" },
+  DATA: { basePrice: 45.00, volatility: 0.5, is24h: false, provider: "finnhub", finnhubSymbol: "DATA" },
+  WIFI: { basePrice: 28.00, volatility: 0.4, is24h: false, provider: "finnhub", finnhubSymbol: "WIFI" },
+  INET: { basePrice: 32.00, volatility: 0.4, is24h: false, provider: "finnhub", finnhubSymbol: "INET" },
   
   // Indices & Commodities - Finnhub (via ETF proxies)
   SPX: { basePrice: 6050.00, volatility: 0.2, is24h: false, provider: "finnhub", finnhubSymbol: "SPY", priceMultiplier: 10 },
-  DXY: { basePrice: 106.50, volatility: 0.1, is24h: true, provider: "finnhub", finnhubSymbol: "UUP", priceMultiplier: 3.8 },
   USOIL: { basePrice: 71.50, volatility: 0.6, is24h: true, provider: "finnhub", finnhubSymbol: "USO", priceMultiplier: 1 },
   
   // Treasury Yield - Simulated (no good free API)

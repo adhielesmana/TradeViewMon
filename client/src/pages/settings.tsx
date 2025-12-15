@@ -144,7 +144,7 @@ export default function SettingsPage() {
               <CardTitle>Finnhub API Key</CardTitle>
             </div>
             <CardDescription>
-              Required for real-time stock data (GDX, GDXJ, NEM, SPX, DXY, USOIL).
+              Required for real-time stock data (GDX, DATA, WIFI, INET, SPX, USOIL).
               Get a free API key from{" "}
               <a
                 href="https://finnhub.io"
@@ -397,7 +397,7 @@ export default function SettingsPage() {
               </div>
               <Separator />
               <div className="flex items-center justify-between">
-                <span className="text-sm">GDX, GDXJ, NEM, SPX, DXY, USOIL</span>
+                <span className="text-sm">GDX, DATA, WIFI, INET, SPX, USOIL</span>
                 <Badge variant={finnhubStatus?.isConfigured ? "default" : "secondary"}>
                   {finnhubStatus?.isConfigured ? "Finnhub (Live)" : "Simulated"}
                 </Badge>

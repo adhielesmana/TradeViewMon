@@ -2,12 +2,12 @@ import { createContext, useContext, useState, useCallback, type ReactNode } from
 
 const SUPPORTED_SYMBOLS = [
   { symbol: "XAUUSD", name: "Gold Spot", category: "commodities" },
-  { symbol: "DXY", name: "Dollar Index", category: "indices" },
   { symbol: "XAGUSD", name: "Silver Spot", category: "commodities" },
   { symbol: "US10Y", name: "Treasury Yield 10Y", category: "bonds" },
   { symbol: "GDX", name: "Gold Miners ETF", category: "etf" },
-  { symbol: "GDXJ", name: "Junior Gold Miners ETF", category: "etf" },
-  { symbol: "NEM", name: "Newmont Corp", category: "stocks" },
+  { symbol: "DATA", name: "Dropbox Inc", category: "stocks" },
+  { symbol: "WIFI", name: "Boingo Wireless", category: "stocks" },
+  { symbol: "INET", name: "Internet Initiative Japan", category: "stocks" },
   { symbol: "SPX", name: "S&P 500 Index", category: "indices" },
   { symbol: "BTCUSD", name: "Bitcoin", category: "crypto" },
   { symbol: "USOIL", name: "Crude Oil WTI", category: "commodities" },
