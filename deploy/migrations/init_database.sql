@@ -375,6 +375,11 @@ BEGIN
         ALTER TABLE demo_positions ADD COLUMN closed_reason VARCHAR(50);
     END IF;
     
+    -- precision_batch_id column in demo_positions (for 3-leg precision trades)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='demo_positions' AND column_name='precision_batch_id') THEN
+        ALTER TABLE demo_positions ADD COLUMN precision_batch_id VARCHAR(100);
+    END IF;
+    
     -- Add precision trade plan columns to ai_suggestions
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='entry_price') THEN
         ALTER TABLE ai_suggestions ADD COLUMN entry_price REAL;
