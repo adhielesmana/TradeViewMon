@@ -269,9 +269,11 @@ export default function LiveDemo() {
   const [autoTradeTakeProfitValue, setAutoTradeTakeProfitValue] = useState("");
   const [autoTradeUseAiFilter, setAutoTradeUseAiFilter] = useState(false);
   const [autoTradeMinConfidence, setAutoTradeMinConfidence] = useState("60");
+  const [usePrecisionSignals, setUsePrecisionSignals] = useState(false);
+  const [precisionTradeUnits, setPrecisionTradeUnits] = useState("0.01");
 
   const autoTradeMutation = useMutation({
-    mutationFn: (data: { isEnabled?: boolean; tradeUnits?: number; symbol?: string; slTpMode?: string; stopLossValue?: number; takeProfitValue?: number; useAiFilter?: boolean; minConfidence?: number }) =>
+    mutationFn: (data: { isEnabled?: boolean; tradeUnits?: number; symbol?: string; slTpMode?: string; stopLossValue?: number; takeProfitValue?: number; useAiFilter?: boolean; minConfidence?: number; usePrecisionSignals?: boolean; precisionTradeUnits?: number }) =>
       apiRequest("PATCH", "/api/demo/auto-trade", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/demo/auto-trade"] });
@@ -893,6 +895,8 @@ export default function LiveDemo() {
                 setAutoTradeTakeProfitValue(autoTradeSettings.takeProfitValue?.toString() || "3");
                 setAutoTradeUseAiFilter(autoTradeSettings.useAiFilter ?? false);
                 setAutoTradeMinConfidence(autoTradeSettings.minConfidence?.toString() || "60");
+                setUsePrecisionSignals(autoTradeSettings.usePrecisionSignals ?? false);
+                setPrecisionTradeUnits(autoTradeSettings.precisionTradeUnits?.toString() || "0.01");
               }
             }}>
               <DialogTrigger asChild>

@@ -350,6 +350,21 @@ BEGIN
         ALTER TABLE auto_trade_settings ADD COLUMN trade_units REAL NOT NULL DEFAULT 0.01;
     END IF;
     
+    -- use_precision_signals (NEW: Precision Auto-Trade feature)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='auto_trade_settings' AND column_name='use_precision_signals') THEN
+        ALTER TABLE auto_trade_settings ADD COLUMN use_precision_signals BOOLEAN NOT NULL DEFAULT false;
+    END IF;
+    
+    -- precision_trade_units
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='auto_trade_settings' AND column_name='precision_trade_units') THEN
+        ALTER TABLE auto_trade_settings ADD COLUMN precision_trade_units REAL NOT NULL DEFAULT 0.01;
+    END IF;
+    
+    -- last_precision_trade_at
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='auto_trade_settings' AND column_name='last_precision_trade_at') THEN
+        ALTER TABLE auto_trade_settings ADD COLUMN last_precision_trade_at TIMESTAMP;
+    END IF;
+    
     -- is_auto_trade column in demo_positions
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='demo_positions' AND column_name='is_auto_trade') THEN
         ALTER TABLE demo_positions ADD COLUMN is_auto_trade BOOLEAN NOT NULL DEFAULT false;

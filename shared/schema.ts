@@ -434,6 +434,9 @@ export const autoTradeSettings = pgTable("auto_trade_settings", {
   takeProfitValue: real("take_profit_value").notNull().default(2), // Take profit value (default 2x SL for 1:2 ratio)
   minConfidence: integer("min_confidence").notNull().default(0), // Minimum AI confidence to execute trade (0-100, 0=disabled)
   useAiFilter: boolean("use_ai_filter").notNull().default(false), // Use AI analysis to filter trades
+  usePrecisionSignals: boolean("use_precision_signals").notNull().default(false), // NEW: Execute trades with exact AI Entry/SL/TP
+  precisionTradeUnits: real("precision_trade_units").notNull().default(0.01), // Trade size for precision signals
+  lastPrecisionTradeAt: timestamp("last_precision_trade_at"), // When last precision trade was executed
   stopLossPips: real("stop_loss_pips").default(50), // Legacy: Stop loss in pips
   takeProfitPips: real("take_profit_pips").default(100), // Legacy: Take profit in pips
   lastTradeAt: timestamp("last_trade_at"), // When last auto-trade was executed
@@ -467,6 +470,8 @@ export const updateAutoTradeSettingSchema = createInsertSchema(autoTradeSettings
   takeProfitValue: true,
   minConfidence: true,
   useAiFilter: true,
+  usePrecisionSignals: true,
+  precisionTradeUnits: true,
   stopLossPips: true,
   takeProfitPips: true,
 }).partial();
