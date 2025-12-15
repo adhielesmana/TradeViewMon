@@ -97,7 +97,7 @@ export interface IStorage {
   // Demo Trading - Combined Operations
   depositDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction }>;
   withdrawDemoCredits(userId: string, amount: number): Promise<{ account: DemoAccount; transaction: DemoTransaction } | { error: string }>;
-  openDemoTrade(userId: string, symbol: string, type: 'BUY' | 'SELL', entryPrice: number, quantity: number, stopLoss?: number, takeProfit?: number, isAutoTrade?: boolean): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
+  openDemoTrade(userId: string, symbol: string, type: 'BUY' | 'SELL', entryPrice: number, quantity: number, stopLoss?: number, takeProfit?: number, isAutoTrade?: boolean, precisionBatchId?: string): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
   closeDemoTrade(userId: string, positionId: number, exitPrice: number, reason?: 'manual' | 'stop_loss' | 'take_profit' | 'liquidation'): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null>;
   updateAutoTradeStats(userId: string, profitLoss: number): Promise<void>;
   updateOpenPositionPrices(symbol: string, currentPrice: number): Promise<void>;
@@ -829,7 +829,8 @@ export class DatabaseStorage implements IStorage {
     quantity: number, 
     stopLoss?: number, 
     takeProfit?: number,
-    isAutoTrade: boolean = false
+    isAutoTrade: boolean = false,
+    precisionBatchId?: string
   ): Promise<{ position: DemoPosition; transaction: DemoTransaction } | null> {
     const account = await this.getDemoAccount(userId);
     if (!account) return null;
@@ -854,6 +855,7 @@ export class DatabaseStorage implements IStorage {
       takeProfit: takeProfit || null,
       status: 'open',
       isAutoTrade,
+      precisionBatchId: precisionBatchId || null,
     });
 
     const transaction = await this.createDemoTransaction({

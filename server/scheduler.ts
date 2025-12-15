@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import { predictionEngine } from "./prediction-engine";
 import { marketDataService } from "./market-data-service";
@@ -979,6 +980,7 @@ class Scheduler {
   }
 
   // Process precision auto-trades using exact Entry/SL/TP from AI suggestions
+  // Creates 3-leg trades: one position for each TP target (TP1, TP2, TP3)
   private async processPrecisionTrades(): Promise<void> {
     try {
       // Get all settings with precision signals enabled
@@ -1005,10 +1007,9 @@ class Scheduler {
             continue;
           }
           
-          // Use takeProfit1 or takeProfit2 as TP
-          const takeProfit = suggestion.takeProfit1 || suggestion.takeProfit2;
-          if (!takeProfit) {
-            console.log(`[PrecisionTrade] ${settings.symbol}: No precision Take Profit available`);
+          // Must have at least TP1 for precision trades
+          if (!suggestion.takeProfit1) {
+            console.log(`[PrecisionTrade] ${settings.symbol}: No precision Take Profit 1 available`);
             continue;
           }
           
@@ -1032,15 +1033,25 @@ class Scheduler {
           
           const tradeUnits = settings.precisionTradeUnits || 0.01;
           const entryPrice = suggestion.entryPrice;
-          const requiredUsd = tradeUnits * entryPrice;
+          const stopLoss = suggestion.stopLoss;
           
-          // Check balance
-          if (account.balance < requiredUsd) {
-            console.log(`[PrecisionTrade] Insufficient balance for user ${settings.userId}`);
+          // Build array of available TPs
+          const tpTargets: { tp: number; label: string }[] = [];
+          if (suggestion.takeProfit1) tpTargets.push({ tp: suggestion.takeProfit1, label: 'TP1' });
+          if (suggestion.takeProfit2) tpTargets.push({ tp: suggestion.takeProfit2, label: 'TP2' });
+          if (suggestion.takeProfit3) tpTargets.push({ tp: suggestion.takeProfit3, label: 'TP3' });
+          
+          // Calculate total required balance for all legs upfront
+          const requiredUsdPerLeg = tradeUnits * entryPrice;
+          const totalRequiredUsd = requiredUsdPerLeg * tpTargets.length;
+          
+          // Check balance for all legs before executing any
+          if (account.balance < totalRequiredUsd) {
+            console.log(`[PrecisionTrade] Insufficient balance for ${tpTargets.length}-leg trade for user ${settings.userId} (need $${totalRequiredUsd.toFixed(2)}, have $${account.balance.toFixed(2)})`);
             continue;
           }
           
-          // Check for duplicate open positions
+          // Check for duplicate open positions with same entry price
           const openPositions = await storage.getDemoPositions(settings.userId, 'open');
           const existingPrecisionTrade = openPositions.find(pos => 
             pos.symbol === settings.symbol && pos.isAutoTrade === true
@@ -1055,31 +1066,62 @@ class Scheduler {
           
           const tradeType = suggestion.decision as 'BUY' | 'SELL';
           
-          console.log(`[PrecisionTrade] Executing ${tradeType} for ${settings.symbol}: Entry=$${entryPrice.toFixed(2)}, SL=$${suggestion.stopLoss.toFixed(2)}, TP=$${takeProfit.toFixed(2)}`);
+          // Generate unique batch ID for this set of trades
+          const precisionBatchId = randomUUID();
           
-          // Open the precision trade
-          const result = await storage.openDemoTrade(
-            settings.userId,
-            settings.symbol,
-            tradeType,
-            entryPrice,
-            tradeUnits,
-            suggestion.stopLoss,
-            takeProfit,
-            true // isAutoTrade
-          );
+          console.log(`[PrecisionTrade] Executing ${tpTargets.length}-leg ${tradeType} for ${settings.symbol}: Entry=$${entryPrice.toFixed(2)}, SL=$${stopLoss.toFixed(2)}, BatchID=${precisionBatchId.slice(0, 8)}...`);
           
-          if (result) {
+          const executedTrades: { tp: number; label: string; positionId: number; entryPrice: number; stopLoss: number; quantity: number }[] = [];
+          let remainingBalance = account.balance;
+          
+          // Open trades for each TP target
+          for (const { tp, label } of tpTargets) {
+            // Verify we still have enough balance for this leg
+            if (remainingBalance < requiredUsdPerLeg) {
+              console.log(`[PrecisionTrade] Insufficient remaining balance for ${label}, skipping remaining legs`);
+              break;
+            }
+            
+            const result = await storage.openDemoTrade(
+              settings.userId,
+              settings.symbol,
+              tradeType,
+              entryPrice,
+              tradeUnits,
+              stopLoss,
+              tp,
+              true, // isAutoTrade
+              precisionBatchId
+            );
+            
+            if (result) {
+              // Track the executed trade with full details
+              executedTrades.push({ 
+                tp, 
+                label, 
+                positionId: result.position.id,
+                entryPrice,
+                stopLoss,
+                quantity: tradeUnits
+              });
+              // Update remaining balance after successful trade
+              remainingBalance -= requiredUsdPerLeg;
+              console.log(`[PrecisionTrade] Leg ${label}: ${tradeUnits} ${settings.symbol} @ $${entryPrice.toFixed(2)} | SL: $${stopLoss.toFixed(2)} | TP: $${tp.toFixed(2)}`);
+            }
+          }
+          
+          if (executedTrades.length > 0) {
             // Update lastPrecisionTradeAt
             await storage.updateAutoTradeSettings(settings.userId, {
               lastPrecisionTradeAt: new Date(),
             });
             
-            // Record the auto-trade
+            // Record the auto-trade (once per batch)
             await storage.recordAutoTrade(settings.userId, suggestion.decision);
             
-            console.log(`[PrecisionTrade] Executed ${tradeType} for user ${settings.userId}: ${tradeUnits} ${settings.symbol} @ $${entryPrice.toFixed(2)} | SL: $${suggestion.stopLoss.toFixed(2)} | TP: $${takeProfit.toFixed(2)}`);
+            console.log(`[PrecisionTrade] Executed ${executedTrades.length}/${tpTargets.length} legs for user ${settings.userId}`);
             
+            // Broadcast all trades with complete information for each leg
             wsService.broadcast({
               type: "precision_trade_executed",
               symbol: settings.symbol,
@@ -1090,8 +1132,17 @@ class Scheduler {
                 decision: suggestion.decision,
                 quantity: tradeUnits,
                 entryPrice,
-                stopLoss: suggestion.stopLoss,
-                takeProfit,
+                stopLoss,
+                precisionBatchId,
+                legCount: executedTrades.length,
+                legs: executedTrades.map(t => ({
+                  label: t.label,
+                  positionId: t.positionId,
+                  entryPrice: t.entryPrice,
+                  stopLoss: t.stopLoss,
+                  takeProfit: t.tp,
+                  quantity: t.quantity,
+                })),
                 riskRewardRatio: suggestion.riskRewardRatio,
               },
             });

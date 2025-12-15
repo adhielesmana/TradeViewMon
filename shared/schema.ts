@@ -292,6 +292,7 @@ export const demoPositions = pgTable("demo_positions", {
   closedAt: timestamp("closed_at"),
   closedReason: varchar("closed_reason", { length: 50 }), // 'manual', 'stop_loss', 'take_profit', 'auto_trade'
   isAutoTrade: boolean("is_auto_trade").notNull().default(false), // True if position created by auto-trading
+  precisionBatchId: varchar("precision_batch_id", { length: 100 }), // UUID to link 3-leg precision trades
 }, (table) => [
   index("demo_positions_account_idx").on(table.accountId),
   index("demo_positions_user_idx").on(table.userId),
