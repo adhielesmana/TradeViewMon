@@ -1247,9 +1247,9 @@ export async function registerRoutes(
   app.patch("/api/demo/auto-trade", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId!;
-      const { isEnabled, tradeUnits, symbol, slTpMode, stopLossValue, takeProfitValue, minConfidence, useAiFilter } = req.body;
+      const { isEnabled, tradeUnits, symbol, slTpMode, stopLossValue, takeProfitValue, minConfidence, useAiFilter, usePrecisionSignals, precisionTradeUnits } = req.body;
       
-      const updateData: { isEnabled?: boolean; tradeUnits?: number; symbol?: string; slTpMode?: string; stopLossValue?: number; takeProfitValue?: number; minConfidence?: number; useAiFilter?: boolean } = {};
+      const updateData: { isEnabled?: boolean; tradeUnits?: number; symbol?: string; slTpMode?: string; stopLossValue?: number; takeProfitValue?: number; minConfidence?: number; useAiFilter?: boolean; usePrecisionSignals?: boolean; precisionTradeUnits?: number } = {};
       
       if (typeof isEnabled === "boolean") {
         updateData.isEnabled = isEnabled;
@@ -1281,6 +1281,14 @@ export async function registerRoutes(
       
       if (typeof useAiFilter === "boolean") {
         updateData.useAiFilter = useAiFilter;
+      }
+      
+      if (typeof usePrecisionSignals === "boolean") {
+        updateData.usePrecisionSignals = usePrecisionSignals;
+      }
+      
+      if (typeof precisionTradeUnits === "number" && precisionTradeUnits >= 0.01) {
+        updateData.precisionTradeUnits = precisionTradeUnits;
       }
       
       const settings = await storage.updateAutoTradeSettings(userId, updateData);
