@@ -23,7 +23,7 @@ const SYMBOL_CONFIGS: Record<string, SymbolConfig> = {
   GDX: { basePrice: 35.50, volatility: 0.4, is24h: false, provider: "finnhub", finnhubSymbol: "GDX" },
   
   // Indonesian Stocks - Simulated (Finnhub doesn't support IDX)
-  DATA: { basePrice: 450.00, volatility: 0.5, is24h: false, provider: "simulated" },
+  DATA: { basePrice: 4060.00, volatility: 0.5, is24h: false, provider: "simulated" },
   WIFI: { basePrice: 4100.00, volatility: 0.4, is24h: false, provider: "simulated" },
   INET: { basePrice: 318.00, volatility: 0.4, is24h: false, provider: "simulated" },
   
