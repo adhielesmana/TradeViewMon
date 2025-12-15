@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { MarketData } from "@shared/schema";
 import { format } from "date-fns";
+import { getCurrencySymbol } from "@/lib/symbol-context";
 
 interface MarketChartProps {
   data: MarketData[];
@@ -23,6 +24,7 @@ interface MarketChartProps {
   height?: number;
   showVolume?: boolean;
   className?: string;
+  symbol?: string;
 }
 
 export function MarketChart({
@@ -32,7 +34,9 @@ export function MarketChart({
   height = 300,
   showVolume = false,
   className,
+  symbol = "XAUUSD",
 }: MarketChartProps) {
+  const currencySymbol = getCurrencySymbol(symbol);
   const chartData = useMemo(() => {
     return data.map((item) => ({
       ...item,
@@ -134,7 +138,7 @@ export function MarketChart({
               axisLine={false}
               tickLine={false}
               tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              tickFormatter={(value) => `$${value.toFixed(2)}`}
+              tickFormatter={(value) => `${currencySymbol}${value.toLocaleString()}`}
               dx={-5}
               width={70}
             />
@@ -147,7 +151,7 @@ export function MarketChart({
               }}
               labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 500 }}
               itemStyle={{ color: "hsl(var(--foreground))" }}
-              formatter={(value: number) => [`$${value.toFixed(2)}`, "Close"]}
+              formatter={(value: number) => [`${currencySymbol}${value.toLocaleString()}`, "Close"]}
             />
             <ReferenceLine 
               y={avgPrice} 

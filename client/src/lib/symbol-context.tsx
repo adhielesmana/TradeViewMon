@@ -1,23 +1,40 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 
 const SUPPORTED_SYMBOLS = [
-  { symbol: "XAUUSD", name: "Gold Spot", category: "commodities" },
-  { symbol: "XAGUSD", name: "Silver Spot", category: "commodities" },
-  { symbol: "US10Y", name: "Treasury Yield 10Y", category: "bonds" },
-  { symbol: "GDX", name: "Gold Miners ETF", category: "etf" },
-  { symbol: "DATA", name: "PT Remala Abadi", category: "stocks" },
-  { symbol: "WIFI", name: "PT Solusi Sinergi Digital", category: "stocks" },
-  { symbol: "INET", name: "PT Sinergi Inti Andalan Prima", category: "stocks" },
-  { symbol: "SPX", name: "S&P 500 Index", category: "indices" },
-  { symbol: "BTCUSD", name: "Bitcoin", category: "crypto" },
-  { symbol: "USOIL", name: "Crude Oil WTI", category: "commodities" },
+  { symbol: "XAUUSD", name: "Gold Spot", category: "commodities", currency: "USD" },
+  { symbol: "XAGUSD", name: "Silver Spot", category: "commodities", currency: "USD" },
+  { symbol: "US10Y", name: "Treasury Yield 10Y", category: "bonds", currency: "USD" },
+  { symbol: "GDX", name: "Gold Miners ETF", category: "etf", currency: "USD" },
+  { symbol: "DATA", name: "PT Remala Abadi", category: "stocks", currency: "IDR" },
+  { symbol: "WIFI", name: "PT Solusi Sinergi Digital", category: "stocks", currency: "IDR" },
+  { symbol: "INET", name: "PT Sinergi Inti Andalan Prima", category: "stocks", currency: "IDR" },
+  { symbol: "SPX", name: "S&P 500 Index", category: "indices", currency: "USD" },
+  { symbol: "BTCUSD", name: "Bitcoin", category: "crypto", currency: "USD" },
+  { symbol: "USOIL", name: "Crude Oil WTI", category: "commodities", currency: "USD" },
 ];
 
 export type SymbolInfo = {
   symbol: string;
   name: string;
   category?: string;
+  currency?: string;
 };
+
+export function getCurrencySymbol(symbol: string): string {
+  const indonesianStocks = ["DATA", "WIFI", "INET"];
+  return indonesianStocks.includes(symbol) ? "Rp" : "$";
+}
+
+export function formatPrice(price: number, symbol: string): string {
+  const currencySymbol = getCurrencySymbol(symbol);
+  const indonesianStocks = ["DATA", "WIFI", "INET"];
+  const isIDR = indonesianStocks.includes(symbol);
+  
+  if (isIDR) {
+    return `${currencySymbol}${price.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  }
+  return `${currencySymbol}${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 type SymbolContextType = {
   currentSymbol: SymbolInfo;
