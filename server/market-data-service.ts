@@ -1,7 +1,7 @@
 import type { InsertMarketData } from "@shared/schema";
 
 // API provider types
-type ApiProvider = "gold-api" | "finnhub" | "simulated";
+type ApiProvider = "gold-api" | "finnhub" | "yahoo" | "simulated";
 
 interface SymbolConfig {
   basePrice: number;
@@ -10,6 +10,7 @@ interface SymbolConfig {
   provider: ApiProvider;
   apiSymbol?: string;  // Gold-API symbol (XAU, XAG, BTC)
   finnhubSymbol?: string;  // Finnhub stock/ETF symbol
+  yahooSymbol?: string;  // Yahoo Finance symbol (e.g., DATA.JK for IDX stocks)
   priceMultiplier?: number;  // For ETF proxies that need price adjustment
 }
 
@@ -22,10 +23,10 @@ const SYMBOL_CONFIGS: Record<string, SymbolConfig> = {
   // Mining Stocks - Finnhub (direct symbols)
   GDX: { basePrice: 35.50, volatility: 0.4, is24h: false, provider: "finnhub", finnhubSymbol: "GDX" },
   
-  // Indonesian Stocks - Simulated (Finnhub doesn't support IDX)
-  DATA: { basePrice: 4060.00, volatility: 0.5, is24h: false, provider: "simulated" },
-  WIFI: { basePrice: 3600.00, volatility: 0.4, is24h: false, provider: "simulated" },
-  INET: { basePrice: 795.00, volatility: 0.4, is24h: false, provider: "simulated" },
+  // Indonesian Stocks - Yahoo Finance (IDX stocks use .JK suffix)
+  DATA: { basePrice: 4060.00, volatility: 0.5, is24h: false, provider: "yahoo", yahooSymbol: "DATA.JK" },
+  WIFI: { basePrice: 3600.00, volatility: 0.4, is24h: false, provider: "yahoo", yahooSymbol: "WIFI.JK" },
+  INET: { basePrice: 795.00, volatility: 0.4, is24h: false, provider: "yahoo", yahooSymbol: "INET.JK" },
   
   // Indices & Commodities - Finnhub (via ETF proxies)
   SPX: { basePrice: 6050.00, volatility: 0.2, is24h: false, provider: "finnhub", finnhubSymbol: "SPY", priceMultiplier: 10 },
@@ -205,6 +206,54 @@ export class MarketDataService {
     }
   }
 
+  // Fetch from Yahoo Finance (free, no key required) - for Indonesian stocks
+  private async fetchYahooPrice(symbol: string, config: SymbolConfig): Promise<{ price: number; updatedAt: string; provider: string } | null> {
+    if (!config.yahooSymbol) {
+      return null;
+    }
+
+    try {
+      // Yahoo Finance v8 API endpoint
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${config.yahooSymbol}?interval=1m&range=1d`;
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+      
+      if (!response.ok) {
+        console.error(`[MarketData] Yahoo Finance API error: ${response.status}`);
+        return null;
+      }
+      
+      const data = await response.json();
+      const result = data?.chart?.result?.[0];
+      
+      if (!result || !result.meta?.regularMarketPrice) {
+        console.error(`[MarketData] Yahoo Finance returned no data for ${config.yahooSymbol}`);
+        return null;
+      }
+      
+      const price = result.meta.regularMarketPrice;
+      const previousClose = result.meta.previousClose || price;
+      const changePercent = ((price - previousClose) / previousClose * 100).toFixed(2);
+      
+      console.log(`[MarketData] ✓ Yahoo Finance Response for ${symbol} (via ${config.yahooSymbol}):`);
+      console.log(`  - Price: ${price} IDR`);
+      console.log(`  - Previous Close: ${previousClose} IDR`);
+      console.log(`  - Change: ${Number(changePercent) >= 0 ? '+' : ''}${changePercent}%`);
+      
+      return { 
+        price, 
+        updatedAt: new Date().toISOString(), 
+        provider: `Yahoo (${config.yahooSymbol})` 
+      };
+    } catch (error) {
+      console.error(`[MarketData] Failed to fetch Yahoo Finance price:`, error);
+      return null;
+    }
+  }
+
   // Main method to fetch real price from appropriate provider
   private async fetchRealPrice(symbol: string): Promise<{ price: number; updatedAt: string; provider: string } | null> {
     const config = this.getConfig(symbol);
@@ -214,6 +263,8 @@ export class MarketDataService {
         return this.fetchGoldApiPrice(symbol, config);
       case "finnhub":
         return this.fetchFinnhubPrice(symbol, config);
+      case "yahoo":
+        return this.fetchYahooPrice(symbol, config);
       case "simulated":
       default:
         return null;
