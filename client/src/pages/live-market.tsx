@@ -9,7 +9,7 @@ import { StatCard } from "@/components/stat-card";
 import { StatusIndicator } from "@/components/status-indicator";
 import { Activity, Volume2, TrendingUp, TrendingDown, Clock, BarChart3, Gauge, Wifi, WifiOff, Moon, Sun } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
-import { useSymbol } from "@/lib/symbol-context";
+import { useSymbol, formatPrice, getCurrencySymbol } from "@/lib/symbol-context";
 import { useWebSocket, type WSMessage, type WSConnectionStatus } from "@/hooks/use-websocket";
 import { queryClient } from "@/lib/queryClient";
 import type { MarketData, MarketStats } from "@shared/schema";
@@ -226,14 +226,14 @@ export default function LiveMarket() {
           <>
             <StatCard
               label="Day High"
-              value={stats.high != null ? `$${stats.high.toFixed(2)}` : "--"}
+              value={stats.high != null ? formatPrice(stats.high, symbol) : "--"}
               icon={TrendingUp}
               valueClassName="text-profit"
               testId="text-day-high"
             />
             <StatCard
               label="Day Low"
-              value={stats.low != null ? `$${stats.low.toFixed(2)}` : "--"}
+              value={stats.low != null ? formatPrice(stats.low, symbol) : "--"}
               icon={TrendingDown}
               valueClassName="text-loss"
               testId="text-day-low"
@@ -302,13 +302,13 @@ export default function LiveMarket() {
                 <div className="flex flex-col">
                   <span className="text-xs text-muted-foreground">EMA (12)</span>
                   <span className="font-mono text-sm font-medium" data-testid="text-ema12">
-                    {latest.ema12 != null ? `$${latest.ema12.toFixed(2)}` : "--"}
+                    {latest.ema12 != null ? formatPrice(latest.ema12, symbol) : "--"}
                   </span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-xs text-muted-foreground">EMA (26)</span>
                   <span className="font-mono text-sm font-medium" data-testid="text-ema26">
-                    {latest.ema26 != null ? `$${latest.ema26.toFixed(2)}` : "--"}
+                    {latest.ema26 != null ? formatPrice(latest.ema26, symbol) : "--"}
                   </span>
                 </div>
                 <div className="flex flex-col">
@@ -375,7 +375,7 @@ export default function LiveMarket() {
             <div className="flex flex-col">
               <span className="text-sm text-muted-foreground">Open</span>
               <span className="font-mono text-lg font-medium" data-testid="text-open-price">
-                {marketData?.[0]?.open ? `$${Number(marketData[0].open).toFixed(2)}` : "--"}
+                {marketData?.[0]?.open ? formatPrice(Number(marketData[0].open), symbol) : "--"}
               </span>
             </div>
             <div className="flex flex-col">
