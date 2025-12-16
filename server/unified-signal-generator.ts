@@ -216,14 +216,17 @@ function calculatePrecisionTradePlan(
     stopLoss = support - (atr * 0.5);
     riskAmount = entryPrice - stopLoss;
     
-    // Take profits based on risk multiples and resistance
+    // Take profits based on risk multiples (ascending for BUY: TP1 < TP2 < TP3)
     takeProfit1 = entryPrice + riskAmount; // 1R (1:1 risk/reward)
-    takeProfit2 = Math.min(entryPrice + (riskAmount * 2), resistance); // 2R or resistance
+    takeProfit2 = entryPrice + (riskAmount * 2); // 2R
     takeProfit3 = entryPrice + (riskAmount * 3); // 3R extended target
     
-    // Ensure TP2 is at least at resistance level if resistance is close
-    if (resistance < takeProfit2) {
-      takeProfit2 = resistance;
+    // Ensure proper ascending sequence: TP1 < TP2 < TP3
+    if (takeProfit2 <= takeProfit1) {
+      takeProfit2 = takeProfit1 + (riskAmount * 0.5);
+    }
+    if (takeProfit3 <= takeProfit2) {
+      takeProfit3 = takeProfit2 + (riskAmount * 0.5);
     }
     
     analysis = `BUY Signal: ${signalType === "immediate" ? "Enter now" : `Set buy order at $${entryPrice.toFixed(2)}`}. ` +
@@ -248,14 +251,17 @@ function calculatePrecisionTradePlan(
     stopLoss = resistance + (atr * 0.5);
     riskAmount = stopLoss - entryPrice;
     
-    // Take profits based on risk multiples and support
+    // Take profits based on risk multiples (descending for SELL: TP1 > TP2 > TP3)
     takeProfit1 = entryPrice - riskAmount; // 1R
-    takeProfit2 = Math.max(entryPrice - (riskAmount * 2), support); // 2R or support
+    takeProfit2 = entryPrice - (riskAmount * 2); // 2R
     takeProfit3 = entryPrice - (riskAmount * 3); // 3R extended target
     
-    // Ensure TP2 is at least at support level if support is close
-    if (support > takeProfit2) {
-      takeProfit2 = support;
+    // Ensure proper descending sequence: TP1 > TP2 > TP3
+    if (takeProfit2 >= takeProfit1) {
+      takeProfit2 = takeProfit1 - (riskAmount * 0.5);
+    }
+    if (takeProfit3 >= takeProfit2) {
+      takeProfit3 = takeProfit2 - (riskAmount * 0.5);
     }
     
     analysis = `SELL Signal: ${signalType === "immediate" ? "Enter now" : `Set sell order at $${entryPrice.toFixed(2)}`}. ` +
@@ -740,6 +746,7 @@ export function generateUnifiedSignal(candles: MarketData[]): UnifiedSignalResul
         buyTarget: null,
         sellTarget: null,
       },
+      tradePlan: null,
     };
   }
   
