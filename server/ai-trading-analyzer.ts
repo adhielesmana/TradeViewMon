@@ -406,6 +406,81 @@ Always respond in valid JSON format.`
   }
 }
 
+function getMarketSentimentContext(symbol: string, trend: string, priceChange24h: number, volatility: number): string {
+  let sentiment = "NEUTRAL";
+  let sentimentReason = "";
+  
+  // Determine market sentiment based on multiple factors
+  if (trend === "UPTREND" && priceChange24h > 0.5) {
+    sentiment = "BULLISH";
+    sentimentReason = "Sustained upward momentum with positive 24h returns";
+  } else if (trend === "DOWNTREND" && priceChange24h < -0.5) {
+    sentiment = "BEARISH";
+    sentimentReason = "Sustained downward pressure with negative 24h returns";
+  } else if (volatility > 0.8) {
+    sentiment = "CAUTIOUS";
+    sentimentReason = "High volatility suggests uncertainty and potential whipsaws";
+  }
+  
+  // Asset-specific context
+  let assetContext = "";
+  switch (symbol) {
+    case "XAUUSD":
+      assetContext = "Gold typically rises during market uncertainty, Fed rate cut expectations, or geopolitical tension. Falls when USD strengthens or risk appetite increases.";
+      break;
+    case "XAGUSD":
+      assetContext = "Silver follows gold but with higher volatility. Also sensitive to industrial demand expectations.";
+      break;
+    case "BTCUSD":
+      assetContext = "Bitcoin is highly volatile, trades 24/7, and is sensitive to regulatory news, institutional adoption, and broader crypto market sentiment.";
+      break;
+    case "SPX":
+      assetContext = "S&P 500 reflects US equity market health. Sensitive to earnings, Fed policy, and economic data.";
+      break;
+    case "DXY":
+      assetContext = "Dollar index inversely correlates with gold/commodities. Strengthens on Fed hawkishness or safe-haven flows.";
+      break;
+    case "USOIL":
+      assetContext = "Crude oil sensitive to OPEC decisions, inventory data, geopolitical events, and global demand outlook.";
+      break;
+    default:
+      assetContext = "Monitor relevant sector news and market-wide risk sentiment.";
+  }
+  
+  return `
+MARKET SENTIMENT ANALYSIS:
+- Overall Sentiment: ${sentiment}
+- Reason: ${sentimentReason || "Mixed signals, no clear directional bias"}
+- Asset Context: ${assetContext}
+- Volatility Regime: ${volatility > 0.8 ? "HIGH (reduce position size)" : volatility > 0.4 ? "MODERATE" : "LOW (favorable for entries)"}`;
+}
+
+function getRiskManagementContext(prediction: PredictionContext): string {
+  const accuracy = prediction.recentAccuracy.accuracyPercent;
+  let modelReliability = "UNTESTED";
+  let riskAdvice = "Use maximum caution - no track record";
+  
+  if (prediction.recentAccuracy.totalPredictions >= 10) {
+    if (accuracy >= 65) {
+      modelReliability = "RELIABLE";
+      riskAdvice = "Model has proven edge - can trade with confidence";
+    } else if (accuracy >= 50) {
+      modelReliability = "MARGINAL";
+      riskAdvice = "Model is near breakeven - only trade strongest setups";
+    } else {
+      modelReliability = "POOR";
+      riskAdvice = "Model underperforming - consider fading or avoiding";
+    }
+  }
+  
+  return `
+RISK MANAGEMENT CONTEXT:
+- Model Reliability: ${modelReliability} (${accuracy.toFixed(1)}% accuracy over ${prediction.recentAccuracy.totalPredictions} predictions)
+- Risk Advice: ${riskAdvice}
+- Average Error: ${prediction.recentAccuracy.averageError.toFixed(3)}%
+- CRITICAL: Only recommend trades with clear edge and acceptable risk/reward`;
+}
+
 function buildAnalysisPrompt(context: MarketContext): string {
   const { symbol, currentPrice, priceChange1h, priceChange24h, volatility, trend, technicalSignal, prediction } = context;
   
@@ -499,32 +574,76 @@ ${prediction.latestPrediction ? `- Latest Prediction: $${prediction.latestPredic
 - Price Delta: ${prediction.latestPrediction.predictedPrice ? (prediction.latestPrediction.predictedPrice > currentPrice ? '+' : '') + (prediction.latestPrediction.predictedPrice - currentPrice).toFixed(2) : 'N/A'}` : '- No recent prediction available'}
 - Historical Accuracy: ${prediction.recentAccuracy.accuracyPercent.toFixed(1)}% (${prediction.recentAccuracy.matchCount}/${prediction.recentAccuracy.totalPredictions} predictions matched)
 - Average Prediction Error: ${prediction.recentAccuracy.averageError.toFixed(3)}%
+${getMarketSentimentContext(symbol, trend, priceChange24h, volatility)}
+${getRiskManagementContext(prediction)}
 
-Based on all the above data (technical indicators + prediction model), provide your trading analysis in this exact JSON format:
+YOU ARE A CONSERVATIVE RISK MANAGER FIRST, TRADER SECOND.
+Your primary goal is CAPITAL PRESERVATION. Only recommend trades with high probability of success.
+It is ALWAYS better to miss a trade opportunity than to lose money on a bad trade.
+
+Based on all the above data, provide your trading analysis in this exact JSON format:
 {
   "direction": "BUY" or "SELL" or "HOLD",
-  "confidence": 0-100 (be conservative - only high confidence when BOTH technical and prediction signals align),
+  "confidence": 0-100 (BE VERY CONSERVATIVE - max 70 unless everything aligns perfectly),
   "riskLevel": "LOW" or "MEDIUM" or "HIGH",
-  "reasoning": "Brief explanation referencing specific indicators AND prediction data that influenced your decision",
-  "suggestedAction": "Specific action recommendation with entry/exit context"
+  "reasoning": "Detailed explanation covering technicals, prediction model, sentiment, and risk factors",
+  "suggestedAction": "Specific action with risk warning if applicable",
+  "marketCondition": "TRENDING" or "RANGING" or "VOLATILE",
+  "entryQuality": "EXCELLENT" or "GOOD" or "FAIR" or "POOR"
 }
 
-DECISION RULES (Technical Analysis):
-1. HOLD if indicators are mixed (similar bullish/bearish count) - wait for clarity
-2. BUY only if: RSI not overbought, MACD positive or turning positive, price trend supports
-3. SELL only if: RSI not oversold, MACD negative or turning negative, price trend supports
-4. HIGH risk if: volatility > 0.5%, conflicting indicators, or extreme RSI with no confirmation
-5. LOW risk only if: 3+ indicators agree, moderate volatility, clear trend direction
-6. Consider if the move already happened - avoid chasing extended moves
-7. Weight MACD and EMA crossover heavily as primary trend indicators
+STRICT TRADING RULES (MUST FOLLOW):
 
-DECISION RULES (Prediction Model - CRITICAL):
-8. CHECK PREDICTION ACCURACY FIRST: If historical accuracy is >90%, prediction is HIGHLY reliable - match your direction to it
-9. If prediction accuracy is 70-90%, use prediction as a confirming factor (not primary driver)
-10. If prediction accuracy is <70%, discount prediction data and rely on technicals alone
-11. PREDICTION-TECHNICAL CONFLICT: If high-accuracy prediction (>90%) conflicts with technical signal, prefer HOLD
-12. BOOST CONFIDENCE: When high-accuracy prediction aligns with technical signal, add 10-15% to confidence
-13. Always mention prediction direction and accuracy in your reasoning when accuracy is >80%`;
+1. DEFAULT TO HOLD: When in doubt, choose HOLD. Missing a trade costs nothing. Losing money hurts.
+
+2. REQUIRE CONFLUENCE: Only trade when 4+ of these align:
+   - Technical indicators (EMA, MACD, RSI)
+   - Prediction model direction
+   - Market sentiment
+   - Volatility is acceptable
+   - No contradicting signals
+
+3. VOLATILITY FILTER:
+   - If volatility > 0.8%, set riskLevel = "HIGH" and confidence -= 20
+   - If volatility > 1.2%, recommend HOLD regardless of other signals
+
+4. RSI EXTREMES:
+   - RSI > 75: Do NOT recommend BUY (overbought, reversal risk)
+   - RSI < 25: Do NOT recommend SELL (oversold, reversal risk)
+   - These are reversal zones, not entry zones
+
+5. TREND CONFIRMATION:
+   - Only BUY in uptrend or at clear support
+   - Only SELL in downtrend or at clear resistance
+   - Never trade against the prevailing trend
+
+6. PREDICTION MODEL WEIGHT:
+   - Accuracy >= 65%: Trust prediction, match direction if possible
+   - Accuracy 50-65%: Use as secondary confirmation only
+   - Accuracy < 50%: IGNORE prediction, may even fade it
+
+7. CONFIDENCE SCORING:
+   - Start at 50 (neutral)
+   - Add 10 for each confirming indicator (max +30)
+   - Add 15 if prediction model aligns (accuracy > 60%)
+   - Subtract 15 if volatility is high
+   - Subtract 20 if any major indicator contradicts
+   - NEVER exceed 85 confidence (markets are uncertain)
+   - Below 60 confidence = recommend HOLD
+
+8. ENTRY QUALITY:
+   - EXCELLENT: 5+ indicators align, low volatility, clear trend
+   - GOOD: 4 indicators align, acceptable volatility
+   - FAIR: 3 indicators align, some concerns
+   - POOR: Fewer than 3 align, recommend HOLD
+
+9. CAPITAL PROTECTION PRIORITY:
+   - If unsure, HOLD
+   - If conflicting signals, HOLD
+   - If move already extended (>1% in direction), HOLD - don't chase
+   - If near key support/resistance, reduce confidence by 10
+
+Remember: The user lost money because of overtrading. Your job is to PROTECT their capital by only recommending HIGH QUALITY trades.`;
 }
 
 function validateDirection(direction: string): "BUY" | "SELL" | "HOLD" {
