@@ -25,6 +25,24 @@ Preferred communication style: Simple, everyday language.
 - **Prediction Engine**: Ensemble model combining Moving Average, Linear Regression, and multi-factor technical analysis, outputting predicted price, direction, confidence, and analysis breakdown.
 - **AI Trading Analyzer**: GPT-5-nano (or fallback to technicals) for trade validation, integrating prediction model accuracy with 6 technical indicators to generate signals with strict low-risk conditions.
 - **Market Data Service**: Abstracted service supporting Gold-API.com (XAU, XAG, BTC) and Finnhub (GDX, GDXJ, NEM, SPX, DXY, USOIL), with on-demand historical data seeding and simulated data for unsupported symbols (US10Y).
+- **Risk Manager**: Comprehensive risk management service (`server/risk-manager.ts`) enforcing:
+  - **Daily Loss Limit**: Maximum 3% of account balance or $500 per day
+  - **Consecutive Loss Halt**: Trading pauses after 3 consecutive losing trades
+  - **Position Limits**: Maximum 2 concurrent open positions, max 5% of balance per trade
+  - **Confidence Validation**: Requires AI confidence ≥75% AND technical confidence ≥60%
+  - All limits are configurable via RiskLimits interface
+
+### Auto-Trade Safety Pipeline
+Every auto-trade must pass through 5 mandatory validation gates (in order):
+1. **Risk Status Check**: Blocks if daily loss exceeded, consecutive losses hit limit, or max positions reached
+2. **R:R Ratio Check**: Minimum 1.5:1 risk-reward ratio required
+3. **Technical Confidence**: Minimum 60% confidence from technical analysis
+4. **MANDATORY AI Validation**: OpenAI must approve with:
+   - shouldTrade = true
+   - riskLevel = "LOW" (only LOW risk trades allowed)
+   - Direction agreement with technical signal
+   - AI confidence ≥75%
+5. **Position Size Validation**: Trade size within 5% of account balance
 
 ### Database
 - **ORM**: Drizzle ORM with PostgreSQL (Neon serverless).
