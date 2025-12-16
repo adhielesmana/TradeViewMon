@@ -6,6 +6,7 @@ import { wsService } from "./websocket";
 import { generateAiSuggestion, toInsertSuggestion, evaluateSuggestion } from "./ai-suggestion-engine";
 import { analyzeWithAI } from "./ai-trading-analyzer";
 import { generateUnifiedSignal } from "./unified-signal-generator";
+import { riskManager } from "./risk-manager";
 
 // Market hours detection
 // Forex/Precious metals market: Sunday 5 PM EST to Friday 5 PM EST
@@ -779,6 +780,16 @@ class Scheduler {
       
       for (const settings of enabledSettings) {
         try {
+          // RISK MANAGEMENT: Check if trading is allowed for this user
+          const riskStatus = await riskManager.checkRiskStatus(settings.userId);
+          if (!riskStatus.canTrade) {
+            console.log(`[AutoTrade] BLOCKED by Risk Manager for ${settings.symbol}: ${riskStatus.reason}`);
+            console.log(`  - Daily loss: $${riskStatus.currentDayLoss.toFixed(2)} (${riskStatus.currentDayLossPercent.toFixed(1)}%)`);
+            console.log(`  - Consecutive losses: ${riskStatus.consecutiveLosses}`);
+            console.log(`  - Open positions: ${riskStatus.openPositionCount}`);
+            continue;
+          }
+          
           // Get the latest actionable (BUY/SELL) AI suggestion within the last 5 minutes
           // This prevents missing trade signals when newer HOLD suggestions exist
           const suggestion = await storage.getLatestActionableAiSuggestion(settings.symbol, 5);
@@ -786,6 +797,18 @@ class Scheduler {
           if (!suggestion) {
             // Only log every few cycles to reduce noise
             console.log(`[AutoTrade] No actionable BUY/SELL signal for ${settings.symbol} in last 5 minutes`);
+            continue;
+          }
+          
+          // RISK: Reject trades with poor R:R ratio
+          if (suggestion.riskRewardRatio !== null && suggestion.riskRewardRatio < 1.5) {
+            console.log(`[AutoTrade] BLOCKED: Poor R:R ratio ${suggestion.riskRewardRatio?.toFixed(1)}:1 for ${settings.symbol} (minimum 1.5:1 required)`);
+            continue;
+          }
+          
+          // RISK: Reject low confidence signals
+          if (suggestion.confidence < riskManager.getLimits().requiredTechConfidence) {
+            console.log(`[AutoTrade] BLOCKED: Low confidence ${suggestion.confidence}% for ${settings.symbol} (minimum ${riskManager.getLimits().requiredTechConfidence}% required)`);
             continue;
           }
           
@@ -802,47 +825,59 @@ class Scheduler {
             }
           }
           
-          // AI Filter: ONLY run when explicitly enabled via toggle
-          // The minConfidence setting only affects the threshold when AI filter is ON
-          const useAiFilter = settings.useAiFilter ?? false;
+          // MANDATORY AI VALIDATION: All auto-trades require AI approval for safety
+          // This is NOT optional - every trade must be validated by both technical AND AI analysis
           const minConfidence = settings.minConfidence ?? 0;
           
-          if (useAiFilter) {
-            try {
-              // Get recent candles for AI analysis
-              const candles = await storage.getRecentMarketData(settings.symbol, 100);
-              
-              if (candles.length >= 30) {
-                // Use user's configured minConfidence directly
-                // When minConfidence is 0, AI can fall back to technical analysis if OpenAI fails
-                const aiAnalysis = await analyzeWithAI(
-                  settings.symbol,
-                  candles,
-                  minConfidence
-                );
-                
-                // Skip trade if AI says not to trade
-                if (!aiAnalysis.shouldTrade) {
-                  console.log(`[AutoTrade] AI filter blocked trade for ${settings.symbol}: ${aiAnalysis.reasoning} (confidence: ${aiAnalysis.confidence}%)`);
-                  continue;
-                }
-                
-                // If AI direction differs from suggestion, skip
-                if (aiAnalysis.direction !== suggestion.decision) {
-                  console.log(`[AutoTrade] AI direction mismatch: AI says ${aiAnalysis.direction}, suggestion says ${suggestion.decision}`);
-                  continue;
-                }
-                
-                console.log(`[AutoTrade] AI approved trade: ${aiAnalysis.direction} with ${aiAnalysis.confidence}% confidence - ${aiAnalysis.reasoning}`);
-              }
-            } catch (aiError) {
-              console.error(`[AutoTrade] AI analysis error, proceeding with caution:`, aiError);
-              // Continue with trade if AI fails but minConfidence is 0
-              if (minConfidence > 0) {
-                console.log(`[AutoTrade] Skipping trade due to AI error and minConfidence requirement`);
-                continue;
-              }
+          try {
+            // Get recent candles for AI analysis
+            const candles = await storage.getRecentMarketData(settings.symbol, 100);
+            
+            // CRITICAL: Cannot trade without sufficient data for AI analysis
+            if (candles.length < 30) {
+              console.log(`[AutoTrade] BLOCKED: Insufficient candle data for AI analysis (${candles.length} < 30 required)`);
+              continue;
             }
+            
+            // Use the higher of user's configured minConfidence or RiskManager's required confidence
+            const requiredAiConf = Math.max(minConfidence, riskManager.getLimits().requiredAiConfidence);
+            const aiAnalysis = await analyzeWithAI(
+              settings.symbol,
+              candles,
+              requiredAiConf
+            );
+            
+            // Skip trade if AI says not to trade
+            if (!aiAnalysis.shouldTrade) {
+              console.log(`[AutoTrade] BLOCKED by AI: ${aiAnalysis.reasoning} (confidence: ${aiAnalysis.confidence}%)`);
+              continue;
+            }
+            
+            // CRITICAL: Require LOW risk classification for auto-trades
+            if (aiAnalysis.riskLevel !== "LOW") {
+              console.log(`[AutoTrade] BLOCKED: AI risk level is ${aiAnalysis.riskLevel} for ${settings.symbol} (only LOW risk trades allowed for auto-trading)`);
+              continue;
+            }
+            
+            // If AI direction differs from suggestion, skip
+            if (aiAnalysis.direction !== suggestion.decision) {
+              console.log(`[AutoTrade] BLOCKED: AI direction mismatch - AI says ${aiAnalysis.direction}, technical says ${suggestion.decision}`);
+              continue;
+            }
+            
+            // Validate BOTH AI and technical confidence meet thresholds
+            const confidenceCheck = riskManager.validateConfidence(aiAnalysis.confidence, suggestion.confidence);
+            if (!confidenceCheck.valid) {
+              console.log(`[AutoTrade] BLOCKED: ${confidenceCheck.reason}`);
+              continue;
+            }
+            
+            console.log(`[AutoTrade] APPROVED: ${aiAnalysis.direction} for ${settings.symbol} (AI: ${aiAnalysis.confidence}%, Tech: ${suggestion.confidence}%, Risk: ${aiAnalysis.riskLevel})`);
+          } catch (aiError) {
+            console.error(`[AutoTrade] AI analysis error:`, aiError);
+            // NEVER proceed with trade if AI fails - this is a hard stop
+            console.log(`[AutoTrade] BLOCKED: AI analysis failed - cannot auto-trade without AI validation`);
+            continue;
           }
           
           // Get user's demo account
@@ -859,6 +894,13 @@ class Scheduler {
           
           // Calculate required USD for this trade (units × price)
           const requiredUsd = tradeUnits * currentPrice;
+          
+          // RISK: Validate position size is within limits
+          const positionCheck = riskManager.validatePositionSize(account.balance, requiredUsd);
+          if (!positionCheck.valid) {
+            console.log(`[AutoTrade] BLOCKED: ${positionCheck.reason}`);
+            continue;
+          }
           
           // Check if user has sufficient balance
           if (account.balance < requiredUsd) {
