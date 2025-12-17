@@ -1518,7 +1518,14 @@ export default function LiveDemo() {
         <TabsContent value="history" className="space-y-4">
           {closedPositions && closedPositions.length > 0 ? (
             <div className="space-y-3">
-              {closedPositions.slice(0, 20).map((position) => (
+              {[...closedPositions]
+                .sort((a, b) => {
+                  const dateA = a.closedAt ? new Date(a.closedAt).getTime() : 0;
+                  const dateB = b.closedAt ? new Date(b.closedAt).getTime() : 0;
+                  return dateB - dateA; // Latest closed first
+                })
+                .slice(0, 20)
+                .map((position) => (
                 <Card key={position.id} data-testid={`card-history-${position.id}`}>
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between flex-wrap gap-4">
