@@ -1,6 +1,7 @@
 import { 
   marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState, aiSuggestions,
   demoAccounts, demoPositions, demoTransactions, appSettings, currencyRates, autoTradeSettings,
+  rssFeeds, monitoredSymbols,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
@@ -16,7 +17,9 @@ import {
   type DemoAccountStats,
   type AppSetting,
   type CurrencyRate, type InsertCurrencyRate,
-  type AutoTradeSetting, type UpdateAutoTradeSetting
+  type AutoTradeSetting, type UpdateAutoTradeSetting,
+  type RssFeed, type InsertRssFeed, type UpdateRssFeed,
+  type MonitoredSymbol, type InsertMonitoredSymbol
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, gte, lte, and, or, sql, inArray, isNull } from "drizzle-orm";
@@ -119,6 +122,20 @@ export interface IStorage {
   getAllEnabledAutoTradeSettings(): Promise<AutoTradeSetting[]>;
   getAllPrecisionEnabledAutoTradeSettings(): Promise<AutoTradeSetting[]>;
   recordAutoTrade(userId: string, decision: string): Promise<void>;
+
+  // RSS Feeds
+  getRssFeeds(): Promise<RssFeed[]>;
+  getRssFeedById(id: number): Promise<RssFeed | null>;
+  createRssFeed(feed: InsertRssFeed): Promise<RssFeed>;
+  updateRssFeed(id: number, updates: UpdateRssFeed): Promise<RssFeed | null>;
+  deleteRssFeed(id: number): Promise<boolean>;
+
+  // Monitored Symbols
+  getMonitoredSymbols(): Promise<MonitoredSymbol[]>;
+  getMonitoredSymbolById(id: number): Promise<MonitoredSymbol | null>;
+  createMonitoredSymbol(symbol: InsertMonitoredSymbol): Promise<MonitoredSymbol>;
+  updateMonitoredSymbol(id: number, updates: Partial<InsertMonitoredSymbol>): Promise<MonitoredSymbol | null>;
+  deleteMonitoredSymbol(id: number): Promise<boolean>;
 }
 
 const startTime = Date.now();
@@ -1149,6 +1166,74 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
       })
       .where(eq(autoTradeSettings.userId, userId));
+  }
+
+  // RSS Feeds CRUD
+  async getRssFeeds(): Promise<RssFeed[]> {
+    return db.select()
+      .from(rssFeeds)
+      .orderBy(desc(rssFeeds.priority), rssFeeds.name);
+  }
+
+  async getRssFeedById(id: number): Promise<RssFeed | null> {
+    const [feed] = await db.select()
+      .from(rssFeeds)
+      .where(eq(rssFeeds.id, id));
+    return feed || null;
+  }
+
+  async createRssFeed(feed: InsertRssFeed): Promise<RssFeed> {
+    const [result] = await db.insert(rssFeeds).values(feed).returning();
+    return result;
+  }
+
+  async updateRssFeed(id: number, updates: UpdateRssFeed): Promise<RssFeed | null> {
+    const [updated] = await db.update(rssFeeds)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(rssFeeds.id, id))
+      .returning();
+    return updated || null;
+  }
+
+  async deleteRssFeed(id: number): Promise<boolean> {
+    const result = await db.delete(rssFeeds)
+      .where(eq(rssFeeds.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Monitored Symbols CRUD
+  async getMonitoredSymbols(): Promise<MonitoredSymbol[]> {
+    return db.select()
+      .from(monitoredSymbols)
+      .orderBy(desc(monitoredSymbols.priority), monitoredSymbols.symbol);
+  }
+
+  async getMonitoredSymbolById(id: number): Promise<MonitoredSymbol | null> {
+    const [symbol] = await db.select()
+      .from(monitoredSymbols)
+      .where(eq(monitoredSymbols.id, id));
+    return symbol || null;
+  }
+
+  async createMonitoredSymbol(symbol: InsertMonitoredSymbol): Promise<MonitoredSymbol> {
+    const [result] = await db.insert(monitoredSymbols).values(symbol).returning();
+    return result;
+  }
+
+  async updateMonitoredSymbol(id: number, updates: Partial<InsertMonitoredSymbol>): Promise<MonitoredSymbol | null> {
+    const [updated] = await db.update(monitoredSymbols)
+      .set(updates)
+      .where(eq(monitoredSymbols.id, id))
+      .returning();
+    return updated || null;
+  }
+
+  async deleteMonitoredSymbol(id: number): Promise<boolean> {
+    const result = await db.delete(monitoredSymbols)
+      .where(eq(monitoredSymbols.id, id))
+      .returning();
+    return result.length > 0;
   }
 }
 

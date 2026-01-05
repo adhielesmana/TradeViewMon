@@ -397,6 +397,29 @@ export const insertAppSettingSchema = createInsertSchema(appSettings).omit({ id:
 export type AppSetting = typeof appSettings.$inferSelect;
 export type InsertAppSetting = z.infer<typeof insertAppSettingSchema>;
 
+// RSS Feeds - configurable list of news RSS feeds
+export const rssFeeds = pgTable("rss_feeds", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: varchar("name", { length: 100 }).notNull(),
+  url: text("url").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  priority: integer("priority").notNull().default(0), // Higher = more important
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertRssFeedSchema = createInsertSchema(rssFeeds).omit({ id: true, createdAt: true, updatedAt: true });
+export const updateRssFeedSchema = createInsertSchema(rssFeeds).pick({
+  name: true,
+  url: true,
+  isActive: true,
+  priority: true,
+}).partial();
+
+export type RssFeed = typeof rssFeeds.$inferSelect;
+export type InsertRssFeed = z.infer<typeof insertRssFeedSchema>;
+export type UpdateRssFeed = z.infer<typeof updateRssFeedSchema>;
+
 // Currency Rates - cached exchange rates from EUR base
 export const currencyRates = pgTable("currency_rates", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),

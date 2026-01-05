@@ -84,9 +84,7 @@ export async function setRssFeedUrl(url: string): Promise<void> {
   await storage.setSetting("RSS_FEED_URL", url);
 }
 
-export async function fetchNews(maxItems: number = 10): Promise<NewsItem[]> {
-  const feedUrl = await getRssFeedUrl();
-  
+async function fetchFromSingleFeed(feedUrl: string, feedName: string, maxItems: number): Promise<NewsItem[]> {
   try {
     const feed = await parser.parseURL(feedUrl);
     
@@ -95,16 +93,37 @@ export async function fetchNews(maxItems: number = 10): Promise<NewsItem[]> {
       link: item.link || "",
       pubDate: item.pubDate || new Date().toISOString(),
       content: item.contentSnippet || item.content || "",
-      source: feed.title || "Yahoo Finance",
+      source: feedName || feed.title || "News",
     }));
   } catch (error: any) {
-    console.error("[NewsService] Failed to fetch RSS feed:", feedUrl, error);
-    // Sanitize error message - don't expose full URL to client
-    const errorType = error.code === "ENOTFOUND" ? "Network error" : 
-                      error.code === "ETIMEDOUT" ? "Connection timeout" :
-                      "Unable to parse feed";
-    throw new Error(`${errorType} - check RSS feed URL in Settings`);
+    console.error(`[NewsService] Failed to fetch RSS feed ${feedName}:`, error);
+    return []; // Return empty array for failed feeds, continue with others
   }
+}
+
+export async function fetchNews(maxItems: number = 10): Promise<NewsItem[]> {
+  // Get all active RSS feeds from database
+  const feeds = await storage.getRssFeeds();
+  const activeFeeds = feeds.filter(f => f.isActive);
+  
+  // If no feeds configured, fall back to legacy single feed setting or default
+  if (activeFeeds.length === 0) {
+    const feedUrl = await getRssFeedUrl();
+    return fetchFromSingleFeed(feedUrl, "Yahoo Finance", maxItems);
+  }
+  
+  // Fetch from all active feeds in parallel
+  const feedPromises = activeFeeds.map(feed => 
+    fetchFromSingleFeed(feed.url, feed.name, Math.ceil(maxItems / activeFeeds.length))
+  );
+  
+  const results = await Promise.all(feedPromises);
+  const allNews = results.flat();
+  
+  // Sort by date (newest first) and limit to maxItems
+  allNews.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
+  
+  return allNews.slice(0, maxItems);
 }
 
 export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis["marketPrediction"]> {

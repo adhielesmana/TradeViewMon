@@ -1508,6 +1508,172 @@ export async function registerRoutes(
     }
   });
 
+  // RSS Feeds CRUD API
+  app.get("/api/settings/rss-feeds", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const feeds = await storage.getRssFeeds();
+      res.json(feeds);
+    } catch (error) {
+      console.error("Error getting RSS feeds:", error);
+      res.status(500).json({ error: "Failed to get RSS feeds" });
+    }
+  });
+
+  app.post("/api/settings/rss-feeds", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const { name, url, isActive, priority } = req.body;
+      
+      if (!name || !url) {
+        return res.status(400).json({ error: "Name and URL are required" });
+      }
+      
+      try {
+        new URL(url.trim());
+      } catch {
+        return res.status(400).json({ error: "Invalid URL format" });
+      }
+      
+      const feed = await storage.createRssFeed({
+        name: name.trim(),
+        url: url.trim(),
+        isActive: isActive !== false,
+        priority: priority || 0,
+      });
+      
+      res.json({ success: true, feed });
+    } catch (error) {
+      console.error("Error creating RSS feed:", error);
+      res.status(500).json({ error: "Failed to create RSS feed" });
+    }
+  });
+
+  app.put("/api/settings/rss-feeds/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { name, url, isActive, priority } = req.body;
+      
+      if (url) {
+        try {
+          new URL(url.trim());
+        } catch {
+          return res.status(400).json({ error: "Invalid URL format" });
+        }
+      }
+      
+      const feed = await storage.updateRssFeed(id, {
+        ...(name && { name: name.trim() }),
+        ...(url && { url: url.trim() }),
+        ...(isActive !== undefined && { isActive }),
+        ...(priority !== undefined && { priority }),
+      });
+      
+      if (!feed) {
+        return res.status(404).json({ error: "RSS feed not found" });
+      }
+      
+      res.json({ success: true, feed });
+    } catch (error) {
+      console.error("Error updating RSS feed:", error);
+      res.status(500).json({ error: "Failed to update RSS feed" });
+    }
+  });
+
+  app.delete("/api/settings/rss-feeds/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteRssFeed(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ error: "RSS feed not found" });
+      }
+      
+      res.json({ success: true, message: "RSS feed deleted" });
+    } catch (error) {
+      console.error("Error deleting RSS feed:", error);
+      res.status(500).json({ error: "Failed to delete RSS feed" });
+    }
+  });
+
+  // Monitored Symbols CRUD API
+  app.get("/api/settings/symbols", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const symbols = await storage.getMonitoredSymbols();
+      res.json(symbols);
+    } catch (error) {
+      console.error("Error getting symbols:", error);
+      res.status(500).json({ error: "Failed to get symbols" });
+    }
+  });
+
+  app.post("/api/settings/symbols", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const { symbol, displayName, category, isActive, priority } = req.body;
+      
+      if (!symbol || !displayName || !category) {
+        return res.status(400).json({ error: "Symbol, displayName, and category are required" });
+      }
+      
+      const newSymbol = await storage.createMonitoredSymbol({
+        symbol: symbol.trim().toUpperCase(),
+        displayName: displayName.trim(),
+        category: category.trim(),
+        isActive: isActive !== false,
+        priority: priority || 0,
+      });
+      
+      res.json({ success: true, symbol: newSymbol });
+    } catch (error: any) {
+      console.error("Error creating symbol:", error);
+      if (error.message?.includes("unique")) {
+        return res.status(400).json({ error: "Symbol already exists" });
+      }
+      res.status(500).json({ error: "Failed to create symbol" });
+    }
+  });
+
+  app.put("/api/settings/symbols/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { symbol, displayName, category, isActive, priority } = req.body;
+      
+      const updated = await storage.updateMonitoredSymbol(id, {
+        ...(symbol && { symbol: symbol.trim().toUpperCase() }),
+        ...(displayName && { displayName: displayName.trim() }),
+        ...(category && { category: category.trim() }),
+        ...(isActive !== undefined && { isActive }),
+        ...(priority !== undefined && { priority }),
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Symbol not found" });
+      }
+      
+      res.json({ success: true, symbol: updated });
+    } catch (error: any) {
+      console.error("Error updating symbol:", error);
+      if (error.message?.includes("unique")) {
+        return res.status(400).json({ error: "Symbol already exists" });
+      }
+      res.status(500).json({ error: "Failed to update symbol" });
+    }
+  });
+
+  app.delete("/api/settings/symbols/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteMonitoredSymbol(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ error: "Symbol not found" });
+      }
+      
+      res.json({ success: true, message: "Symbol deleted" });
+    } catch (error) {
+      console.error("Error deleting symbol:", error);
+      res.status(500).json({ error: "Failed to delete symbol" });
+    }
+  });
+
   wsService.initialize(httpServer);
 
   scheduler.start().catch(console.error);
