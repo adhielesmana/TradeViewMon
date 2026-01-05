@@ -157,7 +157,22 @@ CREATE TABLE IF NOT EXISTS monitored_symbols (
     display_name VARCHAR(100) NOT NULL,
     category VARCHAR(50) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
-    priority INTEGER NOT NULL DEFAULT 0
+    priority INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================
+-- TABLE: rss_feeds
+-- ============================================
+CREATE TABLE IF NOT EXISTS rss_feeds (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    url TEXT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    priority INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- ============================================
@@ -423,6 +438,15 @@ BEGIN
     
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ai_suggestions' AND column_name='valid_until') THEN
         ALTER TABLE ai_suggestions ADD COLUMN valid_until TIMESTAMP;
+    END IF;
+    
+    -- Add missing columns to monitored_symbols
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='monitored_symbols' AND column_name='created_at') THEN
+        ALTER TABLE monitored_symbols ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT NOW();
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='monitored_symbols' AND column_name='updated_at') THEN
+        ALTER TABLE monitored_symbols ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT NOW();
     END IF;
 END $$;
 
