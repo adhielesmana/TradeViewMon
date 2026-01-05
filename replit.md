@@ -54,11 +54,19 @@ Every auto-trade must pass through 5 mandatory validation gates (in order):
     4.  `system_status`: Component health monitoring.
     5.  `price_state`: Price continuity (symbol, last open/close, timestamp).
     6.  `app_settings`: Encrypted application configuration and API keys.
+    7.  `monitored_symbols`: Database-driven symbol management with name, category, currency, enabled status.
+
+### Symbol & Currency Management
+- **Database-Driven Symbols**: All symbols are managed via `monitored_symbols` table with `/api/market/symbols` endpoint.
+- **Currency Formatting**: Currency (IDR/USD) is determined exclusively from `SymbolInfo.currency` field, no hardcoded symbol lists.
+- **Symbol Context**: React context provides `currentSymbol` (SymbolInfo) derived from API data via useMemo for fresh metadata.
+- **Fallback Behavior**: Uses hardcoded FALLBACK_SYMBOLS only when database is empty; preserves stored symbol during initial load.
+- **Price Formatting**: `formatPrice(price, symbolInfo)` and `getCurrencySymbol(symbolInfo)` functions use SymbolInfo objects.
 
 ### Session & Authentication
 - **Session Management**: express-session with memorystore (in-memory) or connect-pg-simple (PostgreSQL).
 - **Authentication**: Passport.js local strategy (bcrypt-hashed passwords), session-based with 24-hour expiry.
-- **Supported Instruments**: XAUUSD, XAGUSD, DXY, US10Y, GDX, GDXJ, NEM, SPX, BTCUSD, USOIL.
+- **Supported Instruments**: Managed via database `monitored_symbols` table (configurable in Settings).
 
 ## External Dependencies
 

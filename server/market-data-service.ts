@@ -412,26 +412,27 @@ export class MarketDataService {
   }
 
   // Get symbol configs for seeding monitored symbols table
-  getSymbolConfigs(): Array<{ symbol: string; displayName: string; category: string }> {
-    const configs: Array<{ symbol: string; displayName: string; category: string }> = [];
+  getSymbolConfigs(): Array<{ symbol: string; displayName: string; category: string; currency: string }> {
+    const configs: Array<{ symbol: string; displayName: string; category: string; currency: string }> = [];
     
     for (const [symbol, config] of Object.entries(SYMBOL_CONFIGS)) {
       let displayName = symbol;
       let category = "Other";
+      let currency = "USD";
       
-      // Set display name and category based on symbol
+      // Set display name, category, and currency based on symbol
       if (symbol === "XAUUSD") { displayName = "Gold (XAU/USD)"; category = "Precious Metals"; }
       else if (symbol === "XAGUSD") { displayName = "Silver (XAG/USD)"; category = "Precious Metals"; }
       else if (symbol === "BTCUSD") { displayName = "Bitcoin (BTC/USD)"; category = "Crypto"; }
       else if (symbol === "GDX") { displayName = "Gold Miners ETF"; category = "Mining Stocks"; }
-      else if (symbol === "DATA") { displayName = "DATA (IDX)"; category = "Indonesian Stocks"; }
-      else if (symbol === "WIFI") { displayName = "WIFI (IDX)"; category = "Indonesian Stocks"; }
-      else if (symbol === "INET") { displayName = "INET (IDX)"; category = "Indonesian Stocks"; }
+      else if (symbol === "DATA") { displayName = "DATA (IDX)"; category = "Indonesian Stocks"; currency = "IDR"; }
+      else if (symbol === "WIFI") { displayName = "WIFI (IDX)"; category = "Indonesian Stocks"; currency = "IDR"; }
+      else if (symbol === "INET") { displayName = "INET (IDX)"; category = "Indonesian Stocks"; currency = "IDR"; }
       else if (symbol === "SPX") { displayName = "S&P 500 Index"; category = "Indices"; }
       else if (symbol === "USOIL") { displayName = "Crude Oil (WTI)"; category = "Commodities"; }
       else if (symbol === "US10Y") { displayName = "US 10Y Treasury"; category = "Bonds"; }
       
-      configs.push({ symbol, displayName, category });
+      configs.push({ symbol, displayName, category, currency });
     }
     
     return configs;

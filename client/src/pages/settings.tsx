@@ -186,6 +186,7 @@ export default function SettingsPage() {
     onSuccess: () => {
       toast({ title: "Success", description: "Symbol added" });
       queryClient.invalidateQueries({ queryKey: ["/api/settings/symbols"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/market/symbols"] });
       closeSymbolDialog();
     },
     onError: (error: Error) => {
@@ -201,6 +202,7 @@ export default function SettingsPage() {
     onSuccess: () => {
       toast({ title: "Success", description: "Symbol updated" });
       queryClient.invalidateQueries({ queryKey: ["/api/settings/symbols"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/market/symbols"] });
       closeSymbolDialog();
     },
     onError: (error: Error) => {
@@ -216,6 +218,7 @@ export default function SettingsPage() {
     onSuccess: () => {
       toast({ title: "Success", description: "Symbol deleted" });
       queryClient.invalidateQueries({ queryKey: ["/api/settings/symbols"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/market/symbols"] });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });

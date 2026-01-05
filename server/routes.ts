@@ -599,6 +599,27 @@ export async function registerRoutes(
     }
   });
 
+  // Public endpoint for active monitored symbols (used by frontend dropdown)
+  app.get("/api/market/symbols", async (req, res) => {
+    try {
+      const symbols = await storage.getMonitoredSymbols();
+      const activeSymbols = symbols
+        .filter(s => s.isActive)
+        .sort((a, b) => a.priority - b.priority)
+        .map(s => ({
+          symbol: s.symbol,
+          name: s.displayName,
+          category: s.category,
+          currency: s.currency || "USD",
+        }));
+      
+      res.json(activeSymbols);
+    } catch (error) {
+      console.error("Error fetching symbols:", error);
+      res.status(500).json({ error: "Failed to fetch symbols" });
+    }
+  });
+
   // Market status endpoint - returns whether market is open/closed
   app.get("/api/market/status", (req, res) => {
     try {
@@ -1627,6 +1648,7 @@ export async function registerRoutes(
             symbol: config.symbol,
             displayName: config.displayName,
             category: config.category,
+            currency: config.currency || "USD",
             isActive: true,
             priority: configs.length - i, // Higher priority for earlier symbols
           });
@@ -1645,7 +1667,7 @@ export async function registerRoutes(
 
   app.post("/api/settings/symbols", requireAuth, requireRole(["superadmin"]), async (req, res) => {
     try {
-      const { symbol, displayName, category, isActive, priority } = req.body;
+      const { symbol, displayName, category, currency, isActive, priority } = req.body;
       
       if (!symbol || !displayName || !category) {
         return res.status(400).json({ error: "Symbol, displayName, and category are required" });
@@ -1655,6 +1677,7 @@ export async function registerRoutes(
         symbol: symbol.trim().toUpperCase(),
         displayName: displayName.trim(),
         category: category.trim(),
+        currency: currency?.trim() || "USD",
         isActive: isActive !== false,
         priority: priority || 0,
       });
@@ -1672,12 +1695,13 @@ export async function registerRoutes(
   app.put("/api/settings/symbols/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { symbol, displayName, category, isActive, priority } = req.body;
+      const { symbol, displayName, category, currency, isActive, priority } = req.body;
       
       const updated = await storage.updateMonitoredSymbol(id, {
         ...(symbol && { symbol: symbol.trim().toUpperCase() }),
         ...(displayName && { displayName: displayName.trim() }),
         ...(category && { category: category.trim() }),
+        ...(currency && { currency: currency.trim() }),
         ...(isActive !== undefined && { isActive }),
         ...(priority !== undefined && { priority }),
       });

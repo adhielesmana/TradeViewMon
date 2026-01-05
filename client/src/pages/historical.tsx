@@ -100,12 +100,14 @@ export default function Historical() {
         isLoading={isLoading}
         title={`Price History (${timeFilter})`}
         height={450}
+        symbolInfo={currentSymbol}
       />
 
       <OHLCVTable
         data={historicalData || []}
         isLoading={isLoading}
         maxHeight={500}
+        symbolInfo={currentSymbol}
       />
     </div>
   );

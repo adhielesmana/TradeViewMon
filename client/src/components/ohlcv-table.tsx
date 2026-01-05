@@ -13,14 +13,14 @@ import { TrendingUp, TrendingDown } from "lucide-react";
 import type { MarketData } from "@shared/schema";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { formatPrice } from "@/lib/symbol-context";
+import { formatPrice, type SymbolInfo } from "@/lib/symbol-context";
 
 interface OHLCVTableProps {
   data: MarketData[];
   isLoading?: boolean;
   maxHeight?: number;
   className?: string;
-  symbol?: string;
+  symbolInfo?: SymbolInfo | null;
 }
 
 export function OHLCVTable({
@@ -28,7 +28,7 @@ export function OHLCVTable({
   isLoading = false,
   maxHeight = 400,
   className,
-  symbol = "XAUUSD",
+  symbolInfo,
 }: OHLCVTableProps) {
   if (isLoading) {
     return (
@@ -100,16 +100,16 @@ export function OHLCVTable({
                       </div>
                     </TableCell>
                     <TableCell className="py-2 text-right font-mono text-sm">
-                      {formatPrice(candle.open, symbol)}
+                      {formatPrice(candle.open, symbolInfo)}
                     </TableCell>
                     <TableCell className="py-2 text-right font-mono text-sm text-profit">
-                      {formatPrice(candle.high, symbol)}
+                      {formatPrice(candle.high, symbolInfo)}
                     </TableCell>
                     <TableCell className="py-2 text-right font-mono text-sm text-loss">
-                      {formatPrice(candle.low, symbol)}
+                      {formatPrice(candle.low, symbolInfo)}
                     </TableCell>
                     <TableCell className="py-2 text-right font-mono text-sm font-medium">
-                      {formatPrice(candle.close, symbol)}
+                      {formatPrice(candle.close, symbolInfo)}
                     </TableCell>
                     <TableCell className="py-2 text-right font-mono text-sm text-muted-foreground">
                       {(candle.volume / 1000).toFixed(1)}K

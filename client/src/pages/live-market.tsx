@@ -195,7 +195,7 @@ export default function LiveMarket() {
               price={stats.currentPrice}
               change={stats.change}
               changePercent={stats.changePercent}
-              symbol={symbol}
+              symbolInfo={currentSymbol}
               size="lg"
             />
           ) : (
@@ -226,14 +226,14 @@ export default function LiveMarket() {
           <>
             <StatCard
               label="Day High"
-              value={stats.high != null ? formatPrice(stats.high, symbol) : "--"}
+              value={stats.high != null ? formatPrice(stats.high, currentSymbol) : "--"}
               icon={TrendingUp}
               valueClassName="text-profit"
               testId="text-day-high"
             />
             <StatCard
               label="Day Low"
-              value={stats.low != null ? formatPrice(stats.low, symbol) : "--"}
+              value={stats.low != null ? formatPrice(stats.low, currentSymbol) : "--"}
               icon={TrendingDown}
               valueClassName="text-loss"
               testId="text-day-low"
@@ -302,13 +302,13 @@ export default function LiveMarket() {
                 <div className="flex flex-col">
                   <span className="text-xs text-muted-foreground">EMA (12)</span>
                   <span className="font-mono text-sm font-medium" data-testid="text-ema12">
-                    {latest.ema12 != null ? formatPrice(latest.ema12, symbol) : "--"}
+                    {latest.ema12 != null ? formatPrice(latest.ema12, currentSymbol) : "--"}
                   </span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-xs text-muted-foreground">EMA (26)</span>
                   <span className="font-mono text-sm font-medium" data-testid="text-ema26">
-                    {latest.ema26 != null ? formatPrice(latest.ema26, symbol) : "--"}
+                    {latest.ema26 != null ? formatPrice(latest.ema26, currentSymbol) : "--"}
                   </span>
                 </div>
                 <div className="flex flex-col">
@@ -375,7 +375,7 @@ export default function LiveMarket() {
             <div className="flex flex-col">
               <span className="text-sm text-muted-foreground">Open</span>
               <span className="font-mono text-lg font-medium" data-testid="text-open-price">
-                {marketData?.[0]?.open ? formatPrice(Number(marketData[0].open), symbol) : "--"}
+                {marketData?.[0]?.open ? formatPrice(Number(marketData[0].open), currentSymbol) : "--"}
               </span>
             </div>
             <div className="flex flex-col">

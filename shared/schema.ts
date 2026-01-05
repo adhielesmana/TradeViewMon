@@ -249,6 +249,7 @@ export const monitoredSymbols = pgTable("monitored_symbols", {
   symbol: varchar("symbol", { length: 20 }).notNull().unique(),
   displayName: varchar("display_name", { length: 100 }).notNull(),
   category: varchar("category", { length: 50 }).notNull(), // 'commodities', 'indices', 'crypto', 'bonds'
+  currency: varchar("currency", { length: 10 }).notNull().default("USD"), // 'USD', 'IDR', etc.
   isActive: boolean("is_active").notNull().default(true),
   priority: integer("priority").notNull().default(0), // Higher = more important
 });

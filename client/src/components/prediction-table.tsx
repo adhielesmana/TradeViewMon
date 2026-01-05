@@ -14,14 +14,14 @@ import { Check, X, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import type { PredictionWithResult } from "@shared/schema";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { formatPrice } from "@/lib/symbol-context";
+import { formatPrice, type SymbolInfo } from "@/lib/symbol-context";
 
 interface PredictionTableProps {
   predictions: PredictionWithResult[];
   isLoading?: boolean;
   maxHeight?: number;
   className?: string;
-  symbol?: string;
+  symbolInfo?: SymbolInfo | null;
 }
 
 export function PredictionTable({
@@ -29,7 +29,7 @@ export function PredictionTable({
   isLoading = false,
   maxHeight = 400,
   className,
-  symbol = "XAUUSD",
+  symbolInfo,
 }: PredictionTableProps) {
   const DirectionIcon = ({ direction }: { direction: string }) => {
     if (direction === "UP") return <TrendingUp className="h-3 w-3 text-profit" />;
@@ -103,13 +103,13 @@ export function PredictionTable({
                     <div className="flex items-center justify-end gap-1">
                       <DirectionIcon direction={prediction.predictedDirection} />
                       <span className="font-mono text-sm">
-                        {formatPrice(prediction.predictedPrice, symbol)}
+                        {formatPrice(prediction.predictedPrice, symbolInfo)}
                       </span>
                     </div>
                   </TableCell>
                   <TableCell className="py-2 text-right font-mono text-sm">
                     {prediction.actualPrice 
-                      ? formatPrice(prediction.actualPrice, symbol)
+                      ? formatPrice(prediction.actualPrice, symbolInfo)
                       : <span className="text-muted-foreground">--</span>
                     }
                   </TableCell>

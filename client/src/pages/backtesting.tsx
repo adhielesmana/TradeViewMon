@@ -341,7 +341,7 @@ export default function Backtesting() {
                     />
                     <YAxis 
                       domain={['auto', 'auto']}
-                      tickFormatter={(v) => `${getCurrencySymbol(symbol)}${(v / 1000).toFixed(1)}k`}
+                      tickFormatter={(v) => `${getCurrencySymbol(currentSymbol)}${(v / 1000).toFixed(1)}k`}
                       tick={{ fontSize: 11 }}
                       className="text-muted-foreground"
                     />
@@ -352,7 +352,7 @@ export default function Backtesting() {
                         borderRadius: '8px',
                       }}
                       labelStyle={{ color: 'hsl(var(--foreground))' }}
-                      formatter={(value: number) => [`${getCurrencySymbol(symbol)}${value.toLocaleString()}`, 'Equity']}
+                      formatter={(value: number) => [`${getCurrencySymbol(currentSymbol)}${value.toLocaleString()}`, 'Equity']}
                     />
                     <ReferenceLine 
                       y={10000} 
@@ -403,10 +403,10 @@ export default function Backtesting() {
                           {format(new Date(trade.timestamp), "MM/dd HH:mm")}
                         </td>
                         <td className="py-2 text-right font-mono">
-                          {formatPrice(trade.predictedPrice, symbol)}
+                          {formatPrice(trade.predictedPrice, currentSymbol)}
                         </td>
                         <td className="py-2 text-right font-mono">
-                          {formatPrice(trade.actualPrice, symbol)}
+                          {formatPrice(trade.actualPrice, currentSymbol)}
                         </td>
                         <td className="py-2 text-center">
                           <div className="flex items-center justify-center gap-1">

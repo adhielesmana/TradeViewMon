@@ -13,14 +13,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { PredictionWithResult } from "@shared/schema";
 import { format } from "date-fns";
-import { formatPrice, getCurrencySymbol } from "@/lib/symbol-context";
+import { formatPrice, getCurrencySymbol, type SymbolInfo } from "@/lib/symbol-context";
 
 interface PredictionChartProps {
   predictions: PredictionWithResult[];
   isLoading?: boolean;
   height?: number;
   className?: string;
-  symbol?: string;
+  symbolInfo?: SymbolInfo | null;
 }
 
 export function PredictionChart({
@@ -28,9 +28,9 @@ export function PredictionChart({
   isLoading = false,
   height = 350,
   className,
-  symbol = "XAUUSD",
+  symbolInfo,
 }: PredictionChartProps) {
-  const currencySymbol = getCurrencySymbol(symbol);
+  const currencySymbol = getCurrencySymbol(symbolInfo);
   const chartData = useMemo(() => {
     return predictions.map((item) => ({
       time: format(new Date(item.targetTimestamp), "HH:mm"),
@@ -121,7 +121,7 @@ export function PredictionChart({
               }}
               labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 500 }}
               formatter={(value: number, name: string) => [
-                value ? formatPrice(value, symbol) : "N/A",
+                value ? formatPrice(value, symbolInfo) : "N/A",
                 name === "predicted" ? "Predicted" : "Actual"
               ]}
             />

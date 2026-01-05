@@ -110,6 +110,7 @@ export default function Predictions() {
             predictions={predictions || []}
             isLoading={isLoadingPredictions}
             height={350}
+            symbolInfo={currentSymbol}
           />
         </div>
         <div className="lg:col-span-1">
@@ -126,6 +127,7 @@ export default function Predictions() {
         predictions={predictions || []}
         isLoading={isLoadingPredictions}
         maxHeight={450}
+        symbolInfo={currentSymbol}
       />
     </div>
   );

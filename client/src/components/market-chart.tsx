@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { MarketData } from "@shared/schema";
 import { format } from "date-fns";
-import { getCurrencySymbol } from "@/lib/symbol-context";
+import { getCurrencySymbol, type SymbolInfo } from "@/lib/symbol-context";
 
 interface MarketChartProps {
   data: MarketData[];
@@ -24,7 +24,7 @@ interface MarketChartProps {
   height?: number;
   showVolume?: boolean;
   className?: string;
-  symbol?: string;
+  symbolInfo?: SymbolInfo | null;
 }
 
 export function MarketChart({
@@ -34,9 +34,9 @@ export function MarketChart({
   height = 300,
   showVolume = false,
   className,
-  symbol = "XAUUSD",
+  symbolInfo,
 }: MarketChartProps) {
-  const currencySymbol = getCurrencySymbol(symbol);
+  const currencySymbol = getCurrencySymbol(symbolInfo);
   const chartData = useMemo(() => {
     return data.map((item) => ({
       ...item,

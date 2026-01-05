@@ -86,20 +86,120 @@ export async function setRssFeedUrl(url: string): Promise<void> {
   await storage.setSetting("RSS_FEED_URL", url);
 }
 
+// Parse HTML page and extract article-like content when RSS fails
+async function fetchAsHtmlPage(pageUrl: string, feedName: string, maxItems: number): Promise<NewsItem[]> {
+  try {
+    const response = await fetch(pageUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; TradeViewMon/1.0; +https://tradeviewmon.replit.app)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
+    
+    if (!response.ok) {
+      console.error(`[NewsService] HTTP ${response.status} for ${feedName}`);
+      return [];
+    }
+    
+    const html = await response.text();
+    const items: NewsItem[] = [];
+    
+    // Extract headlines from common patterns: <h1>, <h2>, <h3>, <article>, etc.
+    // Pattern 1: Look for article titles with links
+    const articlePatterns = [
+      // <a href="..."><h2>Title</h2></a> or <h2><a href="...">Title</a></h2>
+      /<a[^>]+href=["']([^"']+)["'][^>]*>(?:<[^>]*>)*([^<]{10,200})(?:<[^>]*>)*<\/a>/gi,
+      // <article...><h2>Title</h2>...</article>
+      /<article[^>]*>[\s\S]*?<h[1-3][^>]*>([^<]{10,200})<\/h[1-3]>/gi,
+      // Headlines with class containing "title" or "headline"
+      /<[^>]+class=["'][^"']*(?:title|headline|heading)[^"']*["'][^>]*>([^<]{10,200})<\/[^>]+>/gi,
+    ];
+    
+    const seenTitles = new Set<string>();
+    
+    for (const pattern of articlePatterns) {
+      let match;
+      while ((match = pattern.exec(html)) !== null && items.length < maxItems) {
+        const title = (match[2] || match[1] || "").trim()
+          .replace(/<[^>]+>/g, "") // Remove any remaining HTML tags
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/\s+/g, " ");
+        
+        // Skip if too short, already seen, or looks like navigation
+        if (title.length < 15 || seenTitles.has(title.toLowerCase())) continue;
+        if (/^(menu|home|about|contact|login|sign|search|nav|skip)/i.test(title)) continue;
+        
+        seenTitles.add(title.toLowerCase());
+        
+        const link = match[1]?.startsWith("http") ? match[1] : 
+                     match[1]?.startsWith("/") ? new URL(match[1], pageUrl).href : pageUrl;
+        
+        items.push({
+          title,
+          link,
+          pubDate: new Date().toISOString(), // Use current time since we can't extract date from HTML
+          content: title, // Use title as content since we can't reliably extract article body
+          source: feedName,
+        });
+      }
+    }
+    
+    // Fallback: Extract any substantial text as a single news item
+    if (items.length === 0) {
+      // Try to get page title
+      const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+      const pageTitle = titleMatch ? titleMatch[1].trim() : feedName;
+      
+      // Extract meta description if available
+      const descMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+      const description = descMatch ? descMatch[1].trim() : "";
+      
+      if (pageTitle.length > 10 && description.length > 20) {
+        items.push({
+          title: pageTitle,
+          link: pageUrl,
+          pubDate: new Date().toISOString(),
+          content: description,
+          source: feedName,
+        });
+      }
+    }
+    
+    console.log(`[NewsService] Extracted ${items.length} items from HTML page ${feedName}`);
+    return items;
+  } catch (error: any) {
+    console.error(`[NewsService] Failed to parse HTML from ${feedName}:`, error.message);
+    return [];
+  }
+}
+
 async function fetchFromSingleFeed(feedUrl: string, feedName: string, maxItems: number): Promise<NewsItem[]> {
   try {
+    // First, try RSS parsing
     const feed = await parser.parseURL(feedUrl);
     
-    return feed.items.slice(0, maxItems).map((item) => ({
-      title: item.title || "Untitled",
-      link: item.link || "",
-      pubDate: item.pubDate || new Date().toISOString(),
-      content: item.contentSnippet || item.content || "",
-      source: feedName || feed.title || "News",
-    }));
+    if (feed.items && feed.items.length > 0) {
+      console.log(`[NewsService] RSS feed ${feedName}: ${feed.items.length} items`);
+      return feed.items.slice(0, maxItems).map((item) => ({
+        title: item.title || "Untitled",
+        link: item.link || "",
+        pubDate: item.pubDate || new Date().toISOString(),
+        content: item.contentSnippet || item.content || "",
+        source: feedName || feed.title || "News",
+      }));
+    }
+    
+    // RSS parsed but no items, try HTML fallback
+    console.log(`[NewsService] RSS feed ${feedName} empty, trying HTML fallback`);
+    return fetchAsHtmlPage(feedUrl, feedName, maxItems);
   } catch (error: any) {
-    console.error(`[NewsService] Failed to fetch RSS feed ${feedName}:`, error);
-    return []; // Return empty array for failed feeds, continue with others
+    // RSS parsing failed, try HTML fallback
+    console.log(`[NewsService] RSS parsing failed for ${feedName}, trying HTML fallback: ${error.message}`);
+    return fetchAsHtmlPage(feedUrl, feedName, maxItems);
   }
 }
 
@@ -146,7 +246,17 @@ export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis[
     .map((item, i) => `${i + 1}. [${item.pubDate}] ${item.title}\n   ${item.content.slice(0, 200)}...`)
     .join("\n\n");
 
-  const supportedSymbols = ["XAUUSD", "XAGUSD", "BTCUSD", "GDX", "GDXJ", "NEM", "SPX", "DXY", "USOIL", "US10Y"];
+  // Get supported symbols from database instead of hardcoding
+  const monitoredSymbols = await storage.getMonitoredSymbols();
+  const supportedSymbols = monitoredSymbols
+    .filter(s => s.isActive)
+    .map(s => s.symbol);
+  
+  // Fallback if no symbols configured
+  if (supportedSymbols.length === 0) {
+    console.log("[NewsService] No symbols in database, using defaults");
+    supportedSymbols.push("XAUUSD", "XAGUSD", "BTCUSD");
+  }
 
   try {
     const response = await openai.chat.completions.create({

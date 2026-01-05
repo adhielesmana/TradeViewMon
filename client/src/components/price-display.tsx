@@ -1,12 +1,12 @@
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { formatPrice, getCurrencySymbol } from "@/lib/symbol-context";
+import { formatPrice, getCurrencySymbol, type SymbolInfo } from "@/lib/symbol-context";
 
 interface PriceDisplayProps {
   price: number | null;
   change: number | null;
   changePercent: number | null;
-  symbol?: string;
+  symbolInfo?: SymbolInfo | null;
   size?: "sm" | "md" | "lg";
   showSymbol?: boolean;
 }
@@ -15,7 +15,7 @@ export function PriceDisplay({
   price,
   change,
   changePercent,
-  symbol = "AAPL",
+  symbolInfo,
   size = "lg",
   showSymbol = true,
 }: PriceDisplayProps) {
@@ -49,16 +49,16 @@ export function PriceDisplay({
 
   return (
     <div className="flex flex-col gap-1">
-      {showSymbol && (
+      {showSymbol && symbolInfo && (
         <span className={cn("font-medium text-muted-foreground", sizeClasses[size].symbol)}>
-          {symbol}
+          {symbolInfo.symbol}
         </span>
       )}
       <span 
         className={cn("font-mono tracking-tight", sizeClasses[size].price)}
         data-testid="text-current-price"
       >
-        {formatPrice(safePrice, symbol)}
+        {formatPrice(safePrice, symbolInfo)}
       </span>
       <div 
         className={cn(
@@ -72,7 +72,7 @@ export function PriceDisplay({
       >
         <TrendIcon className="h-4 w-4" />
         <span>
-          {isPositive ? "+" : isNegative ? "-" : ""}{getCurrencySymbol(symbol)}{Math.abs(safeChange).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {isPositive ? "+" : isNegative ? "-" : ""}{getCurrencySymbol(symbolInfo)}{Math.abs(safeChange).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </span>
         <span className="text-muted-foreground">
           ({isPositive ? "+" : ""}{safeChangePercent.toFixed(2)}%)

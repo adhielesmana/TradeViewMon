@@ -355,7 +355,7 @@ export default function AiSuggestions() {
                       <TrendingUp className="h-3 w-3" /> ENTRY PRICE
                     </div>
                     <div className="text-xl font-mono font-bold text-primary" data-testid="text-entry-price">
-                      {formatPrice(latestSuggestion.entryPrice, symbol)}
+                      {formatPrice(latestSuggestion.entryPrice, currentSymbol)}
                     </div>
                   </div>
                   
@@ -365,7 +365,7 @@ export default function AiSuggestions() {
                       <AlertTriangle className="h-3 w-3" /> STOP LOSS
                     </div>
                     <div className="text-xl font-mono font-bold text-red-500" data-testid="text-stop-loss">
-                      {latestSuggestion.stopLoss ? formatPrice(latestSuggestion.stopLoss, symbol) : '-'}
+                      {latestSuggestion.stopLoss ? formatPrice(latestSuggestion.stopLoss, currentSymbol) : '-'}
                     </div>
                   </div>
                   
@@ -373,7 +373,7 @@ export default function AiSuggestions() {
                   <div className="p-3 rounded-md bg-green-500/10 border-2 border-green-500/30">
                     <div className="text-xs text-green-400 mb-1">TP1 (1R)</div>
                     <div className="text-xl font-mono font-bold text-green-500" data-testid="text-tp1">
-                      {latestSuggestion.takeProfit1 ? formatPrice(latestSuggestion.takeProfit1, symbol) : '-'}
+                      {latestSuggestion.takeProfit1 ? formatPrice(latestSuggestion.takeProfit1, currentSymbol) : '-'}
                     </div>
                   </div>
                   
@@ -381,7 +381,7 @@ export default function AiSuggestions() {
                   <div className="p-3 rounded-md bg-green-500/10 border-2 border-green-500/50">
                     <div className="text-xs text-green-400 mb-1">TP2 (2R) - Target</div>
                     <div className="text-xl font-mono font-bold text-green-500" data-testid="text-tp2">
-                      {latestSuggestion.takeProfit2 ? formatPrice(latestSuggestion.takeProfit2, symbol) : '-'}
+                      {latestSuggestion.takeProfit2 ? formatPrice(latestSuggestion.takeProfit2, currentSymbol) : '-'}
                     </div>
                   </div>
                 </div>
@@ -391,19 +391,19 @@ export default function AiSuggestions() {
                   <div className="p-2 rounded bg-background/50">
                     <div className="text-xs text-muted-foreground">Support Level</div>
                     <div className="font-mono text-sm" data-testid="text-support">
-                      {latestSuggestion.supportLevel ? formatPrice(latestSuggestion.supportLevel, symbol) : '-'}
+                      {latestSuggestion.supportLevel ? formatPrice(latestSuggestion.supportLevel, currentSymbol) : '-'}
                     </div>
                   </div>
                   <div className="p-2 rounded bg-background/50">
                     <div className="text-xs text-muted-foreground">Resistance Level</div>
                     <div className="font-mono text-sm" data-testid="text-resistance">
-                      {latestSuggestion.resistanceLevel ? formatPrice(latestSuggestion.resistanceLevel, symbol) : '-'}
+                      {latestSuggestion.resistanceLevel ? formatPrice(latestSuggestion.resistanceLevel, currentSymbol) : '-'}
                     </div>
                   </div>
                   <div className="p-2 rounded bg-background/50">
                     <div className="text-xs text-muted-foreground">TP3 (Extended)</div>
                     <div className="font-mono text-sm text-green-400" data-testid="text-tp3">
-                      {latestSuggestion.takeProfit3 ? formatPrice(latestSuggestion.takeProfit3, symbol) : '-'}
+                      {latestSuggestion.takeProfit3 ? formatPrice(latestSuggestion.takeProfit3, currentSymbol) : '-'}
                     </div>
                   </div>
                 </div>
@@ -419,8 +419,8 @@ export default function AiSuggestions() {
                 </div>
                 <p className="text-muted-foreground">
                   Market conditions are unclear. Wait for a stronger BUY or SELL signal before entering a position.
-                  Support: {latestSuggestion.supportLevel ? formatPrice(latestSuggestion.supportLevel, symbol) : latestSuggestion.buyTarget ? formatPrice(latestSuggestion.buyTarget, symbol) : '-'} | 
-                  Resistance: {latestSuggestion.resistanceLevel ? formatPrice(latestSuggestion.resistanceLevel, symbol) : latestSuggestion.sellTarget ? formatPrice(latestSuggestion.sellTarget, symbol) : '-'}
+                  Support: {latestSuggestion.supportLevel ? formatPrice(latestSuggestion.supportLevel, currentSymbol) : latestSuggestion.buyTarget ? formatPrice(latestSuggestion.buyTarget, currentSymbol) : '-'} | 
+                  Resistance: {latestSuggestion.resistanceLevel ? formatPrice(latestSuggestion.resistanceLevel, currentSymbol) : latestSuggestion.sellTarget ? formatPrice(latestSuggestion.sellTarget, currentSymbol) : '-'}
                 </p>
               </div>
             )}
@@ -429,7 +429,7 @@ export default function AiSuggestions() {
               <div>
                 <div className="text-sm text-muted-foreground mb-1">Current Price</div>
                 <div className="text-2xl font-mono font-bold" data-testid="text-current-price">
-                  {formatPrice(latestSuggestion.currentPrice, symbol)}
+                  {formatPrice(latestSuggestion.currentPrice, currentSymbol)}
                 </div>
               </div>
               <div>
@@ -437,7 +437,7 @@ export default function AiSuggestions() {
                   <Target className="h-3 w-3" /> Buy Target
                 </div>
                 <div className="text-2xl font-mono font-bold text-green-500" data-testid="text-buy-target">
-                  {latestSuggestion.buyTarget ? formatPrice(latestSuggestion.buyTarget, symbol) : '-'}
+                  {latestSuggestion.buyTarget ? formatPrice(latestSuggestion.buyTarget, currentSymbol) : '-'}
                 </div>
               </div>
               <div>
@@ -445,7 +445,7 @@ export default function AiSuggestions() {
                   <Target className="h-3 w-3" /> Sell Target
                 </div>
                 <div className="text-2xl font-mono font-bold text-red-500" data-testid="text-sell-target">
-                  {latestSuggestion.sellTarget ? formatPrice(latestSuggestion.sellTarget, symbol) : '-'}
+                  {latestSuggestion.sellTarget ? formatPrice(latestSuggestion.sellTarget, currentSymbol) : '-'}
                 </div>
               </div>
             </div>
@@ -669,12 +669,12 @@ export default function AiSuggestions() {
                     </Badge>
                     <div>
                       <div className="text-sm font-mono">
-                        {formatPrice(suggestion.currentPrice, symbol)}
+                        {formatPrice(suggestion.currentPrice, currentSymbol)}
                         {suggestion.buyTarget && (
-                          <span className="text-green-500 ml-2">Buy: {formatPrice(suggestion.buyTarget, symbol)}</span>
+                          <span className="text-green-500 ml-2">Buy: {formatPrice(suggestion.buyTarget, currentSymbol)}</span>
                         )}
                         {suggestion.sellTarget && (
-                          <span className="text-red-500 ml-2">Sell: {formatPrice(suggestion.sellTarget, symbol)}</span>
+                          <span className="text-red-500 ml-2">Sell: {formatPrice(suggestion.sellTarget, currentSymbol)}</span>
                         )}
                       </div>
                       <div className="text-xs text-muted-foreground">
