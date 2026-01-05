@@ -286,6 +286,7 @@ class Scheduler {
   private predictionTask: ReturnType<typeof cron.schedule> | null = null;
   private currencyTask: ReturnType<typeof cron.schedule> | null = null;
   private midnightTask: ReturnType<typeof cron.schedule> | null = null;
+  private newsTask: ReturnType<typeof cron.schedule> | null = null;
   private intervalMs: number = 60000;
   private predictionCycleCount: number = 0;
 
@@ -316,13 +317,23 @@ class Scheduler {
       await this.updateCurrencyRates();
     });
 
-    // Midnight task: Close all profitable positions at 00:00:00 every day
+    // Midnight task: Close all profitable positions at 00:00:00 every day and cleanup old news
     this.midnightTask = cron.schedule("0 0 0 * * *", async () => {
       await this.runMidnightProfitClose();
+      await this.runNewsCleanup();
     });
+
+    // News fetch task: Every 15 minutes to fetch and store news for AI learning
+    this.newsTask = cron.schedule("0 */15 * * * *", async () => {
+      await this.runNewsFetch();
+    });
+
+    // Initial news fetch on startup
+    this.runNewsFetch().catch(err => console.error("[Scheduler] Initial news fetch failed:", err));
 
     console.log("[Scheduler] Scheduler started - running every 60 seconds for market data and predictions");
     console.log("[Scheduler] Currency rates will update every 12 hours");
+    console.log("[Scheduler] News fetch every 15 minutes with 7-day retention for AI learning");
     console.log("[Scheduler] Midnight profitable positions auto-close enabled at 00:00:00 daily");
   }
 
@@ -345,6 +356,11 @@ class Scheduler {
     if (this.midnightTask) {
       this.midnightTask.stop();
       this.midnightTask = null;
+    }
+
+    if (this.newsTask) {
+      this.newsTask.stop();
+      this.newsTask = null;
     }
 
     this.isRunning = false;
@@ -440,6 +456,35 @@ class Scheduler {
       
     } catch (error) {
       console.error("[Scheduler] Error in midnight profit close:", error);
+    }
+  }
+
+  // News fetch task: Fetch news from RSS feeds and store for AI learning
+  private async runNewsFetch(): Promise<void> {
+    try {
+      const { fetchAndStoreNews, getNewsStats } = await import("./news-service");
+      const result = await fetchAndStoreNews();
+      
+      if (result.stored > 0) {
+        const stats = await getNewsStats();
+        console.log(`[Scheduler] News stored: ${result.stored} new articles (total: ${stats.totalArticles}, last 24h: ${stats.last24Hours})`);
+      }
+    } catch (error) {
+      console.error("[Scheduler] Error fetching news:", error);
+    }
+  }
+
+  // News cleanup task: Delete news older than 7 days
+  private async runNewsCleanup(): Promise<void> {
+    try {
+      const { cleanupOldNews } = await import("./news-service");
+      const deleted = await cleanupOldNews();
+      
+      if (deleted > 0) {
+        console.log(`[Scheduler] News cleanup: deleted ${deleted} articles older than 7 days`);
+      }
+    } catch (error) {
+      console.error("[Scheduler] Error cleaning up old news:", error);
     }
   }
 

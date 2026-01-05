@@ -1,7 +1,7 @@
 import { 
   marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState, aiSuggestions,
   demoAccounts, demoPositions, demoTransactions, appSettings, currencyRates, autoTradeSettings,
-  rssFeeds, monitoredSymbols,
+  rssFeeds, monitoredSymbols, newsArticles,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
@@ -19,10 +19,11 @@ import {
   type CurrencyRate, type InsertCurrencyRate,
   type AutoTradeSetting, type UpdateAutoTradeSetting,
   type RssFeed, type InsertRssFeed, type UpdateRssFeed,
-  type MonitoredSymbol, type InsertMonitoredSymbol
+  type MonitoredSymbol, type InsertMonitoredSymbol,
+  type NewsArticle, type InsertNewsArticle
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, gte, lte, gt, and, or, sql, inArray, isNull } from "drizzle-orm";
+import { eq, desc, gte, lte, lt, gt, and, or, sql, inArray, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // Market Data
@@ -136,6 +137,22 @@ export interface IStorage {
   createMonitoredSymbol(symbol: InsertMonitoredSymbol): Promise<MonitoredSymbol>;
   updateMonitoredSymbol(id: number, updates: Partial<InsertMonitoredSymbol>): Promise<MonitoredSymbol | null>;
   deleteMonitoredSymbol(id: number): Promise<boolean>;
+  
+  // News Articles (7-day retention for AI learning)
+  getNewsArticles(limit?: number): Promise<NewsArticle[]>;
+  getNewsArticlesSince(since: Date): Promise<NewsArticle[]>;
+  getNewsArticleByLinkHash(linkHash: string): Promise<NewsArticle | null>;
+  insertNewsArticle(article: InsertNewsArticle): Promise<NewsArticle>;
+  insertNewsArticleBatch(articles: InsertNewsArticle[]): Promise<NewsArticle[]>;
+  deleteOldNewsArticles(olderThan: Date): Promise<number>;
+  getNewsArticlesCount(): Promise<number>;
+  getNewsArticlesStats(): Promise<{
+    totalArticles: number;
+    last24Hours: number;
+    last7Days: number;
+    oldestArticle: Date | null;
+    newestArticle: Date | null;
+  }>;
   
   // All open positions for scheduled tasks
   getAllOpenProfitablePositions(): Promise<DemoPosition[]>;
@@ -1247,6 +1264,87 @@ export class DatabaseStorage implements IStorage {
         eq(demoPositions.status, 'open'),
         gt(demoPositions.profitLoss, 0)
       ));
+  }
+
+  // News Articles CRUD (7-day retention for AI learning)
+  async getNewsArticles(limit: number = 100): Promise<NewsArticle[]> {
+    return db.select()
+      .from(newsArticles)
+      .orderBy(desc(newsArticles.fetchedAt))
+      .limit(limit);
+  }
+
+  async getNewsArticlesSince(since: Date): Promise<NewsArticle[]> {
+    return db.select()
+      .from(newsArticles)
+      .where(gte(newsArticles.fetchedAt, since))
+      .orderBy(desc(newsArticles.fetchedAt));
+  }
+
+  async getNewsArticleByLinkHash(linkHash: string): Promise<NewsArticle | null> {
+    const [article] = await db.select()
+      .from(newsArticles)
+      .where(eq(newsArticles.linkHash, linkHash));
+    return article || null;
+  }
+
+  async insertNewsArticle(article: InsertNewsArticle): Promise<NewsArticle> {
+    const [result] = await db.insert(newsArticles).values(article).returning();
+    return result;
+  }
+
+  async insertNewsArticleBatch(articles: InsertNewsArticle[]): Promise<NewsArticle[]> {
+    if (articles.length === 0) return [];
+    try {
+      return db.insert(newsArticles)
+        .values(articles)
+        .onConflictDoNothing({ target: newsArticles.linkHash })
+        .returning();
+    } catch (error) {
+      console.error("[Storage] Error inserting news articles batch:", error);
+      return [];
+    }
+  }
+
+  async deleteOldNewsArticles(olderThan: Date): Promise<number> {
+    const result = await db.delete(newsArticles)
+      .where(lt(newsArticles.fetchedAt, olderThan))
+      .returning();
+    return result.length;
+  }
+
+  async getNewsArticlesCount(): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(newsArticles);
+    return Number(result[0]?.count || 0);
+  }
+
+  async getNewsArticlesStats(): Promise<{
+    totalArticles: number;
+    last24Hours: number;
+    last7Days: number;
+    oldestArticle: Date | null;
+    newestArticle: Date | null;
+  }> {
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    const [stats] = await db.select({
+      totalArticles: sql<number>`count(*)`,
+      last24Hours: sql<number>`count(*) filter (where ${newsArticles.fetchedAt} >= ${oneDayAgo})`,
+      last7Days: sql<number>`count(*) filter (where ${newsArticles.fetchedAt} >= ${sevenDaysAgo})`,
+      oldestArticle: sql<Date | null>`min(${newsArticles.fetchedAt})`,
+      newestArticle: sql<Date | null>`max(${newsArticles.fetchedAt})`,
+    }).from(newsArticles);
+    
+    return {
+      totalArticles: Number(stats?.totalArticles || 0),
+      last24Hours: Number(stats?.last24Hours || 0),
+      last7Days: Number(stats?.last7Days || 0),
+      oldestArticle: stats?.oldestArticle || null,
+      newestArticle: stats?.newestArticle || null,
+    };
   }
 }
 

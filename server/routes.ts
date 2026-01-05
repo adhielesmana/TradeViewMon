@@ -11,7 +11,7 @@ import type { SafeUser, InsertMarketData } from "@shared/schema";
 import { predictionEngine } from "./prediction-engine";
 import { generateUnifiedSignal, convertToLegacyIndicatorSignal, convertToMultiFactorAnalysis, detectAllCandlestickPatterns } from "./unified-signal-generator";
 import { encrypt, decrypt, maskApiKey } from "./encryption";
-import { getNewsAndAnalysis, getRssFeedUrl, setRssFeedUrl } from "./news-service";
+import { getNewsAndAnalysis, getRssFeedUrl, setRssFeedUrl, getNewsStats, getStoredNewsSince } from "./news-service";
 import { z } from "zod";
 
 const updateUserSchema = z.object({
@@ -1591,6 +1591,22 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error deleting RSS feed:", error);
       res.status(500).json({ error: "Failed to delete RSS feed" });
+    }
+  });
+
+  // News Articles Statistics (for AI learning)
+  app.get("/api/settings/news-stats", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const stats = await getNewsStats();
+      const recentNews = await getStoredNewsSince(24); // Last 24 hours
+      
+      res.json({
+        ...stats,
+        recentArticles: recentNews.slice(0, 10) // Return latest 10 articles preview
+      });
+    } catch (error) {
+      console.error("Error getting news stats:", error);
+      res.status(500).json({ error: "Failed to get news stats" });
     }
   });
 

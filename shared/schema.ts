@@ -420,6 +420,30 @@ export type RssFeed = typeof rssFeeds.$inferSelect;
 export type InsertRssFeed = z.infer<typeof insertRssFeedSchema>;
 export type UpdateRssFeed = z.infer<typeof updateRssFeedSchema>;
 
+// News Articles - stores RSS news for 7-day retention for AI learning
+export const newsArticles = pgTable("news_articles", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  feedId: integer("feed_id").references(() => rssFeeds.id),
+  title: text("title").notNull(),
+  link: text("link").notNull(),
+  linkHash: varchar("link_hash", { length: 64 }).notNull().unique(), // SHA-256 hash for deduplication
+  content: text("content"),
+  source: varchar("source", { length: 100 }),
+  publishedAt: timestamp("published_at"),
+  fetchedAt: timestamp("fetched_at").notNull().default(sql`now()`),
+  sentiment: varchar("sentiment", { length: 20 }), // 'BULLISH', 'BEARISH', 'NEUTRAL' - AI analyzed
+  affectedSymbols: text("affected_symbols"), // JSON array of affected symbols
+  aiAnalysis: text("ai_analysis"), // JSON with full AI analysis result
+}, (table) => [
+  index("news_articles_feed_published_idx").on(table.feedId, table.publishedAt),
+  index("news_articles_fetched_idx").on(table.fetchedAt),
+  index("news_articles_published_idx").on(table.publishedAt),
+]);
+
+export const insertNewsArticleSchema = createInsertSchema(newsArticles).omit({ id: true });
+export type NewsArticle = typeof newsArticles.$inferSelect;
+export type InsertNewsArticle = z.infer<typeof insertNewsArticleSchema>;
+
 // Currency Rates - cached exchange rates from EUR base
 export const currencyRates = pgTable("currency_rates", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),

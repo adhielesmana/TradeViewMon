@@ -176,6 +176,28 @@ CREATE TABLE IF NOT EXISTS rss_feeds (
 );
 
 -- ============================================
+-- TABLE: news_articles (7-day retention for AI learning)
+-- ============================================
+CREATE TABLE IF NOT EXISTS news_articles (
+    id SERIAL PRIMARY KEY,
+    feed_id INTEGER REFERENCES rss_feeds(id),
+    title TEXT NOT NULL,
+    link TEXT NOT NULL,
+    link_hash VARCHAR(64) NOT NULL UNIQUE,
+    content TEXT,
+    source VARCHAR(100),
+    published_at TIMESTAMP,
+    fetched_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    sentiment VARCHAR(20),
+    affected_symbols TEXT,
+    ai_analysis TEXT
+);
+
+CREATE INDEX IF NOT EXISTS news_articles_feed_published_idx ON news_articles(feed_id, published_at);
+CREATE INDEX IF NOT EXISTS news_articles_fetched_idx ON news_articles(fetched_at);
+CREATE INDEX IF NOT EXISTS news_articles_published_idx ON news_articles(published_at);
+
+-- ============================================
 -- TABLE: demo_accounts
 -- ============================================
 CREATE TABLE IF NOT EXISTS demo_accounts (

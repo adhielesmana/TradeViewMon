@@ -1,7 +1,9 @@
 import Parser from "rss-parser";
 import OpenAI from "openai";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { decrypt } from "./encryption";
+import type { InsertNewsArticle, NewsArticle } from "@shared/schema";
 
 const parser = new Parser({
   customFields: {
@@ -273,4 +275,169 @@ export async function getNewsAndAnalysis(): Promise<NewsAnalysis> {
       error: error.message || "Failed to fetch news",
     };
   }
+}
+
+// ============================================
+// News Storage Functions (7-day retention for AI learning)
+// ============================================
+
+function generateLinkHash(link: string): string {
+  return crypto.createHash('sha256').update(link).digest('hex');
+}
+
+interface FetchedNewsItem {
+  title: string;
+  link: string;
+  pubDate: string;
+  content: string;
+  source: string;
+  feedId?: number;
+}
+
+async function fetchFromSingleFeedWithMeta(
+  feedUrl: string, 
+  feedName: string, 
+  feedId: number | undefined,
+  maxItems: number
+): Promise<FetchedNewsItem[]> {
+  try {
+    const feed = await parser.parseURL(feedUrl);
+    
+    return feed.items.slice(0, maxItems).map((item) => ({
+      title: item.title || "Untitled",
+      link: item.link || "",
+      pubDate: item.pubDate || new Date().toISOString(),
+      content: item.contentSnippet || item.content || "",
+      source: feedName || feed.title || "News",
+      feedId,
+    }));
+  } catch (error: any) {
+    console.error(`[NewsService] Failed to fetch RSS feed ${feedName}:`, error.message);
+    return [];
+  }
+}
+
+export async function fetchAndStoreNews(): Promise<{ stored: number; total: number }> {
+  console.log("[NewsService] Starting scheduled news fetch and store...");
+  
+  const feeds = await storage.getRssFeeds();
+  const activeFeeds = feeds.filter(f => f.isActive);
+  
+  if (activeFeeds.length === 0) {
+    console.log("[NewsService] No active RSS feeds configured");
+    return { stored: 0, total: 0 };
+  }
+  
+  const feedPromises = activeFeeds.map(feed => 
+    fetchFromSingleFeedWithMeta(feed.url, feed.name, feed.id, 20)
+  );
+  
+  const results = await Promise.all(feedPromises);
+  const allNews = results.flat();
+  
+  if (allNews.length === 0) {
+    console.log("[NewsService] No news items fetched from any feed");
+    return { stored: 0, total: 0 };
+  }
+  
+  const articlesToInsert: InsertNewsArticle[] = allNews.map(item => ({
+    feedId: item.feedId || null,
+    title: item.title,
+    link: item.link,
+    linkHash: generateLinkHash(item.link),
+    content: item.content,
+    source: item.source,
+    publishedAt: item.pubDate ? new Date(item.pubDate) : null,
+    fetchedAt: new Date(),
+    sentiment: null,
+    affectedSymbols: null,
+    aiAnalysis: null,
+  }));
+  
+  const inserted = await storage.insertNewsArticleBatch(articlesToInsert);
+  
+  console.log(`[NewsService] Stored ${inserted.length}/${allNews.length} new articles (duplicates skipped)`);
+  
+  return { stored: inserted.length, total: allNews.length };
+}
+
+export async function cleanupOldNews(): Promise<number> {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  
+  const deleted = await storage.deleteOldNewsArticles(sevenDaysAgo);
+  
+  if (deleted > 0) {
+    console.log(`[NewsService] Cleaned up ${deleted} articles older than 7 days`);
+  }
+  
+  return deleted;
+}
+
+export async function getStoredNewsCount(): Promise<number> {
+  return storage.getNewsArticlesCount();
+}
+
+export async function getStoredNews(limit: number = 100): Promise<NewsArticle[]> {
+  return storage.getNewsArticles(limit);
+}
+
+export async function getStoredNewsSince(hours: number = 24): Promise<NewsArticle[]> {
+  const since = new Date();
+  since.setHours(since.getHours() - hours);
+  return storage.getNewsArticlesSince(since);
+}
+
+export async function getNewsAndAnalysisWithHistory(historyHours: number = 24): Promise<NewsAnalysis> {
+  try {
+    const storedArticles = await getStoredNewsSince(historyHours);
+    
+    const news: NewsItem[] = storedArticles.map(article => ({
+      title: article.title,
+      link: article.link,
+      pubDate: article.publishedAt?.toISOString() || article.fetchedAt.toISOString(),
+      content: article.content || "",
+      source: article.source || "News",
+    }));
+    
+    if (news.length === 0) {
+      const freshNews = await fetchNews(10);
+      const prediction = await analyzeNewsWithAI(freshNews);
+      
+      return {
+        fetchedAt: new Date().toISOString(),
+        newsCount: freshNews.length,
+        news: freshNews,
+        marketPrediction: prediction,
+      };
+    }
+    
+    const prediction = await analyzeNewsWithAI(news.slice(0, 20));
+    
+    return {
+      fetchedAt: new Date().toISOString(),
+      newsCount: news.length,
+      news: news.slice(0, 20),
+      marketPrediction: prediction,
+    };
+  } catch (error: any) {
+    console.error("[NewsService] Failed to get news with history:", error);
+    return {
+      fetchedAt: new Date().toISOString(),
+      newsCount: 0,
+      news: [],
+      marketPrediction: null,
+      error: error.message || "Failed to fetch news",
+    };
+  }
+}
+
+export async function getNewsStats(): Promise<{
+  totalArticles: number;
+  last24Hours: number;
+  last7Days: number;
+  oldestArticle: Date | null;
+  newestArticle: Date | null;
+}> {
+  return storage.getNewsArticlesStats();
 }
