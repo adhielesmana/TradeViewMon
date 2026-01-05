@@ -11,6 +11,7 @@ import type { SafeUser, InsertMarketData } from "@shared/schema";
 import { predictionEngine } from "./prediction-engine";
 import { generateUnifiedSignal, convertToLegacyIndicatorSignal, convertToMultiFactorAnalysis, detectAllCandlestickPatterns } from "./unified-signal-generator";
 import { encrypt, decrypt, maskApiKey } from "./encryption";
+import { getNewsAndAnalysis, getRssFeedUrl, setRssFeedUrl } from "./news-service";
 import { z } from "zod";
 
 const updateUserSchema = z.object({
@@ -1365,9 +1366,13 @@ export async function registerRoutes(
         };
       }
       
+      // Get RSS feed URL
+      const rssFeedUrl = await getRssFeedUrl();
+      
       res.json({
         finnhubApiKey: finnhubKeyStatus,
-        openaiApiKey: openaiKeyStatus
+        openaiApiKey: openaiKeyStatus,
+        rssFeedUrl: rssFeedUrl
       });
     } catch (error) {
       console.error("Error getting settings:", error);
@@ -1451,6 +1456,55 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error removing OpenAI API key:", error);
       res.status(500).json({ error: "Failed to remove API key" });
+    }
+  });
+
+  // RSS Feed URL Settings
+  app.get("/api/settings/rss-feed", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const url = await getRssFeedUrl();
+      res.json({ url });
+    } catch (error) {
+      console.error("Error getting RSS feed URL:", error);
+      res.status(500).json({ error: "Failed to get RSS feed URL" });
+    }
+  });
+
+  app.post("/api/settings/rss-feed", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const { url } = req.body;
+      
+      if (typeof url !== "string" || !url.trim()) {
+        return res.status(400).json({ error: "RSS feed URL is required" });
+      }
+      
+      // Basic URL validation
+      try {
+        new URL(url.trim());
+      } catch {
+        return res.status(400).json({ error: "Invalid URL format" });
+      }
+      
+      await setRssFeedUrl(url.trim());
+      
+      res.json({ 
+        success: true, 
+        message: "RSS feed URL saved successfully."
+      });
+    } catch (error) {
+      console.error("Error saving RSS feed URL:", error);
+      res.status(500).json({ error: "Failed to save RSS feed URL" });
+    }
+  });
+
+  // News Analysis API (authenticated users can access)
+  app.get("/api/news/analysis", requireAuth, async (req, res) => {
+    try {
+      const analysis = await getNewsAndAnalysis();
+      res.json(analysis);
+    } catch (error) {
+      console.error("Error fetching news analysis:", error);
+      res.status(500).json({ error: "Failed to fetch news analysis" });
     }
   });
 

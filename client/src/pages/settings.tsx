@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, Key, CheckCircle, AlertCircle, Info, Loader2, Eye, EyeOff, Bot } from "lucide-react";
+import { Settings, Key, CheckCircle, AlertCircle, Info, Loader2, Eye, EyeOff, Bot, Rss } from "lucide-react";
 
 interface ApiKeyStatus {
   isConfigured: boolean;
@@ -21,6 +21,7 @@ interface ApiKeyStatus {
 interface SettingsData {
   finnhubApiKey: ApiKeyStatus;
   openaiApiKey: ApiKeyStatus;
+  rssFeedUrl: string;
 }
 
 export default function SettingsPage() {
@@ -29,6 +30,7 @@ export default function SettingsPage() {
   const [showFinnhubKey, setShowFinnhubKey] = useState(false);
   const [openaiKey, setOpenaiKey] = useState("");
   const [showOpenaiKey, setShowOpenaiKey] = useState(false);
+  const [rssFeedUrl, setRssFeedUrl] = useState("");
 
   const { data: settings, isLoading } = useQuery<SettingsData>({
     queryKey: ["/api/settings"],
@@ -100,6 +102,28 @@ export default function SettingsPage() {
     },
   });
 
+  const updateRssFeedMutation = useMutation({
+    mutationFn: async (url: string) => {
+      const response = await apiRequest("POST", "/api/settings/rss-feed", { url });
+      return response.json() as Promise<{ success: boolean; message: string }>;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Success",
+        description: data.message,
+      });
+      setRssFeedUrl("");
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update RSS feed URL",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSaveFinnhubKey = () => {
     updateFinnhubKeyMutation.mutate(finnhubKey);
   };
@@ -114,6 +138,10 @@ export default function SettingsPage() {
 
   const handleClearOpenaiKey = () => {
     deleteOpenaiKeyMutation.mutate();
+  };
+
+  const handleSaveRssFeedUrl = () => {
+    updateRssFeedMutation.mutate(rssFeedUrl);
   };
 
   if (isLoading) {
@@ -431,6 +459,72 @@ export default function SettingsPage() {
                   {settings?.openaiApiKey?.isConfigured ? "Available" : "Disabled"}
                 </Badge>
               </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <span className="text-sm">AI News Analysis</span>
+                <Badge variant={settings?.openaiApiKey?.isConfigured ? "default" : "secondary"}>
+                  {settings?.openaiApiKey?.isConfigured ? "Available" : "Disabled"}
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Rss className="h-5 w-5 text-orange-500" />
+              <CardTitle>News RSS Feed</CardTitle>
+            </div>
+            <CardDescription>
+              Configure the RSS feed URL for financial news. The AI will analyze news headlines to provide market predictions.
+              Default: Yahoo Finance News
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Current Feed:</span>
+              <span className="text-sm text-muted-foreground font-mono truncate max-w-md">
+                {settings?.rssFeedUrl || "https://finance.yahoo.com/news/rssindex"}
+              </span>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="rss-feed-url">Update RSS Feed URL</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="rss-feed-url"
+                    type="url"
+                    placeholder="https://finance.yahoo.com/news/rssindex"
+                    value={rssFeedUrl}
+                    onChange={(e) => setRssFeedUrl(e.target.value)}
+                    className="flex-1"
+                    data-testid="input-rss-feed-url"
+                  />
+                  <Button
+                    onClick={handleSaveRssFeedUrl}
+                    disabled={!rssFeedUrl.trim() || updateRssFeedMutation.isPending}
+                    data-testid="button-save-rss-feed"
+                  >
+                    {updateRssFeedMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Save"
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  Popular RSS feeds: Yahoo Finance, Reuters, Bloomberg, CNBC. 
+                  The AI will read news from this feed and generate market predictions based on sentiment analysis.
+                </AlertDescription>
+              </Alert>
             </div>
           </CardContent>
         </Card>

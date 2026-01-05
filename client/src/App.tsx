@@ -23,6 +23,7 @@ import LiveDemo from "@/pages/live-demo";
 import SystemStatus from "@/pages/system-status";
 import UserManagement from "@/pages/user-management";
 import SettingsPage from "@/pages/settings";
+import NewsAnalysisPage from "@/pages/news-analysis";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import NotFound from "@/pages/not-found";
@@ -39,6 +40,7 @@ function ProtectedRoutes() {
       <Route path="/historical" component={Historical} />
       <Route path="/backtesting" component={Backtesting} />
       <Route path="/live-demo" component={LiveDemo} />
+      <Route path="/news" component={NewsAnalysisPage} />
       {isAdmin && <Route path="/status" component={SystemStatus} />}
       {isAdmin && <Route path="/users" component={UserManagement} />}
       {isAdmin && <Route path="/settings" component={SettingsPage} />}

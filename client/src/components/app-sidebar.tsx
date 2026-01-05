@@ -9,7 +9,8 @@ import {
   Users,
   Brain,
   Wallet,
-  Settings
+  Settings,
+  Newspaper
 } from "lucide-react";
 import {
   Sidebar,
@@ -66,6 +67,13 @@ const menuItems = [
     url: "/live-demo",
     icon: Wallet,
     description: "Paper trading",
+    adminOnly: false,
+  },
+  {
+    title: "News & AI",
+    url: "/news",
+    icon: Newspaper,
+    description: "AI news analysis",
     adminOnly: false,
   },
   {
