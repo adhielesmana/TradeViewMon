@@ -411,6 +411,32 @@ export class MarketDataService {
     return Object.keys(SYMBOL_CONFIGS);
   }
 
+  // Get symbol configs for seeding monitored symbols table
+  getSymbolConfigs(): Array<{ symbol: string; displayName: string; category: string }> {
+    const configs: Array<{ symbol: string; displayName: string; category: string }> = [];
+    
+    for (const [symbol, config] of Object.entries(SYMBOL_CONFIGS)) {
+      let displayName = symbol;
+      let category = "Other";
+      
+      // Set display name and category based on symbol
+      if (symbol === "XAUUSD") { displayName = "Gold (XAU/USD)"; category = "Precious Metals"; }
+      else if (symbol === "XAGUSD") { displayName = "Silver (XAG/USD)"; category = "Precious Metals"; }
+      else if (symbol === "BTCUSD") { displayName = "Bitcoin (BTC/USD)"; category = "Crypto"; }
+      else if (symbol === "GDX") { displayName = "Gold Miners ETF"; category = "Mining Stocks"; }
+      else if (symbol === "DATA") { displayName = "DATA (IDX)"; category = "Indonesian Stocks"; }
+      else if (symbol === "WIFI") { displayName = "WIFI (IDX)"; category = "Indonesian Stocks"; }
+      else if (symbol === "INET") { displayName = "INET (IDX)"; category = "Indonesian Stocks"; }
+      else if (symbol === "SPX") { displayName = "S&P 500 Index"; category = "Indices"; }
+      else if (symbol === "USOIL") { displayName = "Crude Oil (WTI)"; category = "Commodities"; }
+      else if (symbol === "US10Y") { displayName = "US 10Y Treasury"; category = "Bonds"; }
+      
+      configs.push({ symbol, displayName, category });
+    }
+    
+    return configs;
+  }
+
   setCurrentSymbol(symbol: string): void {
     if (SYMBOL_CONFIGS[symbol]) {
       this.currentSymbol = symbol;

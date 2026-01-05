@@ -285,6 +285,7 @@ class Scheduler {
   private intervalHandle: NodeJS.Timeout | null = null;
   private predictionTask: ReturnType<typeof cron.schedule> | null = null;
   private currencyTask: ReturnType<typeof cron.schedule> | null = null;
+  private midnightTask: ReturnType<typeof cron.schedule> | null = null;
   private intervalMs: number = 60000;
   private predictionCycleCount: number = 0;
 
@@ -315,8 +316,14 @@ class Scheduler {
       await this.updateCurrencyRates();
     });
 
+    // Midnight task: Close all profitable positions at 00:00:00 every day
+    this.midnightTask = cron.schedule("0 0 0 * * *", async () => {
+      await this.runMidnightProfitClose();
+    });
+
     console.log("[Scheduler] Scheduler started - running every 60 seconds for market data and predictions");
     console.log("[Scheduler] Currency rates will update every 12 hours");
+    console.log("[Scheduler] Midnight profitable positions auto-close enabled at 00:00:00 daily");
   }
 
   async stop(): Promise<void> {
@@ -333,6 +340,11 @@ class Scheduler {
     if (this.currencyTask) {
       this.currencyTask.stop();
       this.currencyTask = null;
+    }
+
+    if (this.midnightTask) {
+      this.midnightTask.stop();
+      this.midnightTask = null;
     }
 
     this.isRunning = false;
@@ -374,6 +386,60 @@ class Scheduler {
       console.log("[Scheduler] Currency rates updated successfully");
     } catch (error) {
       console.error("[Scheduler] Error updating currency rates:", error);
+    }
+  }
+
+  // Midnight task: Close all positions with positive profit
+  private async runMidnightProfitClose(): Promise<void> {
+    try {
+      console.log("[Scheduler] Running midnight profitable positions auto-close...");
+      
+      // Get all open positions with positive profit
+      const profitablePositions = await storage.getAllOpenProfitablePositions();
+      
+      if (profitablePositions.length === 0) {
+        console.log("[Scheduler] No profitable open positions to close at midnight");
+        return;
+      }
+      
+      console.log(`[Scheduler] Found ${profitablePositions.length} profitable positions to close`);
+      
+      let closedCount = 0;
+      let totalProfit = 0;
+      
+      for (const position of profitablePositions) {
+        try {
+          // Get current market price for the symbol
+          const currentPrice = position.currentPrice || position.entryPrice;
+          
+          // Close the position with "midnight_auto_close" reason
+          const closedPosition = await storage.closeDemoPosition(
+            position.id,
+            currentPrice,
+            'midnight_auto_close'
+          );
+          
+          if (closedPosition) {
+            closedCount++;
+            totalProfit += closedPosition.profitLoss || 0;
+            
+            // Update the user's demo account balance
+            const account = await storage.getDemoAccount(position.userId);
+            if (account) {
+              await storage.updateAutoTradeStats(position.userId, closedPosition.profitLoss || 0);
+            }
+            
+            console.log(`[Scheduler] Closed position #${position.id} (${position.symbol}) - Profit: $${(closedPosition.profitLoss || 0).toFixed(2)}`);
+          }
+        } catch (posError) {
+          console.error(`[Scheduler] Error closing position #${position.id}:`, posError);
+        }
+      }
+      
+      console.log(`[Scheduler] Midnight auto-close complete: ${closedCount}/${profitablePositions.length} positions closed, total profit: $${totalProfit.toFixed(2)}`);
+      
+    } catch (error) {
+      console.error("[Scheduler] Error in midnight profit close:", error);
     }
   }
 

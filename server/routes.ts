@@ -1597,7 +1597,29 @@ export async function registerRoutes(
   // Monitored Symbols CRUD API
   app.get("/api/settings/symbols", requireAuth, requireRole(["superadmin"]), async (req, res) => {
     try {
-      const symbols = await storage.getMonitoredSymbols();
+      let symbols = await storage.getMonitoredSymbols();
+      
+      // Auto-seed from market data service if table is empty
+      if (symbols.length === 0) {
+        console.log("[Settings] Seeding monitored symbols from market data service...");
+        const { marketDataService } = await import("./market-data-service");
+        const configs = marketDataService.getSymbolConfigs();
+        
+        for (let i = 0; i < configs.length; i++) {
+          const config = configs[i];
+          await storage.createMonitoredSymbol({
+            symbol: config.symbol,
+            displayName: config.displayName,
+            category: config.category,
+            isActive: true,
+            priority: configs.length - i, // Higher priority for earlier symbols
+          });
+        }
+        
+        symbols = await storage.getMonitoredSymbols();
+        console.log(`[Settings] Seeded ${symbols.length} monitored symbols`);
+      }
+      
       res.json(symbols);
     } catch (error) {
       console.error("Error getting symbols:", error);

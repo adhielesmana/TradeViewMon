@@ -22,7 +22,7 @@ import {
   type MonitoredSymbol, type InsertMonitoredSymbol
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, gte, lte, and, or, sql, inArray, isNull } from "drizzle-orm";
+import { eq, desc, gte, lte, gt, and, or, sql, inArray, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // Market Data
@@ -136,6 +136,9 @@ export interface IStorage {
   createMonitoredSymbol(symbol: InsertMonitoredSymbol): Promise<MonitoredSymbol>;
   updateMonitoredSymbol(id: number, updates: Partial<InsertMonitoredSymbol>): Promise<MonitoredSymbol | null>;
   deleteMonitoredSymbol(id: number): Promise<boolean>;
+  
+  // All open positions for scheduled tasks
+  getAllOpenProfitablePositions(): Promise<DemoPosition[]>;
 }
 
 const startTime = Date.now();
@@ -1234,6 +1237,16 @@ export class DatabaseStorage implements IStorage {
       .where(eq(monitoredSymbols.id, id))
       .returning();
     return result.length > 0;
+  }
+
+  // Get all open positions with positive profit (for midnight auto-close)
+  async getAllOpenProfitablePositions(): Promise<DemoPosition[]> {
+    return db.select()
+      .from(demoPositions)
+      .where(and(
+        eq(demoPositions.status, 'open'),
+        gt(demoPositions.profitLoss, 0)
+      ));
   }
 }
 
