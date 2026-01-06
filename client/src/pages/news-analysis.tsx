@@ -67,6 +67,7 @@ interface AffectedSymbol {
 }
 
 interface MarketPrediction {
+  headline?: string; // Natural news-style headline
   overallSentiment: "BULLISH" | "BEARISH" | "NEUTRAL";
   confidence: number;
   summary: string;
@@ -86,6 +87,7 @@ interface NewsAnalysis {
 
 interface HistorySnapshot {
   id: number;
+  headline: string | null; // Natural news-style headline
   overallSentiment: string;
   confidence: number;
   summary: string;
@@ -628,7 +630,7 @@ export default function NewsAnalysisPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm">
-                            {snapshot.overallSentiment} Market Outlook
+                            {snapshot.headline || `${snapshot.overallSentiment} Market Outlook`}
                           </span>
                           <Badge variant="outline" className="text-xs">
                             {snapshot.confidence}% confidence
@@ -721,7 +723,7 @@ export default function NewsAnalysisPage() {
                   )}
                 </div>
                 <DialogTitle className="text-xl">
-                  {selectedSnapshot.overallSentiment} Market Analysis
+                  {selectedSnapshot.headline || `${selectedSnapshot.overallSentiment} Market Analysis`}
                 </DialogTitle>
                 <DialogDescription className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
@@ -743,9 +745,9 @@ export default function NewsAnalysisPage() {
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                 <div className="absolute bottom-4 left-4 text-white">
-                  <div className="text-sm opacity-80">Market Update</div>
+                  <div className="text-sm opacity-80">{format(new Date(selectedSnapshot.analyzedAt), "MMMM d, yyyy")}</div>
                   <div className="text-lg font-semibold">
-                    {format(new Date(selectedSnapshot.analyzedAt), "MMMM d, yyyy")}
+                    {selectedSnapshot.headline || "Market Analysis"}
                   </div>
                 </div>
               </div>
