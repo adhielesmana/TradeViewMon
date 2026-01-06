@@ -1575,6 +1575,48 @@ export async function registerRoutes(
     }
   });
 
+  // Paginated article history (AI predictions with generated articles)
+  app.get("/api/news/analysis/history", requireAuth, async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = Math.min(50, Math.max(5, parseInt(req.query.pageSize as string) || 10));
+      
+      const result = await storage.getNewsAnalysisSnapshotsPaginated(page, pageSize);
+      res.json({
+        snapshots: result.snapshots,
+        pagination: {
+          page,
+          pageSize,
+          total: result.total,
+          totalPages: result.totalPages,
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching article history:", error);
+      res.status(500).json({ error: "Failed to fetch article history" });
+    }
+  });
+
+  // Get single article by ID
+  app.get("/api/news/analysis/:id", requireAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid article ID" });
+      }
+      
+      const snapshot = await storage.getNewsAnalysisSnapshotById(id);
+      if (!snapshot) {
+        return res.status(404).json({ error: "Article not found" });
+      }
+      
+      res.json(snapshot);
+    } catch (error) {
+      console.error("Error fetching article:", error);
+      res.status(500).json({ error: "Failed to fetch article" });
+    }
+  });
+
   // RSS Feeds CRUD API
   app.get("/api/settings/rss-feeds", requireAuth, requireRole(["superadmin"]), async (req, res) => {
     try {

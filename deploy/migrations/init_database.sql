@@ -238,7 +238,8 @@ CREATE TABLE IF NOT EXISTS news_analysis_snapshots (
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     source_articles TEXT,
     historical_context TEXT,
-    analysis_type VARCHAR(50) DEFAULT 'regular'
+    analysis_type VARCHAR(50) DEFAULT 'regular',
+    generated_article TEXT
 );
 
 CREATE INDEX IF NOT EXISTS news_analysis_snapshots_analyzed_idx ON news_analysis_snapshots(analyzed_at DESC);

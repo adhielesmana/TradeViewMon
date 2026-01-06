@@ -365,6 +365,39 @@ function getDefaultPrediction(): NewsAnalysis["marketPrediction"] {
   };
 }
 
+// Generate article-style text for history display
+function generateArticleText(prediction: NewsAnalysis["marketPrediction"], newsCount: number, analysisType?: string): string {
+  if (!prediction) return "";
+  
+  const sentimentText = prediction.overallSentiment === "BULLISH" ? "optimistic" :
+                        prediction.overallSentiment === "BEARISH" ? "cautious" : "balanced";
+  
+  const riskText = prediction.riskLevel === "LOW" ? "relatively low-risk" :
+                   prediction.riskLevel === "HIGH" ? "elevated risk" : "moderate risk";
+  
+  const keyFactorsText = prediction.keyFactors.length > 0 
+    ? prediction.keyFactors.slice(0, 3).join(", ")
+    : "current market developments";
+  
+  const symbolImpacts = prediction.affectedSymbols.slice(0, 3).map(s => 
+    `${s.symbol} (${s.impact.toLowerCase()})`
+  ).join(", ") || "various market sectors";
+  
+  const analysisTypeText = analysisType === "hourly" ? "hourly market" : "market";
+  
+  const paragraphs = [
+    `Our latest ${analysisTypeText} analysis, based on ${newsCount} recent financial news sources, presents a ${sentimentText} outlook on market conditions. With a confidence level of ${prediction.confidence}%, our AI models have identified several key factors driving current market sentiment and price movements.`,
+    
+    `${prediction.summary} The analysis indicates a ${riskText} environment for traders, with particular attention warranted on ${keyFactorsText}. These factors are expected to influence short-term price action across multiple asset classes.`,
+    
+    `Key assets affected by current conditions include ${symbolImpacts}. Our recommendation: ${prediction.tradingRecommendation}. Traders should monitor these developments closely and adjust positions according to their individual risk tolerance and investment objectives.`,
+    
+    `This analysis incorporates real-time news sentiment, technical indicators, and historical pattern recognition to provide actionable market intelligence. As market conditions can change rapidly, we recommend regular review of updated analyses to maintain optimal trading positions.`
+  ];
+  
+  return paragraphs.join("\n\n");
+}
+
 // ============================================
 // Cached News Analysis Functions
 // ============================================
@@ -393,6 +426,8 @@ async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"],
   if (!prediction) return;
   
   try {
+    const generatedArticle = generateArticleText(prediction, newsCount, "regular");
+    
     const snapshot: InsertNewsAnalysisSnapshot = {
       overallSentiment: prediction.overallSentiment,
       confidence: prediction.confidence,
@@ -403,6 +438,8 @@ async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"],
       riskLevel: prediction.riskLevel,
       newsCount: newsCount,
       analyzedAt: new Date(),
+      analysisType: "regular",
+      generatedArticle: generatedArticle,
     };
     
     await storage.saveNewsAnalysisSnapshot(snapshot);
@@ -719,6 +756,9 @@ Generate your market prediction now.`
       riskLevel: parsed.riskLevel || "MEDIUM",
     };
     
+    // Generate article text for history display
+    const generatedArticle = generateArticleText(prediction, recentArticles.length, "hourly");
+    
     // Save enhanced analysis to database with source tracking
     const snapshot: InsertNewsAnalysisSnapshot = {
       overallSentiment: prediction.overallSentiment,
@@ -736,7 +776,8 @@ Generate your market prediction now.`
         historicalTrendNote: parsed.historicalTrendNote || null,
         lastPredictionSentiments: historicalPredictions.slice(0, 5).map(p => p.overallSentiment)
       }),
-      analysisType: "hourly"
+      analysisType: "hourly",
+      generatedArticle: generatedArticle,
     };
     
     await storage.saveNewsAnalysisSnapshot(snapshot);
