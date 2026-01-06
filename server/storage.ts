@@ -168,6 +168,10 @@ export interface IStorage {
   getLatestNewsAnalysisSnapshot(): Promise<NewsAnalysisSnapshot | null>;
   saveNewsAnalysisSnapshot(snapshot: InsertNewsAnalysisSnapshot): Promise<NewsAnalysisSnapshot>;
   deleteOldNewsAnalysisSnapshots(keepCount?: number): Promise<number>;
+  getNewsAnalysisSnapshotsLast7Days(): Promise<NewsAnalysisSnapshot[]>;
+  
+  // News Articles for hourly AI analysis
+  getNewsArticlesLastHour(): Promise<NewsArticle[]>;
   
   // All open positions for scheduled tasks
   getAllOpenProfitablePositions(): Promise<DemoPosition[]>;
@@ -1446,6 +1450,22 @@ export class DatabaseStorage implements IStorage {
       .where(sql`${newsAnalysisSnapshots.id} NOT IN (${sql.join(keepIds.map(id => sql`${id}`), sql`, `)})`)
       .returning();
     return result.length;
+  }
+
+  async getNewsAnalysisSnapshotsLast7Days(): Promise<NewsAnalysisSnapshot[]> {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    return db.select()
+      .from(newsAnalysisSnapshots)
+      .where(gte(newsAnalysisSnapshots.analyzedAt, sevenDaysAgo))
+      .orderBy(desc(newsAnalysisSnapshots.analyzedAt));
+  }
+
+  async getNewsArticlesLastHour(): Promise<NewsArticle[]> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    return db.select()
+      .from(newsArticles)
+      .where(gte(newsArticles.fetchedAt, oneHourAgo))
+      .orderBy(desc(newsArticles.fetchedAt));
   }
 }
 
