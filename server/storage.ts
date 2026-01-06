@@ -1,7 +1,7 @@
 import { 
   marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState, aiSuggestions,
   demoAccounts, demoPositions, demoTransactions, appSettings, currencyRates, autoTradeSettings,
-  rssFeeds, monitoredSymbols, newsArticles,
+  rssFeeds, monitoredSymbols, newsArticles, newsAnalysisSnapshots,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
@@ -20,7 +20,8 @@ import {
   type AutoTradeSetting, type UpdateAutoTradeSetting,
   type RssFeed, type InsertRssFeed, type UpdateRssFeed,
   type MonitoredSymbol, type InsertMonitoredSymbol,
-  type NewsArticle, type InsertNewsArticle
+  type NewsArticle, type InsertNewsArticle,
+  type NewsAnalysisSnapshot, type InsertNewsAnalysisSnapshot
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, gte, lte, lt, gt, and, or, sql, inArray, isNull } from "drizzle-orm";
@@ -153,6 +154,11 @@ export interface IStorage {
     oldestArticle: Date | null;
     newestArticle: Date | null;
   }>;
+  
+  // News Analysis Snapshots (cached AI predictions)
+  getLatestNewsAnalysisSnapshot(): Promise<NewsAnalysisSnapshot | null>;
+  saveNewsAnalysisSnapshot(snapshot: InsertNewsAnalysisSnapshot): Promise<NewsAnalysisSnapshot>;
+  deleteOldNewsAnalysisSnapshots(keepCount?: number): Promise<number>;
   
   // All open positions for scheduled tasks
   getAllOpenProfitablePositions(): Promise<DemoPosition[]>;
@@ -1345,6 +1351,36 @@ export class DatabaseStorage implements IStorage {
       oldestArticle: stats?.oldestArticle || null,
       newestArticle: stats?.newestArticle || null,
     };
+  }
+
+  // News Analysis Snapshots CRUD (cached AI predictions)
+  async getLatestNewsAnalysisSnapshot(): Promise<NewsAnalysisSnapshot | null> {
+    const [result] = await db.select()
+      .from(newsAnalysisSnapshots)
+      .orderBy(desc(newsAnalysisSnapshots.analyzedAt))
+      .limit(1);
+    return result || null;
+  }
+
+  async saveNewsAnalysisSnapshot(snapshot: InsertNewsAnalysisSnapshot): Promise<NewsAnalysisSnapshot> {
+    const [result] = await db.insert(newsAnalysisSnapshots).values(snapshot).returning();
+    return result;
+  }
+
+  async deleteOldNewsAnalysisSnapshots(keepCount: number = 10): Promise<number> {
+    // Keep the most recent snapshots, delete older ones
+    const toKeep = await db.select({ id: newsAnalysisSnapshots.id })
+      .from(newsAnalysisSnapshots)
+      .orderBy(desc(newsAnalysisSnapshots.analyzedAt))
+      .limit(keepCount);
+    
+    const keepIds = toKeep.map(s => s.id);
+    if (keepIds.length === 0) return 0;
+    
+    const result = await db.delete(newsAnalysisSnapshots)
+      .where(sql`${newsAnalysisSnapshots.id} NOT IN (${sql.join(keepIds.map(id => sql`${id}`), sql`, `)})`)
+      .returning();
+    return result.length;
   }
 }
 

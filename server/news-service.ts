@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import crypto from "crypto";
 import { storage } from "./storage";
 import { decrypt } from "./encryption";
-import type { InsertNewsArticle, NewsArticle } from "@shared/schema";
+import type { InsertNewsArticle, NewsArticle, InsertNewsAnalysisSnapshot, NewsAnalysisSnapshot } from "@shared/schema";
 
 const parser = new Parser({
   customFields: {
@@ -365,6 +365,199 @@ function getDefaultPrediction(): NewsAnalysis["marketPrediction"] {
   };
 }
 
+// ============================================
+// Cached News Analysis Functions
+// ============================================
+
+// Cache staleness threshold (10 minutes)
+const CACHE_STALE_MINUTES = 10;
+
+// Flag to prevent multiple simultaneous background refreshes
+let isRefreshing = false;
+
+// Convert database snapshot to NewsAnalysis marketPrediction format
+function snapshotToMarketPrediction(snapshot: NewsAnalysisSnapshot): NewsAnalysis["marketPrediction"] {
+  return {
+    overallSentiment: snapshot.overallSentiment as "BULLISH" | "BEARISH" | "NEUTRAL",
+    confidence: snapshot.confidence,
+    summary: snapshot.summary,
+    keyFactors: snapshot.keyFactors ? JSON.parse(snapshot.keyFactors) : [],
+    affectedSymbols: snapshot.affectedSymbols ? JSON.parse(snapshot.affectedSymbols) : [],
+    tradingRecommendation: snapshot.tradingRecommendation || "Monitor market conditions",
+    riskLevel: (snapshot.riskLevel as "LOW" | "MEDIUM" | "HIGH") || "MEDIUM",
+  };
+}
+
+// Save AI prediction to cache
+async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"], newsCount: number): Promise<void> {
+  if (!prediction) return;
+  
+  try {
+    const snapshot: InsertNewsAnalysisSnapshot = {
+      overallSentiment: prediction.overallSentiment,
+      confidence: prediction.confidence,
+      summary: prediction.summary,
+      keyFactors: JSON.stringify(prediction.keyFactors),
+      affectedSymbols: JSON.stringify(prediction.affectedSymbols),
+      tradingRecommendation: prediction.tradingRecommendation,
+      riskLevel: prediction.riskLevel,
+      newsCount: newsCount,
+      analyzedAt: new Date(),
+    };
+    
+    await storage.saveNewsAnalysisSnapshot(snapshot);
+    
+    // Clean up old snapshots (keep last 10)
+    await storage.deleteOldNewsAnalysisSnapshots(10);
+    
+    console.log("[NewsService] Analysis cached successfully");
+  } catch (error) {
+    console.error("[NewsService] Failed to cache analysis:", error);
+  }
+}
+
+// Background refresh function (non-blocking)
+async function backgroundRefresh(): Promise<void> {
+  if (isRefreshing) {
+    console.log("[NewsService] Background refresh already in progress");
+    return;
+  }
+  
+  isRefreshing = true;
+  console.log("[NewsService] Starting background refresh...");
+  
+  try {
+    const news = await fetchNews(10);
+    if (news.length > 0) {
+      const prediction = await analyzeNewsWithAI(news);
+      if (prediction) {
+        await saveAnalysisToCache(prediction, news.length);
+      }
+    }
+    console.log("[NewsService] Background refresh completed");
+  } catch (error) {
+    console.error("[NewsService] Background refresh failed:", error);
+  } finally {
+    isRefreshing = false;
+  }
+}
+
+// Extended NewsAnalysis with cache metadata
+export interface CachedNewsAnalysis extends NewsAnalysis {
+  isCached: boolean;
+  cacheAge?: number; // Age in minutes
+  isRefreshing: boolean;
+}
+
+// Get news analysis with caching for fast page loads
+export async function getNewsAndAnalysisCached(): Promise<CachedNewsAnalysis> {
+  try {
+    // Try to get cached analysis first
+    const cachedSnapshot = await storage.getLatestNewsAnalysisSnapshot();
+    
+    if (cachedSnapshot) {
+      const ageMs = Date.now() - cachedSnapshot.analyzedAt.getTime();
+      const ageMinutes = Math.round(ageMs / 60000);
+      
+      // Get stored news articles for display
+      const storedArticles = await storage.getNewsArticles(10);
+      const news: NewsItem[] = storedArticles.map(article => ({
+        title: article.title,
+        link: article.link,
+        pubDate: article.publishedAt?.toISOString() || article.fetchedAt.toISOString(),
+        content: article.content || "",
+        source: article.source || "News",
+      }));
+      
+      const cachedResult: CachedNewsAnalysis = {
+        fetchedAt: cachedSnapshot.analyzedAt.toISOString(),
+        newsCount: news.length || cachedSnapshot.newsCount,
+        news: news.length > 0 ? news : [],
+        marketPrediction: snapshotToMarketPrediction(cachedSnapshot),
+        isCached: true,
+        cacheAge: ageMinutes,
+        isRefreshing: isRefreshing,
+      };
+      
+      // Trigger background refresh if cache is stale
+      if (ageMinutes >= CACHE_STALE_MINUTES && !isRefreshing) {
+        console.log(`[NewsService] Cache is ${ageMinutes}min old, triggering background refresh`);
+        backgroundRefresh(); // Don't await - run in background
+      }
+      
+      return cachedResult;
+    }
+    
+    // No cache available - fetch fresh data
+    console.log("[NewsService] No cache available, fetching fresh data...");
+    const news = await fetchNews(10);
+    const prediction = await analyzeNewsWithAI(news);
+    
+    // Save to cache for next time
+    if (prediction) {
+      await saveAnalysisToCache(prediction, news.length);
+    }
+    
+    return {
+      fetchedAt: new Date().toISOString(),
+      newsCount: news.length,
+      news,
+      marketPrediction: prediction,
+      isCached: false,
+      cacheAge: 0,
+      isRefreshing: false,
+    };
+  } catch (error: any) {
+    // Try to return cached data even on error
+    const cachedSnapshot = await storage.getLatestNewsAnalysisSnapshot();
+    if (cachedSnapshot) {
+      return {
+        fetchedAt: cachedSnapshot.analyzedAt.toISOString(),
+        newsCount: cachedSnapshot.newsCount,
+        news: [],
+        marketPrediction: snapshotToMarketPrediction(cachedSnapshot),
+        isCached: true,
+        cacheAge: Math.round((Date.now() - cachedSnapshot.analyzedAt.getTime()) / 60000),
+        isRefreshing: false,
+        error: error.message || "Failed to refresh news",
+      };
+    }
+    
+    return {
+      fetchedAt: new Date().toISOString(),
+      newsCount: 0,
+      news: [],
+      marketPrediction: null,
+      error: error.message || "Failed to fetch news",
+      isCached: false,
+      isRefreshing: false,
+    };
+  }
+}
+
+// Force refresh (bypasses cache)
+export async function forceRefreshNewsAnalysis(): Promise<CachedNewsAnalysis> {
+  console.log("[NewsService] Force refresh requested");
+  
+  const news = await fetchNews(10);
+  const prediction = await analyzeNewsWithAI(news);
+  
+  if (prediction) {
+    await saveAnalysisToCache(prediction, news.length);
+  }
+  
+  return {
+    fetchedAt: new Date().toISOString(),
+    newsCount: news.length,
+    news,
+    marketPrediction: prediction,
+    isCached: false,
+    cacheAge: 0,
+    isRefreshing: false,
+  };
+}
+
+// Legacy function - kept for backward compatibility
 export async function getNewsAndAnalysis(): Promise<NewsAnalysis> {
   try {
     const news = await fetchNews(10);
