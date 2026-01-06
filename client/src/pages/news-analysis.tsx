@@ -23,6 +23,7 @@ import {
   Calendar
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
+import marketAnalysisImage from "@assets/stock_images/stock_market_trading_4aea7bde.jpg";
 
 interface NewsArticle {
   id: number;
@@ -177,14 +178,16 @@ export default function NewsAnalysisPage() {
             <p className="text-sm text-muted-foreground">Loading market news and predictions...</p>
           </div>
         </div>
-        <div className="grid gap-6 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
+        <div className="flex flex-col gap-6">
+          <Card>
             <CardHeader>
               <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-64 mt-2" />
             </CardHeader>
             <CardContent className="space-y-4">
-              {[1, 2, 3].map((i) => (
+              {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-full" />
                   <Skeleton className="h-4 w-full" />
                   <Skeleton className="h-4 w-3/4" />
                 </div>
@@ -195,8 +198,13 @@ export default function NewsAnalysisPage() {
             <CardHeader>
               <Skeleton className="h-6 w-36" />
             </CardHeader>
-            <CardContent>
-              <Skeleton className="h-24 w-full" />
+            <CardContent className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                </div>
+              ))}
             </CardContent>
           </Card>
         </div>
@@ -247,42 +255,93 @@ export default function NewsAnalysisPage() {
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* AI Market Prediction */}
-        <Card className="lg:col-span-1">
+      <div className="flex flex-col gap-6">
+        {/* AI Market Prediction - Full Width */}
+        <Card>
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <Brain className="h-5 w-5 text-purple-500" />
-              <CardTitle>AI Market Prediction</CardTitle>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <Brain className="h-5 w-5 text-purple-500" />
+                <CardTitle>AI Market Prediction</CardTitle>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {analysis?.marketPrediction && (
+                  <>
+                    <SentimentBadge sentiment={analysis.marketPrediction.overallSentiment} />
+                    <Badge variant="outline">
+                      {analysis.marketPrediction.confidence}% Confidence
+                    </Badge>
+                    <RiskBadge risk={analysis.marketPrediction.riskLevel} />
+                  </>
+                )}
+              </div>
             </div>
             <CardDescription>
               OpenAI analysis of {pagination?.total || analysis?.newsCount || 0} news articles (last 7 days)
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             {analysis?.marketPrediction ? (
               <>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium">Sentiment:</span>
-                  <SentimentBadge sentiment={analysis.marketPrediction.overallSentiment} />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium">Confidence:</span>
-                  <Badge variant="outline">
-                    {analysis.marketPrediction.confidence}%
-                  </Badge>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium">Risk Level:</span>
-                  <RiskBadge risk={analysis.marketPrediction.riskLevel} />
+                {/* Article-Style Analysis Report */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold border-b pb-2">Market Analysis Report</h3>
+                  
+                  {/* Featured Image */}
+                  <div className="relative w-full h-48 md:h-64 lg:h-72 rounded-lg overflow-hidden">
+                    <img 
+                      src={marketAnalysisImage} 
+                      alt="Market Analysis" 
+                      className="w-full h-full object-cover"
+                      data-testid="img-market-analysis"
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4">
+                      <span className="text-white text-sm font-medium">
+                        {format(new Date(), "EEEE, MMMM d, yyyy")} - Market Update
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <article className="prose prose-sm dark:prose-invert max-w-none space-y-4">
+                    <p className="text-muted-foreground leading-relaxed text-justify">
+                      Current market analysis indicates a <strong>{analysis.marketPrediction.overallSentiment.toLowerCase()}</strong> outlook 
+                      with a confidence level of {analysis.marketPrediction.confidence}%. {analysis.marketPrediction.summary}
+                    </p>
+                    
+                    <p className="text-muted-foreground leading-relaxed text-justify">
+                      {analysis.marketPrediction.keyFactors.length > 0 && (
+                        <>
+                          Several key factors are driving market sentiment. {analysis.marketPrediction.keyFactors[0]}
+                          {analysis.marketPrediction.keyFactors[1] && ` Additionally, ${analysis.marketPrediction.keyFactors[1].toLowerCase()}`}
+                          {analysis.marketPrediction.keyFactors[2] && ` Furthermore, ${analysis.marketPrediction.keyFactors[2].toLowerCase()}`}
+                        </>
+                      )}
+                    </p>
+                    
+                    <p className="text-muted-foreground leading-relaxed text-justify">
+                      {analysis.marketPrediction.affectedSymbols.length > 0 && (
+                        <>
+                          Among the affected instruments, {analysis.marketPrediction.affectedSymbols.map((s, i) => {
+                            const prefix = i === 0 ? "" : i === analysis.marketPrediction!.affectedSymbols.length - 1 ? " and " : ", ";
+                            return `${prefix}${s.symbol} shows ${s.impact.toLowerCase()} impact due to ${s.reason.toLowerCase()}`;
+                          }).join("")}.
+                        </>
+                      )}
+                      {" "}The current risk assessment suggests a <strong>{analysis.marketPrediction.riskLevel.toLowerCase()}</strong> risk environment for trading activities.
+                    </p>
+                    
+                    <p className="text-muted-foreground leading-relaxed text-justify">
+                      Based on this comprehensive analysis, {analysis.marketPrediction.tradingRecommendation}
+                      {" "}Traders should remain vigilant and monitor market conditions closely as these factors continue to evolve throughout the trading session.
+                    </p>
+                  </article>
                 </div>
 
                 <Separator />
 
+                {/* Summary Section */}
                 <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Summary</h4>
+                  <h4 className="text-sm font-medium">Quick Summary</h4>
                   <p className="text-sm text-muted-foreground">
                     {analysis.marketPrediction.summary}
                   </p>
@@ -322,13 +381,15 @@ export default function NewsAnalysisPage() {
                     <Separator />
                     <div className="space-y-2">
                       <h4 className="text-sm font-medium">Symbol Impact</h4>
-                      <div className="space-y-2">
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                         {analysis.marketPrediction.affectedSymbols.map((item, idx) => (
-                          <div key={idx} className="flex flex-wrap items-start gap-2 text-sm">
-                            <Badge variant="outline" className="font-mono">
-                              {item.symbol}
-                            </Badge>
-                            <ImpactBadge impact={item.impact} />
+                          <div key={idx} className="flex flex-col gap-1 p-3 rounded-lg bg-muted/50">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="font-mono">
+                                {item.symbol}
+                              </Badge>
+                              <ImpactBadge impact={item.impact} />
+                            </div>
                             <span className="text-muted-foreground text-xs">
                               {item.reason}
                             </span>
@@ -351,7 +412,7 @@ export default function NewsAnalysisPage() {
         </Card>
 
         {/* News Articles with Pagination */}
-        <Card className="lg:col-span-2">
+        <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
