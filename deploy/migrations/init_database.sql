@@ -511,6 +511,10 @@ BEGIN
     END IF;
     
     -- Add missing columns to news_analysis_snapshots (for enhanced hourly AI analysis)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='news_analysis_snapshots' AND column_name='headline') THEN
+        ALTER TABLE news_analysis_snapshots ADD COLUMN headline TEXT;
+    END IF;
+    
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='news_analysis_snapshots' AND column_name='source_articles') THEN
         ALTER TABLE news_analysis_snapshots ADD COLUMN source_articles TEXT;
     END IF;

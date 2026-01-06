@@ -462,6 +462,7 @@ export const newsAnalysisSnapshots = pgTable("news_analysis_snapshots", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   overallSentiment: varchar("overall_sentiment", { length: 20 }).notNull(), // 'BULLISH', 'BEARISH', 'NEUTRAL'
   confidence: real("confidence").notNull(),
+  headline: text("headline"), // Natural news-style headline extracted from key article insights
   summary: text("summary").notNull(),
   keyFactors: text("key_factors"), // JSON array of strings
   affectedSymbols: text("affected_symbols"), // JSON array of symbol impacts
