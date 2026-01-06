@@ -150,6 +150,7 @@ export interface IStorage {
   // News Articles (7-day retention for AI learning)
   getNewsArticles(limit?: number): Promise<NewsArticle[]>;
   getNewsArticlesSince(since: Date): Promise<NewsArticle[]>;
+  getNewsArticlesPaginated(page: number, pageSize: number, daysBack?: number): Promise<{ articles: NewsArticle[]; total: number; totalPages: number }>;
   getNewsArticleByLinkHash(linkHash: string): Promise<NewsArticle | null>;
   insertNewsArticle(article: InsertNewsArticle): Promise<NewsArticle>;
   insertNewsArticleBatch(articles: InsertNewsArticle[]): Promise<NewsArticle[]>;
@@ -1328,6 +1329,27 @@ export class DatabaseStorage implements IStorage {
       .from(newsArticles)
       .where(gte(newsArticles.fetchedAt, since))
       .orderBy(desc(newsArticles.fetchedAt));
+  }
+
+  async getNewsArticlesPaginated(page: number, pageSize: number, daysBack: number = 7): Promise<{ articles: NewsArticle[]; total: number; totalPages: number }> {
+    const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+    const offset = (page - 1) * pageSize;
+    
+    const [countResult] = await db.select({ count: sql<number>`count(*)` })
+      .from(newsArticles)
+      .where(gte(newsArticles.fetchedAt, since));
+    
+    const total = Number(countResult?.count || 0);
+    const totalPages = total === 0 ? 1 : Math.ceil(total / pageSize);
+    
+    const articles = await db.select()
+      .from(newsArticles)
+      .where(gte(newsArticles.fetchedAt, since))
+      .orderBy(desc(newsArticles.fetchedAt))
+      .limit(pageSize)
+      .offset(offset);
+    
+    return { articles, total, totalPages };
   }
 
   async getNewsArticleByLinkHash(linkHash: string): Promise<NewsArticle | null> {

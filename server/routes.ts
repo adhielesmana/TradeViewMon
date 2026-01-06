@@ -1551,6 +1551,30 @@ export async function registerRoutes(
     }
   });
 
+  // Paginated news articles from last 7 days
+  app.get("/api/news/articles", requireAuth, async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = Math.min(50, Math.max(10, parseInt(req.query.pageSize as string) || 20));
+      const daysBack = Math.min(30, Math.max(1, parseInt(req.query.daysBack as string) || 7));
+      
+      const result = await storage.getNewsArticlesPaginated(page, pageSize, daysBack);
+      res.json({
+        articles: result.articles,
+        pagination: {
+          page,
+          pageSize,
+          total: result.total,
+          totalPages: result.totalPages,
+          daysBack,
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching paginated news articles:", error);
+      res.status(500).json({ error: "Failed to fetch news articles" });
+    }
+  });
+
   // RSS Feeds CRUD API
   app.get("/api/settings/rss-feeds", requireAuth, requireRole(["superadmin"]), async (req, res) => {
     try {

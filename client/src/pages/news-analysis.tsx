@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,9 +17,35 @@ import {
   ExternalLink,
   Brain,
   Target,
-  Shield
+  Shield,
+  ChevronLeft,
+  ChevronRight,
+  Calendar
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
+
+interface NewsArticle {
+  id: number;
+  title: string;
+  link: string;
+  content: string | null;
+  source: string | null;
+  publishedAt: string | null;
+  fetchedAt: string;
+  sentiment: string | null;
+  affectedSymbols: string | null;
+}
+
+interface PaginatedNewsResponse {
+  articles: NewsArticle[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    daysBack: number;
+  };
+}
 
 interface NewsItem {
   title: string;
@@ -67,7 +94,6 @@ function SentimentIcon({ sentiment }: { sentiment: string }) {
 
 function SentimentBadge({ sentiment }: { sentiment: string }) {
   const variant = sentiment === "BULLISH" ? "default" : sentiment === "BEARISH" ? "destructive" : "secondary";
-  const color = sentiment === "BULLISH" ? "bg-green-500" : sentiment === "BEARISH" ? "bg-red-500" : "bg-yellow-500";
   
   return (
     <Badge variant={variant} className={`gap-1 ${sentiment === "BULLISH" ? "bg-green-500 hover:bg-green-600" : ""}`}>
@@ -102,19 +128,46 @@ function ImpactBadge({ impact }: { impact: string }) {
   return <Badge variant="outline">Neutral</Badge>;
 }
 
+function ArticleSentimentBadge({ sentiment }: { sentiment: string | null }) {
+  if (!sentiment) return null;
+  const upper = sentiment.toUpperCase();
+  if (upper === "POSITIVE" || upper === "BULLISH") {
+    return <Badge variant="outline" className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Positive</Badge>;
+  }
+  if (upper === "NEGATIVE" || upper === "BEARISH") {
+    return <Badge variant="outline" className="text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">Negative</Badge>;
+  }
+  return <Badge variant="outline" className="text-xs">Neutral</Badge>;
+}
+
 export default function NewsAnalysisPage() {
-  const { data: analysis, isLoading, isFetching, refetch } = useQuery<NewsAnalysis>({
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 15;
+
+  const { data: analysis, isLoading: analysisLoading, isFetching: analysisFetching, refetch } = useQuery<NewsAnalysis>({
     queryKey: ["/api/news/analysis"],
-    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
-    staleTime: 2 * 60 * 1000, // Consider stale after 2 minutes
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const { data: paginatedNews, isLoading: newsLoading, refetch: refetchNews } = useQuery<PaginatedNewsResponse>({
+    queryKey: [`/api/news/articles?page=${currentPage}&pageSize=${pageSize}&daysBack=7`],
+    refetchInterval: 60 * 1000,
   });
 
   const handleRefresh = () => {
+    setCurrentPage(1);
     queryClient.invalidateQueries({ queryKey: ["/api/news/analysis"] });
+    queryClient.invalidateQueries({ predicate: (query) => String(query.queryKey[0] || '').startsWith('/api/news/articles') });
     refetch();
+    refetchNews();
   };
 
-  if (isLoading) {
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+  };
+
+  if (analysisLoading) {
     return (
       <div className="flex flex-col gap-6 p-6">
         <div className="flex items-center gap-3">
@@ -151,6 +204,8 @@ export default function NewsAnalysisPage() {
     );
   }
 
+  const pagination = paginatedNews?.pagination;
+
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -159,7 +214,7 @@ export default function NewsAnalysisPage() {
           <div>
             <h1 className="text-2xl font-bold">News & AI Analysis</h1>
             <p className="text-sm text-muted-foreground">
-              AI-powered market predictions based on financial news
+              AI-powered market predictions based on 7 days of financial news
             </p>
           </div>
         </div>
@@ -174,10 +229,10 @@ export default function NewsAnalysisPage() {
             variant="outline"
             size="sm"
             onClick={handleRefresh}
-            disabled={isFetching}
+            disabled={analysisFetching}
             data-testid="button-refresh-news"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 mr-2 ${analysisFetching ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>
@@ -194,14 +249,14 @@ export default function NewsAnalysisPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* AI Market Prediction */}
-        <Card className="lg:col-span-1 lg:row-span-2">
+        <Card className="lg:col-span-1">
           <CardHeader>
             <div className="flex items-center gap-2">
               <Brain className="h-5 w-5 text-purple-500" />
               <CardTitle>AI Market Prediction</CardTitle>
             </div>
             <CardDescription>
-              OpenAI analysis of {analysis?.newsCount || 0} news articles
+              OpenAI analysis of {pagination?.total || analysis?.newsCount || 0} news articles (last 7 days)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -295,50 +350,116 @@ export default function NewsAnalysisPage() {
           </CardContent>
         </Card>
 
-        {/* News Headlines */}
+        {/* News Articles with Pagination */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <Newspaper className="h-5 w-5 text-orange-500" />
-              <CardTitle>Latest Financial News</CardTitle>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Newspaper className="h-5 w-5 text-orange-500" />
+                <CardTitle>Financial News (Last 7 Days)</CardTitle>
+              </div>
+              {pagination && (
+                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <Calendar className="h-4 w-4" />
+                  {pagination.total} articles
+                </div>
+              )}
             </div>
             <CardDescription>
-              Headlines from your configured RSS feed
+              Headlines from your configured RSS feeds - AI learns from all articles
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {analysis?.news && analysis.news.length > 0 ? (
+            {newsLoading ? (
               <div className="space-y-4">
-                {analysis.news.map((item, idx) => (
-                  <div key={idx} className="border-b pb-4 last:border-b-0 last:pb-0">
-                    <a
-                      href={item.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group"
-                      data-testid={`link-news-${idx}`}
-                    >
-                      <h4 className="text-sm font-medium group-hover:text-primary transition-colors flex items-start gap-2">
-                        {item.title}
-                        <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </h4>
-                    </a>
-                    <div className="flex flex-wrap items-center gap-2 mt-1">
-                      <Badge variant="outline" className="text-xs">
-                        {item.source}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {format(new Date(item.pubDate), "MMM d, yyyy HH:mm")}
-                      </span>
-                    </div>
-                    {item.content && (
-                      <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
-                        {item.content}
-                      </p>
-                    )}
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="space-y-2 border-b pb-4 last:border-b-0">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/4" />
                   </div>
                 ))}
               </div>
+            ) : paginatedNews?.articles && paginatedNews.articles.length > 0 ? (
+              <>
+                <div className="space-y-4 max-h-[600px] overflow-y-auto">
+                  {paginatedNews.articles.map((article) => (
+                    <div key={article.id} className="border-b pb-4 last:border-b-0 last:pb-0" data-testid={`article-${article.id}`}>
+                      <a
+                        href={article.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group"
+                        data-testid={`link-article-${article.id}`}
+                      >
+                        <h4 className="text-sm font-medium group-hover:text-primary transition-colors flex items-start gap-2">
+                          {article.title}
+                          <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </h4>
+                      </a>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        {article.source && (
+                          <Badge variant="outline" className="text-xs">
+                            {article.source}
+                          </Badge>
+                        )}
+                        <ArticleSentimentBadge sentiment={article.sentiment} />
+                        <span className="text-xs text-muted-foreground">
+                          {article.publishedAt 
+                            ? formatDistanceToNow(new Date(article.publishedAt), { addSuffix: true })
+                            : formatDistanceToNow(new Date(article.fetchedAt), { addSuffix: true })
+                          }
+                        </span>
+                      </div>
+                      {article.content && (
+                        <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
+                          {article.content}
+                        </p>
+                      )}
+                      {article.affectedSymbols && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {article.affectedSymbols.split(",").map((symbol, idx) => (
+                            <Badge key={idx} variant="secondary" className="text-xs font-mono">
+                              {symbol.trim()}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Pagination Controls */}
+                {pagination && pagination.totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                    <div className="text-sm text-muted-foreground">
+                      Page {pagination.page} of {pagination.totalPages}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage <= 1}
+                        data-testid="button-prev-page"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage >= pagination.totalPages}
+                        data-testid="button-next-page"
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <Newspaper className="h-12 w-12 mx-auto mb-4 opacity-50" />
