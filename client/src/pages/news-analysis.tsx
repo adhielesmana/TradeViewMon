@@ -341,9 +341,12 @@ export default function NewsAnalysisPage() {
                       data-testid="img-market-analysis"
                     />
                     <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4">
-                      <span className="text-white text-sm font-medium">
-                        {format(new Date(), "EEEE, MMMM d, yyyy")} - Market Update
+                      <span className="text-white text-sm opacity-80">
+                        {format(new Date(), "EEEE, MMMM d, yyyy")}
                       </span>
+                      <div className="text-white text-lg font-semibold">
+                        {analysis.marketPrediction.headline || "Market Analysis"}
+                      </div>
                     </div>
                   </div>
                   
