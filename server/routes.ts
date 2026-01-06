@@ -1701,7 +1701,7 @@ export async function registerRoutes(
       
       // Auto-detect Indonesian stocks by (IDX) in displayName OR currency = IDR
       const isIndonesianStock = trimmedDisplayName.includes("(IDX)") || trimmedCurrency === "IDR";
-      const finalCategory = isIndonesianStock ? "stocks" : category.trim();
+      const finalCategory = isIndonesianStock ? "Indonesian Stocks" : category.trim();
       const finalCurrency = isIndonesianStock ? "IDR" : trimmedCurrency;
       
       // Register with market data service for Yahoo Finance fetching
@@ -1742,7 +1742,7 @@ export async function registerRoutes(
       const isIndonesianStock = trimmedDisplayName?.includes("(IDX)") || trimmedCurrency === "IDR";
       
       // Override category and currency for Indonesian stocks
-      const finalCategory = isIndonesianStock ? "stocks" : category?.trim();
+      const finalCategory = isIndonesianStock ? "Indonesian Stocks" : category?.trim();
       const finalCurrency = isIndonesianStock ? "IDR" : trimmedCurrency;
       
       // Register with market data service for Yahoo Finance fetching
