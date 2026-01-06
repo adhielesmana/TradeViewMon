@@ -27,6 +27,7 @@ export interface NewsAnalysis {
   newsCount: number;
   news: NewsItem[];
   marketPrediction: {
+    headline?: string; // Natural news-style headline for display
     overallSentiment: "BULLISH" | "BEARISH" | "NEUTRAL";
     confidence: number;
     summary: string;
@@ -274,6 +275,7 @@ Focus on how these news items might affect the following trading instruments: ${
 
 Respond in JSON format with this exact structure:
 {
+  "headline": "A natural news-style headline (like a real newspaper) highlighting the key market story from the articles - NOT 'Market Outlook' or 'AI Analysis' style",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
   "summary": "Brief 2-3 sentence market outlook based on the news",
@@ -283,7 +285,13 @@ Respond in JSON format with this exact structure:
   ],
   "tradingRecommendation": "Brief actionable recommendation",
   "riskLevel": "LOW" | "MEDIUM" | "HIGH"
-}`,
+}
+
+IMPORTANT: The "headline" must read like a real news headline from Reuters, Bloomberg, or WSJ. Examples:
+- "Gold Surges as Fed Signals Rate Pause"
+- "Asian Markets Rally on Strong China Data"
+- "Oil Prices Slip Amid OPEC Supply Concerns"
+Do NOT use generic titles like "Market Outlook" or "Trading Analysis".`,
         },
         {
           role: "user",
@@ -338,6 +346,7 @@ Respond in JSON format with this exact structure:
       : [];
     
     return {
+      headline: typeof prediction.headline === "string" ? prediction.headline : undefined,
       overallSentiment: sentiment,
       confidence: Math.min(100, Math.max(0, Number(prediction.confidence) || 50)),
       summary: typeof prediction.summary === "string" ? prediction.summary : "Market conditions remain mixed",
@@ -359,6 +368,7 @@ Respond in JSON format with this exact structure:
 
 function getDefaultPrediction(): NewsAnalysis["marketPrediction"] {
   return {
+    headline: "Markets Await Key Economic Developments",
     overallSentiment: "NEUTRAL",
     confidence: 50,
     summary: "Unable to analyze news at this time",
@@ -415,6 +425,7 @@ let isRefreshing = false;
 // Convert database snapshot to NewsAnalysis marketPrediction format
 function snapshotToMarketPrediction(snapshot: NewsAnalysisSnapshot): NewsAnalysis["marketPrediction"] {
   return {
+    headline: snapshot.headline || undefined,
     overallSentiment: snapshot.overallSentiment as "BULLISH" | "BEARISH" | "NEUTRAL",
     confidence: snapshot.confidence,
     summary: snapshot.summary,
@@ -435,6 +446,7 @@ async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"],
     const snapshot: InsertNewsAnalysisSnapshot = {
       overallSentiment: prediction.overallSentiment,
       confidence: prediction.confidence,
+      headline: prediction.headline || null,
       summary: prediction.summary,
       keyFactors: JSON.stringify(prediction.keyFactors),
       affectedSymbols: JSON.stringify(prediction.affectedSymbols),
@@ -699,6 +711,7 @@ Focus on these trading instruments: ${supportedSymbols.join(", ")}
 
 Respond in JSON format with this exact structure:
 {
+  "headline": "A natural news-style headline highlighting the key market story - like Reuters, Bloomberg, or WSJ",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
   "summary": "Detailed 3-5 sentence market outlook based on FULL article analysis and historical context",
@@ -710,6 +723,12 @@ Respond in JSON format with this exact structure:
   "riskLevel": "LOW" | "MEDIUM" | "HIGH",
   "historicalTrendNote": "Brief note on how current analysis aligns with or differs from recent 7-day predictions"
 }
+
+IMPORTANT: The "headline" must read like a real news headline from Reuters, Bloomberg, or WSJ. Examples:
+- "Gold Surges as Fed Signals Rate Pause"
+- "Asian Markets Rally on Strong China Data"  
+- "Oil Prices Slip Amid OPEC Supply Concerns"
+Do NOT use generic titles like "Market Outlook" or "Trading Analysis".
 
 BE CONSERVATIVE with confidence scores - markets are uncertain.
 If articles lack clear trading signals, default to NEUTRAL with appropriate explanation.`
@@ -751,6 +770,7 @@ Generate your market prediction now.`
     
     const parsed = JSON.parse(jsonMatch[0]);
     const prediction: NewsAnalysis["marketPrediction"] = {
+      headline: typeof parsed.headline === "string" ? parsed.headline : undefined,
       overallSentiment: parsed.overallSentiment || "NEUTRAL",
       confidence: Math.min(100, Math.max(0, parsed.confidence || 50)),
       summary: parsed.summary || "Analysis completed",
@@ -767,6 +787,7 @@ Generate your market prediction now.`
     const snapshot: InsertNewsAnalysisSnapshot = {
       overallSentiment: prediction.overallSentiment,
       confidence: prediction.confidence,
+      headline: prediction.headline || null,
       summary: prediction.summary,
       keyFactors: JSON.stringify(prediction.keyFactors),
       affectedSymbols: JSON.stringify(prediction.affectedSymbols),
