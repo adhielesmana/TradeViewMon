@@ -149,6 +149,29 @@ CREATE INDEX IF NOT EXISTS ai_suggestions_generated_at_idx ON ai_suggestions(gen
 CREATE INDEX IF NOT EXISTS ai_suggestions_symbol_generated_idx ON ai_suggestions(symbol, generated_at);
 
 -- ============================================
+-- TABLE: symbol_categories
+-- ============================================
+CREATE TABLE IF NOT EXISTS symbol_categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT true
+);
+
+-- Seed default categories (ON CONFLICT prevents duplicates on re-run)
+INSERT INTO symbol_categories (name, display_order, is_active) VALUES 
+    ('Commodities', 100, true),
+    ('Indonesian Stocks', 90, true),
+    ('Indices', 80, true),
+    ('Crypto', 70, true),
+    ('Forex', 60, true),
+    ('Bonds', 50, true),
+    ('Stocks', 40, true),
+    ('Precious Metals', 95, true),
+    ('Mining Stocks', 85, true)
+ON CONFLICT (name) DO NOTHING;
+
+-- ============================================
 -- TABLE: monitored_symbols
 -- ============================================
 CREATE TABLE IF NOT EXISTS monitored_symbols (

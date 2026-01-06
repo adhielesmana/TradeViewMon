@@ -6,6 +6,8 @@ TradeViewMon is a full-stack financial application providing real-time stock mar
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+**IMPORTANT Database Rule**: Whenever creating new database tables in development (via Drizzle schema), ALWAYS also add the corresponding CREATE TABLE statement to `deploy/migrations/init_database.sql` so the table is created during production deployment. This ensures development and production databases stay in sync.
+
 ## System Architecture
 
 ### Frontend
@@ -54,8 +56,9 @@ Every auto-trade must pass through 5 mandatory validation gates (in order):
     4.  `system_status`: Component health monitoring.
     5.  `price_state`: Price continuity (symbol, last open/close, timestamp).
     6.  `app_settings`: Encrypted application configuration and API keys.
-    7.  `monitored_symbols`: Database-driven symbol management with name, category, currency, enabled status.
-    8.  `news_analysis_snapshots`: Cached AI market predictions for fast News & AI Analysis page loads.
+    7.  `symbol_categories`: Dynamic category management (name, displayOrder, isActive) with CRUD API at `/api/settings/categories`.
+    8.  `monitored_symbols`: Database-driven symbol management with name, category, currency, enabled status.
+    9.  `news_analysis_snapshots`: Cached AI market predictions for fast News & AI Analysis page loads.
 
 ### Symbol & Currency Management
 - **Database-Driven Symbols**: All symbols are managed via `monitored_symbols` table with `/api/market/symbols` endpoint.
