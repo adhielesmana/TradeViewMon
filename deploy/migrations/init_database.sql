@@ -510,6 +510,23 @@ BEGIN
         ALTER TABLE ai_suggestions ADD COLUMN valid_until TIMESTAMP;
     END IF;
     
+    -- Add missing columns to news_analysis_snapshots (for enhanced hourly AI analysis)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='news_analysis_snapshots' AND column_name='source_articles') THEN
+        ALTER TABLE news_analysis_snapshots ADD COLUMN source_articles TEXT;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='news_analysis_snapshots' AND column_name='historical_context') THEN
+        ALTER TABLE news_analysis_snapshots ADD COLUMN historical_context TEXT;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='news_analysis_snapshots' AND column_name='analysis_type') THEN
+        ALTER TABLE news_analysis_snapshots ADD COLUMN analysis_type VARCHAR(50) DEFAULT 'regular';
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='news_analysis_snapshots' AND column_name='generated_article') THEN
+        ALTER TABLE news_analysis_snapshots ADD COLUMN generated_article TEXT;
+    END IF;
+    
     -- Add missing columns to monitored_symbols
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='monitored_symbols' AND column_name='created_at') THEN
         ALTER TABLE monitored_symbols ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT NOW();

@@ -6,7 +6,11 @@ TradeViewMon is a full-stack financial application providing real-time stock mar
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
-**IMPORTANT Database Rule**: Whenever creating new database tables in development (via Drizzle schema), ALWAYS also add the corresponding CREATE TABLE statement to `deploy/migrations/init_database.sql` so the table is created during production deployment. This ensures development and production databases stay in sync.
+**CRITICAL Database Sync Rules** (MUST FOLLOW):
+1. **New Tables**: When adding a new table in `shared/schema.ts`, ALSO add the `CREATE TABLE IF NOT EXISTS` statement to `deploy/migrations/init_database.sql`
+2. **New Columns**: When adding columns to existing tables in `shared/schema.ts`, ALSO add `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` statements in the migrations section of `init_database.sql`
+3. **The init_database.sql is run on EVERY deployment** - it must handle both fresh installs AND updates to existing databases
+4. This ensures development and production databases stay in sync and prevents "column does not exist" errors in production
 
 ## System Architecture
 
