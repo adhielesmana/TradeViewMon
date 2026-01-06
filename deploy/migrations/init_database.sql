@@ -156,6 +156,7 @@ CREATE TABLE IF NOT EXISTS monitored_symbols (
     symbol VARCHAR(20) NOT NULL UNIQUE,
     display_name VARCHAR(100) NOT NULL,
     category VARCHAR(50) NOT NULL,
+    currency VARCHAR(10) NOT NULL DEFAULT 'USD',
     is_active BOOLEAN NOT NULL DEFAULT true,
     priority INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -469,6 +470,11 @@ BEGIN
     
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='monitored_symbols' AND column_name='updated_at') THEN
         ALTER TABLE monitored_symbols ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT NOW();
+    END IF;
+    
+    -- currency column for multi-currency support (IDR, USD, etc.)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='monitored_symbols' AND column_name='currency') THEN
+        ALTER TABLE monitored_symbols ADD COLUMN currency VARCHAR(10) NOT NULL DEFAULT 'USD';
     END IF;
 END $$;
 
