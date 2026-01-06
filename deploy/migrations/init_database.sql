@@ -199,6 +199,25 @@ CREATE INDEX IF NOT EXISTS news_articles_fetched_idx ON news_articles(fetched_at
 CREATE INDEX IF NOT EXISTS news_articles_published_idx ON news_articles(published_at);
 
 -- ============================================
+-- TABLE: news_analysis_snapshots (cached AI market predictions)
+-- ============================================
+CREATE TABLE IF NOT EXISTS news_analysis_snapshots (
+    id SERIAL PRIMARY KEY,
+    overall_sentiment VARCHAR(20) NOT NULL,
+    confidence REAL NOT NULL,
+    summary TEXT NOT NULL,
+    key_factors TEXT,
+    affected_symbols TEXT,
+    trading_recommendation TEXT,
+    risk_level VARCHAR(20),
+    news_count INTEGER NOT NULL DEFAULT 0,
+    analyzed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS news_analysis_snapshots_analyzed_idx ON news_analysis_snapshots(analyzed_at DESC);
+
+-- ============================================
 -- TABLE: demo_accounts
 -- ============================================
 CREATE TABLE IF NOT EXISTS demo_accounts (

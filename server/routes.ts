@@ -11,7 +11,7 @@ import type { SafeUser, InsertMarketData } from "@shared/schema";
 import { predictionEngine } from "./prediction-engine";
 import { generateUnifiedSignal, convertToLegacyIndicatorSignal, convertToMultiFactorAnalysis, detectAllCandlestickPatterns } from "./unified-signal-generator";
 import { encrypt, decrypt, maskApiKey } from "./encryption";
-import { getNewsAndAnalysis, getRssFeedUrl, setRssFeedUrl, getNewsStats, getStoredNewsSince } from "./news-service";
+import { getNewsAndAnalysisCached, forceRefreshNewsAnalysis, getRssFeedUrl, setRssFeedUrl, getNewsStats, getStoredNewsSince } from "./news-service";
 import { z } from "zod";
 
 const updateUserSchema = z.object({
@@ -1518,14 +1518,25 @@ export async function registerRoutes(
     }
   });
 
-  // News Analysis API (authenticated users can access)
+  // News Analysis API (authenticated users can access) - uses caching for fast loads
   app.get("/api/news/analysis", requireAuth, async (req, res) => {
     try {
-      const analysis = await getNewsAndAnalysis();
+      const analysis = await getNewsAndAnalysisCached();
       res.json(analysis);
     } catch (error) {
       console.error("Error fetching news analysis:", error);
       res.status(500).json({ error: "Failed to fetch news analysis" });
+    }
+  });
+
+  // Force refresh news analysis (bypasses cache)
+  app.post("/api/news/analysis/refresh", requireAuth, async (req, res) => {
+    try {
+      const analysis = await forceRefreshNewsAnalysis();
+      res.json(analysis);
+    } catch (error) {
+      console.error("Error refreshing news analysis:", error);
+      res.status(500).json({ error: "Failed to refresh news analysis" });
     }
   });
 
