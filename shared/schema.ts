@@ -445,6 +445,25 @@ export const insertNewsArticleSchema = createInsertSchema(newsArticles).omit({ i
 export type NewsArticle = typeof newsArticles.$inferSelect;
 export type InsertNewsArticle = z.infer<typeof insertNewsArticleSchema>;
 
+// News Analysis Snapshots - cached AI market predictions for fast page load
+export const newsAnalysisSnapshots = pgTable("news_analysis_snapshots", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  overallSentiment: varchar("overall_sentiment", { length: 20 }).notNull(), // 'BULLISH', 'BEARISH', 'NEUTRAL'
+  confidence: real("confidence").notNull(),
+  summary: text("summary").notNull(),
+  keyFactors: text("key_factors"), // JSON array of strings
+  affectedSymbols: text("affected_symbols"), // JSON array of symbol impacts
+  tradingRecommendation: text("trading_recommendation"),
+  riskLevel: varchar("risk_level", { length: 20 }), // 'LOW', 'MEDIUM', 'HIGH'
+  newsCount: integer("news_count").notNull().default(0),
+  analyzedAt: timestamp("analyzed_at").notNull().default(sql`now()`), // When AI analysis was done
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertNewsAnalysisSnapshotSchema = createInsertSchema(newsAnalysisSnapshots).omit({ id: true });
+export type NewsAnalysisSnapshot = typeof newsAnalysisSnapshots.$inferSelect;
+export type InsertNewsAnalysisSnapshot = z.infer<typeof insertNewsAnalysisSnapshotSchema>;
+
 // Currency Rates - cached exchange rates from EUR base
 export const currencyRates = pgTable("currency_rates", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
