@@ -124,6 +124,62 @@ export class MarketDataService {
     return { isConfigured, source: this.keySource, maskedValue };
   }
 
+  // Dynamically register an Indonesian stock for Yahoo Finance fetching
+  // Called when symbols with (IDX) in displayName are created/updated
+  registerIndonesianStock(symbol: string): boolean {
+    const normalizedSymbol = symbol.trim().toUpperCase();
+    
+    // Skip if already registered (idempotent)
+    if (SYMBOL_CONFIGS[normalizedSymbol]) {
+      console.log(`[MarketData] Indonesian stock ${normalizedSymbol} already registered`);
+      return false;
+    }
+    
+    // Create config for Yahoo Finance with .JK suffix
+    const yahooSymbol = `${normalizedSymbol}.JK`;
+    const config: SymbolConfig = {
+      basePrice: 5000, // Default base price for IDR stocks
+      volatility: 0.3,
+      is24h: false,
+      provider: "yahoo",
+      yahooSymbol: yahooSymbol,
+    };
+    
+    // Add to SYMBOL_CONFIGS dynamically
+    SYMBOL_CONFIGS[normalizedSymbol] = config;
+    
+    // Initialize in symbolPrices map
+    this.symbolPrices.set(normalizedSymbol, { base: config.basePrice, last: config.basePrice });
+    
+    console.log(`[MarketData] ✓ Registered Indonesian stock: ${normalizedSymbol} → Yahoo:${yahooSymbol}`);
+    return true;
+  }
+
+  // Load Indonesian stocks from database on startup
+  async loadIndonesianStocksFromDatabase(getMonitoredSymbols: () => Promise<Array<{ symbol: string; displayName: string; currency: string; isActive: boolean }>>): Promise<void> {
+    try {
+      const symbols = await getMonitoredSymbols();
+      let registered = 0;
+      
+      for (const sym of symbols) {
+        // Detect Indonesian stocks by (IDX) in displayName OR currency = IDR
+        const isIndonesianStock = sym.displayName.includes("(IDX)") || sym.currency === "IDR";
+        
+        if (isIndonesianStock && sym.isActive) {
+          if (this.registerIndonesianStock(sym.symbol)) {
+            registered++;
+          }
+        }
+      }
+      
+      if (registered > 0) {
+        console.log(`[MarketData] Loaded ${registered} Indonesian stocks from database`);
+      }
+    } catch (error) {
+      console.error("[MarketData] Failed to load Indonesian stocks from database:", error);
+    }
+  }
+
   private getConfig(symbol: string): SymbolConfig {
     return SYMBOL_CONFIGS[symbol] || SYMBOL_CONFIGS.XAUUSD;
   }

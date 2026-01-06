@@ -150,6 +150,17 @@ export async function registerRoutes(
   
   // Initialize market data service with database API key
   await marketDataService.initializeFromDatabase(() => storage.getSetting("FINNHUB_API_KEY"));
+  
+  // Load Indonesian stocks (IDX) from database for Yahoo Finance fetching
+  await marketDataService.loadIndonesianStocksFromDatabase(async () => {
+    const symbols = await storage.getMonitoredSymbols();
+    return symbols.map(s => ({
+      symbol: s.symbol,
+      displayName: s.displayName,
+      currency: s.currency || "USD",
+      isActive: s.isActive,
+    }));
+  });
 
   app.post("/api/auth/login", async (req, res) => {
     try {
@@ -1684,11 +1695,26 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Symbol, displayName, and category are required" });
       }
       
+      const trimmedDisplayName = displayName.trim();
+      const trimmedSymbol = symbol.trim().toUpperCase();
+      const trimmedCurrency = currency?.trim() || "USD";
+      
+      // Auto-detect Indonesian stocks by (IDX) in displayName OR currency = IDR
+      const isIndonesianStock = trimmedDisplayName.includes("(IDX)") || trimmedCurrency === "IDR";
+      const finalCategory = isIndonesianStock ? "stocks" : category.trim();
+      const finalCurrency = isIndonesianStock ? "IDR" : trimmedCurrency;
+      
+      // Register with market data service for Yahoo Finance fetching
+      if (isIndonesianStock) {
+        marketDataService.registerIndonesianStock(trimmedSymbol);
+        console.log(`[Symbols] Auto-registered Indonesian stock: ${trimmedSymbol} with IDR currency`);
+      }
+      
       const newSymbol = await storage.createMonitoredSymbol({
-        symbol: symbol.trim().toUpperCase(),
-        displayName: displayName.trim(),
-        category: category.trim(),
-        currency: currency?.trim() || "USD",
+        symbol: trimmedSymbol,
+        displayName: trimmedDisplayName,
+        category: finalCategory,
+        currency: finalCurrency,
         isActive: isActive !== false,
         priority: priority || 0,
       });
@@ -1708,11 +1734,28 @@ export async function registerRoutes(
       const id = parseInt(req.params.id);
       const { symbol, displayName, category, currency, isActive, priority } = req.body;
       
+      const trimmedDisplayName = displayName?.trim();
+      const trimmedSymbol = symbol?.trim().toUpperCase();
+      const trimmedCurrency = currency?.trim();
+      
+      // Auto-detect Indonesian stocks by (IDX) in displayName OR currency = IDR
+      const isIndonesianStock = trimmedDisplayName?.includes("(IDX)") || trimmedCurrency === "IDR";
+      
+      // Override category and currency for Indonesian stocks
+      const finalCategory = isIndonesianStock ? "stocks" : category?.trim();
+      const finalCurrency = isIndonesianStock ? "IDR" : trimmedCurrency;
+      
+      // Register with market data service for Yahoo Finance fetching
+      if (isIndonesianStock && trimmedSymbol) {
+        marketDataService.registerIndonesianStock(trimmedSymbol);
+        console.log(`[Symbols] Auto-registered Indonesian stock: ${trimmedSymbol} with IDR currency`);
+      }
+      
       const updated = await storage.updateMonitoredSymbol(id, {
-        ...(symbol && { symbol: symbol.trim().toUpperCase() }),
-        ...(displayName && { displayName: displayName.trim() }),
-        ...(category && { category: category.trim() }),
-        ...(currency && { currency: currency.trim() }),
+        ...(trimmedSymbol && { symbol: trimmedSymbol }),
+        ...(trimmedDisplayName && { displayName: trimmedDisplayName }),
+        ...(finalCategory && { category: finalCategory }),
+        ...(finalCurrency && { currency: finalCurrency }),
         ...(isActive !== undefined && { isActive }),
         ...(priority !== undefined && { priority }),
       });

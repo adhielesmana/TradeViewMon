@@ -63,6 +63,10 @@ Every auto-trade must pass through 5 mandatory validation gates (in order):
 - **Symbol Context**: React context provides `currentSymbol` (SymbolInfo) derived from API data via useMemo for fresh metadata.
 - **Fallback Behavior**: Uses hardcoded FALLBACK_SYMBOLS only when database is empty; preserves stored symbol during initial load.
 - **Price Formatting**: `formatPrice(price, symbolInfo)` and `getCurrencySymbol(symbolInfo)` functions use SymbolInfo objects.
+- **Indonesian Stock Auto-Detection**: Symbols with "(IDX)" in displayName OR currency = "IDR" are automatically:
+  - Category set to "stocks" and currency to "IDR"
+  - Registered with market data service for Yahoo Finance (.JK suffix)
+  - Loaded from database on server startup for persistence across restarts
 
 ### Session & Authentication
 - **Session Management**: express-session with memorystore (in-memory) or connect-pg-simple (PostgreSQL).
