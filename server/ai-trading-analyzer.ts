@@ -8,7 +8,12 @@ import { decrypt } from "./encryption";
 let cachedOpenAIClient: OpenAI | null = null;
 let cachedApiKey: string | null = null;
 
-async function getOpenAIKey(): Promise<string | null> {
+interface OpenAIKeyResult {
+  key: string;
+  source: "database" | "replit" | "env";
+}
+
+async function getOpenAIKeyWithSource(): Promise<OpenAIKeyResult | null> {
   // Priority 1: Check database for encrypted key (configured via Settings page)
   // This is the PRIMARY source - users configure their key through the UI
   try {
@@ -16,7 +21,7 @@ async function getOpenAIKey(): Promise<string | null> {
     if (encryptedKey) {
       const decryptedKey = decrypt(encryptedKey);
       if (decryptedKey) {
-        return decryptedKey;
+        return { key: decryptedKey, source: "database" };
       }
     }
   } catch (e) {
@@ -26,50 +31,48 @@ async function getOpenAIKey(): Promise<string | null> {
   // Priority 2: Check for Replit's managed OpenAI integration (automatic on Replit)
   const replitKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
   if (replitKey && replitKey !== "not-configured") {
-    return replitKey;
+    return { key: replitKey, source: "replit" };
   }
   
   // Priority 3: Check for standard OPENAI_API_KEY environment variable (optional override)
   const standardKey = process.env.OPENAI_API_KEY;
   if (standardKey && standardKey !== "not-configured") {
-    return standardKey;
+    return { key: standardKey, source: "env" };
   }
   
   return null;
 }
 
-function getOpenAIBaseURL(): string | undefined {
-  // If using Replit's integration, use their base URL
-  if (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL) {
-    return process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  }
-  // For self-hosted or standard OpenAI key, use default OpenAI API
-  return undefined; // OpenAI SDK will use https://api.openai.com/v1 by default
-}
-
 async function getOpenAIClient(): Promise<OpenAI | null> {
-  const apiKey = await getOpenAIKey();
+  const keyResult = await getOpenAIKeyWithSource();
   
-  if (!apiKey) {
+  if (!keyResult) {
     cachedOpenAIClient = null;
     cachedApiKey = null;
+    console.log("[AI Analyzer] No OpenAI key configured");
     return null;
   }
   
   // Return cached client if key hasn't changed
-  if (cachedOpenAIClient && cachedApiKey === apiKey) {
+  if (cachedOpenAIClient && cachedApiKey === keyResult.key) {
     return cachedOpenAIClient;
   }
   
   // Create new client with updated key
-  cachedApiKey = apiKey;
-  const baseURL = getOpenAIBaseURL();
+  cachedApiKey = keyResult.key;
+  
+  // Only use Replit base URL when using Replit's managed key
+  // User's own key from database should use standard OpenAI API
+  const useReplitProxy = keyResult.source === "replit" && process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  
   cachedOpenAIClient = new OpenAI({
-    baseURL: baseURL,
-    apiKey: apiKey
+    apiKey: keyResult.key,
+    baseURL: useReplitProxy ? process.env.AI_INTEGRATIONS_OPENAI_BASE_URL : undefined,
   });
   
-  console.log(`[AI Analyzer] OpenAI client initialized (using ${baseURL ? 'Replit proxy' : 'direct OpenAI API'})`);
+  const sourceLabel = keyResult.source === "database" ? "user's own key" : 
+                      keyResult.source === "replit" ? "Replit integration" : "env variable";
+  console.log(`[AI Analyzer] OpenAI client initialized (${sourceLabel}, ${useReplitProxy ? 'Replit proxy' : 'direct OpenAI API'})`);
   
   return cachedOpenAIClient;
 }

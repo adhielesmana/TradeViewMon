@@ -307,7 +307,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/users/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.delete("/api/users/:id", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const { id } = req.params;
       const currentUser = req.session.user!;
@@ -1037,7 +1037,7 @@ export async function registerRoutes(
   });
 
   // Backfill historical data endpoint (admin only)
-  app.post("/api/system/backfill", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.post("/api/system/backfill", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const days = parseInt(req.body.days as string) || 90;
       const symbol = marketDataService.getSymbol();
@@ -1350,7 +1350,7 @@ export async function registerRoutes(
   });
 
   // Settings Routes (Superadmin only)
-  app.get("/api/settings", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.get("/api/settings", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       // Get Finnhub API key status from service
       const finnhubKeyStatus = marketDataService.getFinnhubKeyStatus();
@@ -1412,7 +1412,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/settings/finnhub-key", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.post("/api/settings/finnhub-key", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const { apiKey } = req.body;
       
@@ -1440,7 +1440,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/settings/openai-key", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.post("/api/settings/openai-key", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       // Database key takes priority, so always allow saving via Settings UI
       // This will override any environment variable since database is checked first
@@ -1476,7 +1476,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/settings/openai-key", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.delete("/api/settings/openai-key", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       // Remove from database - this will fall back to environment variable if set
       await storage.setSetting("OPENAI_API_KEY_ENCRYPTED", null);
@@ -1492,7 +1492,7 @@ export async function registerRoutes(
   });
 
   // RSS Feed URL Settings
-  app.get("/api/settings/rss-feed", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.get("/api/settings/rss-feed", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const url = await getRssFeedUrl();
       res.json({ url });
@@ -1502,7 +1502,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/settings/rss-feed", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.post("/api/settings/rss-feed", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const { url } = req.body;
       
@@ -1618,7 +1618,7 @@ export async function registerRoutes(
   });
 
   // RSS Feeds CRUD API
-  app.get("/api/settings/rss-feeds", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.get("/api/settings/rss-feeds", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const feeds = await storage.getRssFeeds();
       res.json(feeds);
@@ -1628,7 +1628,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/settings/rss-feeds", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.post("/api/settings/rss-feeds", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const { name, url, isActive, priority } = req.body;
       
@@ -1656,7 +1656,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/settings/rss-feeds/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.put("/api/settings/rss-feeds/:id", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const { name, url, isActive, priority } = req.body;
@@ -1687,7 +1687,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/settings/rss-feeds/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.delete("/api/settings/rss-feeds/:id", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const deleted = await storage.deleteRssFeed(id);
@@ -1704,7 +1704,7 @@ export async function registerRoutes(
   });
 
   // News Articles Statistics (for AI learning)
-  app.get("/api/settings/news-stats", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.get("/api/settings/news-stats", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const stats = await getNewsStats();
       const recentNews = await getStoredNewsSince(24); // Last 24 hours
@@ -1720,7 +1720,7 @@ export async function registerRoutes(
   });
 
   // Symbol Categories CRUD API
-  app.get("/api/settings/categories", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.get("/api/settings/categories", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const categories = await storage.getSymbolCategories();
       res.json(categories);
@@ -1730,7 +1730,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/settings/categories", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.post("/api/settings/categories", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const { name, displayOrder } = req.body;
       
@@ -1754,7 +1754,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/settings/categories/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.put("/api/settings/categories/:id", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const { name, displayOrder, isActive } = req.body;
@@ -1779,7 +1779,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/settings/categories/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.delete("/api/settings/categories/:id", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const deleted = await storage.deleteSymbolCategory(id);
@@ -1796,7 +1796,7 @@ export async function registerRoutes(
   });
 
   // Monitored Symbols CRUD API
-  app.get("/api/settings/symbols", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.get("/api/settings/symbols", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       let symbols = await storage.getMonitoredSymbols();
       
@@ -1829,7 +1829,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/settings/symbols", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.post("/api/settings/symbols", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const { symbol, displayName, category, currency, isActive, priority } = req.body;
       
@@ -1871,7 +1871,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/settings/symbols/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.put("/api/settings/symbols/:id", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const { symbol, displayName, category, currency, isActive, priority } = req.body;
@@ -1916,7 +1916,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/settings/symbols/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+  app.delete("/api/settings/symbols/:id", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const deleted = await storage.deleteMonitoredSymbol(id);

@@ -45,23 +45,25 @@ export interface NewsAnalysis {
 const DEFAULT_RSS_URL = "https://finance.yahoo.com/news/rssindex";
 
 async function getOpenAIClient(): Promise<OpenAI | null> {
-  // Priority 1: Database stored encrypted key (Settings page)
+  // Priority 1: Database stored encrypted key (Settings page) - uses standard OpenAI API
   const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
   if (encryptedKey) {
     try {
       const decryptedKey = decrypt(encryptedKey);
+      console.log("[NewsService] Using database OpenAI key (user's own key)");
       return new OpenAI({
         apiKey: decryptedKey,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        // Do NOT use Replit base URL for user's own key - use standard OpenAI API
       });
     } catch (e) {
       console.error("[NewsService] Failed to decrypt OpenAI key:", e);
     }
   }
 
-  // Priority 2: Replit's managed OpenAI integration
+  // Priority 2: Replit's managed OpenAI integration (uses Replit proxy)
   const replitKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
   if (replitKey && replitKey !== "not-configured") {
+    console.log("[NewsService] Using Replit OpenAI integration");
     return new OpenAI({
       apiKey: replitKey,
       baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -71,9 +73,11 @@ async function getOpenAIClient(): Promise<OpenAI | null> {
   // Priority 3: Standard OPENAI_API_KEY environment variable
   const standardKey = process.env.OPENAI_API_KEY;
   if (standardKey) {
+    console.log("[NewsService] Using OPENAI_API_KEY environment variable");
     return new OpenAI({ apiKey: standardKey });
   }
 
+  console.log("[NewsService] No OpenAI key configured");
   return null;
 }
 
