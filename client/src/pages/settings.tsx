@@ -42,6 +42,7 @@ interface MonitoredSymbol {
   symbol: string;
   displayName: string;
   category: string;
+  currency: string;
   isActive: boolean;
   priority: number;
 }
@@ -69,6 +70,7 @@ export default function SettingsPage() {
   const [symbolCode, setSymbolCode] = useState("");
   const [symbolDisplayName, setSymbolDisplayName] = useState("");
   const [symbolCategory, setSymbolCategory] = useState("commodities");
+  const [symbolCurrency, setSymbolCurrency] = useState("USD");
   const [symbolPriority, setSymbolPriority] = useState(0);
 
   const { data: settings, isLoading } = useQuery<SettingsData>({
@@ -179,7 +181,7 @@ export default function SettingsPage() {
 
   // Symbols mutations
   const createSymbolMutation = useMutation({
-    mutationFn: async (symbol: { symbol: string; displayName: string; category: string; priority: number }) => {
+    mutationFn: async (symbol: { symbol: string; displayName: string; category: string; currency: string; priority: number }) => {
       const response = await apiRequest("POST", "/api/settings/symbols", symbol);
       return response.json();
     },
@@ -195,7 +197,7 @@ export default function SettingsPage() {
   });
 
   const updateSymbolMutation = useMutation({
-    mutationFn: async ({ id, ...data }: { id: number; symbol?: string; displayName?: string; category?: string; isActive?: boolean; priority?: number }) => {
+    mutationFn: async ({ id, ...data }: { id: number; symbol?: string; displayName?: string; category?: string; currency?: string; isActive?: boolean; priority?: number }) => {
       const response = await apiRequest("PUT", `/api/settings/symbols/${id}`, data);
       return response.json();
     },
@@ -262,6 +264,7 @@ export default function SettingsPage() {
     setSymbolCode("");
     setSymbolDisplayName("");
     setSymbolCategory("commodities");
+    setSymbolCurrency("USD");
     setSymbolPriority(0);
     setSymbolDialogOpen(true);
   };
@@ -271,6 +274,7 @@ export default function SettingsPage() {
     setSymbolCode(symbol.symbol);
     setSymbolDisplayName(symbol.displayName);
     setSymbolCategory(symbol.category);
+    setSymbolCurrency(symbol.currency || "USD");
     setSymbolPriority(symbol.priority);
     setSymbolDialogOpen(true);
   };
@@ -281,14 +285,15 @@ export default function SettingsPage() {
     setSymbolCode("");
     setSymbolDisplayName("");
     setSymbolCategory("commodities");
+    setSymbolCurrency("USD");
     setSymbolPriority(0);
   };
 
   const handleSaveSymbol = () => {
     if (editingSymbol) {
-      updateSymbolMutation.mutate({ id: editingSymbol.id, symbol: symbolCode, displayName: symbolDisplayName, category: symbolCategory, priority: symbolPriority });
+      updateSymbolMutation.mutate({ id: editingSymbol.id, symbol: symbolCode, displayName: symbolDisplayName, category: symbolCategory, currency: symbolCurrency, priority: symbolPriority });
     } else {
-      createSymbolMutation.mutate({ symbol: symbolCode, displayName: symbolDisplayName, category: symbolCategory, priority: symbolPriority });
+      createSymbolMutation.mutate({ symbol: symbolCode, displayName: symbolDisplayName, category: symbolCategory, currency: symbolCurrency, priority: symbolPriority });
     }
   };
 
@@ -637,8 +642,25 @@ export default function SettingsPage() {
                   <SelectItem value="bonds">Bonds</SelectItem>
                   <SelectItem value="forex">Forex</SelectItem>
                   <SelectItem value="stocks">Stocks</SelectItem>
+                  <SelectItem value="Indonesian Stocks">Indonesian Stocks</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="symbol-currency">Currency</Label>
+              <Select value={symbolCurrency} onValueChange={setSymbolCurrency}>
+                <SelectTrigger data-testid="select-symbol-currency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USD">USD ($)</SelectItem>
+                  <SelectItem value="IDR">IDR (Rp)</SelectItem>
+                  <SelectItem value="EUR">EUR</SelectItem>
+                  <SelectItem value="GBP">GBP</SelectItem>
+                  <SelectItem value="JPY">JPY</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Tip: Select IDR for Indonesian stocks - will auto-configure Yahoo Finance</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="symbol-priority">Priority (higher = more important)</Label>
