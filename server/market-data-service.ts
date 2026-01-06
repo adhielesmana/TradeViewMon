@@ -27,6 +27,7 @@ const SYMBOL_CONFIGS: Record<string, SymbolConfig> = {
   DATA: { basePrice: 4060.00, volatility: 0.5, is24h: false, provider: "yahoo", yahooSymbol: "DATA.JK" },
   WIFI: { basePrice: 3600.00, volatility: 0.4, is24h: false, provider: "yahoo", yahooSymbol: "WIFI.JK" },
   INET: { basePrice: 795.00, volatility: 0.4, is24h: false, provider: "yahoo", yahooSymbol: "INET.JK" },
+  BBCA: { basePrice: 9500.00, volatility: 0.3, is24h: false, provider: "yahoo", yahooSymbol: "BBCA.JK" },
   
   // Indices & Commodities - Finnhub (via ETF proxies)
   SPX: { basePrice: 6050.00, volatility: 0.2, is24h: false, provider: "finnhub", finnhubSymbol: "SPY", priceMultiplier: 10 },
