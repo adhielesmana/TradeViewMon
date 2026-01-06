@@ -235,10 +235,14 @@ CREATE TABLE IF NOT EXISTS news_analysis_snapshots (
     risk_level VARCHAR(20),
     news_count INTEGER NOT NULL DEFAULT 0,
     analyzed_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    source_articles TEXT,
+    historical_context TEXT,
+    analysis_type VARCHAR(50) DEFAULT 'regular'
 );
 
 CREATE INDEX IF NOT EXISTS news_analysis_snapshots_analyzed_idx ON news_analysis_snapshots(analyzed_at DESC);
+CREATE INDEX IF NOT EXISTS news_analysis_snapshots_type_idx ON news_analysis_snapshots(analysis_type);
 
 -- ============================================
 -- TABLE: demo_accounts
