@@ -169,6 +169,8 @@ export interface IStorage {
   saveNewsAnalysisSnapshot(snapshot: InsertNewsAnalysisSnapshot): Promise<NewsAnalysisSnapshot>;
   deleteOldNewsAnalysisSnapshots(keepCount?: number): Promise<number>;
   getNewsAnalysisSnapshotsLast7Days(): Promise<NewsAnalysisSnapshot[]>;
+  getNewsAnalysisSnapshotsPaginated(page: number, pageSize: number): Promise<{ snapshots: NewsAnalysisSnapshot[]; total: number; totalPages: number }>;
+  getNewsAnalysisSnapshotById(id: number): Promise<NewsAnalysisSnapshot | null>;
   
   // News Articles for hourly AI analysis
   getNewsArticlesLastHour(): Promise<NewsArticle[]>;
@@ -1458,6 +1460,31 @@ export class DatabaseStorage implements IStorage {
       .from(newsAnalysisSnapshots)
       .where(gte(newsAnalysisSnapshots.analyzedAt, sevenDaysAgo))
       .orderBy(desc(newsAnalysisSnapshots.analyzedAt));
+  }
+
+  async getNewsAnalysisSnapshotsPaginated(page: number, pageSize: number): Promise<{ snapshots: NewsAnalysisSnapshot[]; total: number; totalPages: number }> {
+    const offset = (page - 1) * pageSize;
+    
+    const [countResult] = await db.select({ count: sql<number>`count(*)` })
+      .from(newsAnalysisSnapshots);
+    const total = Number(countResult?.count || 0);
+    const totalPages = Math.ceil(total / pageSize);
+    
+    const snapshots = await db.select()
+      .from(newsAnalysisSnapshots)
+      .orderBy(desc(newsAnalysisSnapshots.analyzedAt))
+      .limit(pageSize)
+      .offset(offset);
+    
+    return { snapshots, total, totalPages };
+  }
+
+  async getNewsAnalysisSnapshotById(id: number): Promise<NewsAnalysisSnapshot | null> {
+    const [result] = await db.select()
+      .from(newsAnalysisSnapshots)
+      .where(eq(newsAnalysisSnapshots.id, id))
+      .limit(1);
+    return result || null;
   }
 
   async getNewsArticlesLastHour(): Promise<NewsArticle[]> {

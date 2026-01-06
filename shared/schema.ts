@@ -473,7 +473,8 @@ export const newsAnalysisSnapshots = pgTable("news_analysis_snapshots", {
   // Enhanced fields for full article analysis
   sourceArticles: text("source_articles"), // JSON array of article IDs analyzed
   historicalContext: text("historical_context"), // JSON summary of last 7 days predictions used
-  analysisType: varchar("analysis_type", { length: 20 }).default("hourly"), // 'hourly' or 'on_demand'
+  analysisType: varchar("analysis_type", { length: 50 }).default("regular"), // 'hourly' or 'regular'
+  generatedArticle: text("generated_article"), // Full generated article text for history display
 });
 
 export const insertNewsAnalysisSnapshotSchema = createInsertSchema(newsAnalysisSnapshots).omit({ id: true });
