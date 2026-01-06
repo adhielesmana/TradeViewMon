@@ -287,6 +287,7 @@ class Scheduler {
   private currencyTask: ReturnType<typeof cron.schedule> | null = null;
   private midnightTask: ReturnType<typeof cron.schedule> | null = null;
   private newsTask: ReturnType<typeof cron.schedule> | null = null;
+  private hourlyAiTask: ReturnType<typeof cron.schedule> | null = null;
   private intervalMs: number = 60000;
   private predictionCycleCount: number = 0;
 
@@ -328,12 +329,23 @@ class Scheduler {
       await this.runNewsFetch();
     });
 
+    // Hourly AI analysis task: Every hour at minute 0 (full article analysis with 7-day historical context)
+    this.hourlyAiTask = cron.schedule("0 0 * * * *", async () => {
+      await this.runHourlyAiAnalysis();
+    });
+
     // Initial news fetch on startup
     this.runNewsFetch().catch(err => console.error("[Scheduler] Initial news fetch failed:", err));
+    
+    // Run initial hourly AI analysis after a short delay (allow news fetch to complete)
+    setTimeout(() => {
+      this.runHourlyAiAnalysis().catch(err => console.error("[Scheduler] Initial hourly AI analysis failed:", err));
+    }, 30000); // 30 second delay
 
     console.log("[Scheduler] Scheduler started - running every 60 seconds for market data and predictions");
     console.log("[Scheduler] Currency rates will update every 12 hours");
     console.log("[Scheduler] News fetch every 15 minutes with 7-day retention for AI learning");
+    console.log("[Scheduler] Hourly AI analysis with full article content and 7-day historical context");
     console.log("[Scheduler] Midnight profitable positions auto-close enabled at 00:00:00 daily");
   }
 
@@ -361,6 +373,11 @@ class Scheduler {
     if (this.newsTask) {
       this.newsTask.stop();
       this.newsTask = null;
+    }
+
+    if (this.hourlyAiTask) {
+      this.hourlyAiTask.stop();
+      this.hourlyAiTask = null;
     }
 
     this.isRunning = false;
@@ -485,6 +502,24 @@ class Scheduler {
       }
     } catch (error) {
       console.error("[Scheduler] Error cleaning up old news:", error);
+    }
+  }
+
+  // Hourly AI analysis: Full article content analysis with 7-day historical context
+  private async runHourlyAiAnalysis(): Promise<void> {
+    try {
+      console.log("[Scheduler] Starting hourly AI market analysis...");
+      const { runHourlyAiAnalysis } = await import("./news-service");
+      const result = await runHourlyAiAnalysis();
+      
+      if (result.success) {
+        console.log(`[Scheduler] Hourly AI analysis complete: ${result.prediction?.overallSentiment} (${result.prediction?.confidence}% confidence)`);
+        console.log(`[Scheduler] Analyzed ${result.articlesAnalyzed} articles with ${result.historicalPredictionsUsed} historical predictions`);
+      } else {
+        console.log(`[Scheduler] Hourly AI analysis skipped: ${result.error || "Unknown reason"}`);
+      }
+    } catch (error) {
+      console.error("[Scheduler] Error running hourly AI analysis:", error);
     }
   }
 

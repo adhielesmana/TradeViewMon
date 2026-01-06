@@ -557,6 +557,215 @@ export async function forceRefreshNewsAnalysis(): Promise<CachedNewsAnalysis> {
   };
 }
 
+// ============================================
+// Enhanced Hourly AI Analysis
+// Runs every hour with full article content and historical context
+// ============================================
+
+interface HourlyAnalysisResult {
+  success: boolean;
+  articlesAnalyzed: number;
+  historicalPredictionsUsed: number;
+  prediction: NewsAnalysis["marketPrediction"] | null;
+  error?: string;
+}
+
+/**
+ * Enhanced hourly AI analysis that:
+ * 1. Reads FULL article content from the last 1 hour (not just RSS summaries)
+ * 2. Uses last 7 days of stored AI predictions as supplemental context
+ * 3. Generates comprehensive market prediction and stores to database
+ */
+export async function runHourlyAiAnalysis(): Promise<HourlyAnalysisResult> {
+  console.log("[NewsService] Starting hourly AI analysis...");
+  
+  const openai = await getOpenAIClient();
+  if (!openai) {
+    console.log("[NewsService] OpenAI not configured, skipping hourly analysis");
+    return {
+      success: false,
+      articlesAnalyzed: 0,
+      historicalPredictionsUsed: 0,
+      prediction: null,
+      error: "OpenAI not configured"
+    };
+  }
+  
+  try {
+    // Step 1: Get full news articles from the last 1 hour
+    const recentArticles = await storage.getNewsArticlesLastHour();
+    console.log(`[NewsService] Found ${recentArticles.length} articles from last hour`);
+    
+    // Step 2: Get last 7 days of AI predictions for historical context
+    const historicalPredictions = await storage.getNewsAnalysisSnapshotsLast7Days();
+    console.log(`[NewsService] Found ${historicalPredictions.length} historical predictions from last 7 days`);
+    
+    // Get supported symbols from database
+    const monitoredSymbols = await storage.getMonitoredSymbols();
+    const supportedSymbols = monitoredSymbols
+      .filter(s => s.isActive)
+      .map(s => s.symbol);
+    
+    if (supportedSymbols.length === 0) {
+      supportedSymbols.push("XAUUSD", "XAGUSD", "BTCUSD");
+    }
+    
+    // Build full article context (complete content, not just summaries)
+    const articleContext = recentArticles.length > 0 
+      ? recentArticles.map((article, i) => {
+          const publishedTime = article.publishedAt 
+            ? new Date(article.publishedAt).toISOString()
+            : new Date(article.fetchedAt).toISOString();
+          return `ARTICLE ${i + 1}:
+Title: ${article.title}
+Source: ${article.source || "Unknown"}
+Published: ${publishedTime}
+Full Content:
+${article.content || "No content available"}
+---`;
+        }).join("\n\n")
+      : "No new articles in the last hour.";
+    
+    // Build historical prediction context
+    const historicalContext = historicalPredictions.length > 0
+      ? historicalPredictions.slice(0, 10).map((pred, i) => {
+          const analyzedTime = new Date(pred.analyzedAt).toISOString();
+          return `PREDICTION ${i + 1} (${analyzedTime}):
+- Sentiment: ${pred.overallSentiment}
+- Confidence: ${pred.confidence}%
+- Summary: ${pred.summary}
+- Risk Level: ${pred.riskLevel}
+- Recommendation: ${pred.tradingRecommendation}`;
+        }).join("\n\n")
+      : "No historical predictions available.";
+    
+    // Generate comprehensive AI analysis
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are an expert financial analyst performing a comprehensive HOURLY market analysis.
+
+Your task is to analyze recent news articles in depth and combine this with historical AI predictions to generate an accurate market outlook.
+
+ANALYSIS APPROACH:
+1. READ AND ANALYZE each article thoroughly - extract key financial implications, market sentiment drivers, and trading signals
+2. CORRELATE with historical predictions - identify trends, patterns, and whether recent predictions were accurate
+3. SYNTHESIZE a comprehensive market prediction
+
+Focus on these trading instruments: ${supportedSymbols.join(", ")}
+
+Respond in JSON format with this exact structure:
+{
+  "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
+  "confidence": 0-100,
+  "summary": "Detailed 3-5 sentence market outlook based on FULL article analysis and historical context",
+  "keyFactors": ["Factor 1 with specific detail from articles", "Factor 2", "Factor 3", "Factor 4"],
+  "affectedSymbols": [
+    {"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Specific reason from article analysis"}
+  ],
+  "tradingRecommendation": "Detailed actionable recommendation with risk context",
+  "riskLevel": "LOW" | "MEDIUM" | "HIGH",
+  "historicalTrendNote": "Brief note on how current analysis aligns with or differs from recent 7-day predictions"
+}
+
+BE CONSERVATIVE with confidence scores - markets are uncertain.
+If articles lack clear trading signals, default to NEUTRAL with appropriate explanation.`
+        },
+        {
+          role: "user",
+          content: `Perform comprehensive hourly analysis based on:
+
+=== RECENT NEWS ARTICLES (Last 1 Hour) ===
+${articleContext}
+
+=== HISTORICAL AI PREDICTIONS (Last 7 Days) ===
+${historicalContext}
+
+Generate your market prediction now.`
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: 1500,
+    });
+    
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error("Empty response from OpenAI");
+    }
+    
+    // Parse the JSON response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.warn("[NewsService] No JSON found in hourly analysis response");
+      return {
+        success: false,
+        articlesAnalyzed: recentArticles.length,
+        historicalPredictionsUsed: historicalPredictions.length,
+        prediction: null,
+        error: "Invalid AI response format"
+      };
+    }
+    
+    const parsed = JSON.parse(jsonMatch[0]);
+    const prediction: NewsAnalysis["marketPrediction"] = {
+      overallSentiment: parsed.overallSentiment || "NEUTRAL",
+      confidence: Math.min(100, Math.max(0, parsed.confidence || 50)),
+      summary: parsed.summary || "Analysis completed",
+      keyFactors: parsed.keyFactors || [],
+      affectedSymbols: parsed.affectedSymbols || [],
+      tradingRecommendation: parsed.tradingRecommendation || "Monitor market conditions",
+      riskLevel: parsed.riskLevel || "MEDIUM",
+    };
+    
+    // Save enhanced analysis to database with source tracking
+    const snapshot: InsertNewsAnalysisSnapshot = {
+      overallSentiment: prediction.overallSentiment,
+      confidence: prediction.confidence,
+      summary: prediction.summary,
+      keyFactors: JSON.stringify(prediction.keyFactors),
+      affectedSymbols: JSON.stringify(prediction.affectedSymbols),
+      tradingRecommendation: prediction.tradingRecommendation,
+      riskLevel: prediction.riskLevel,
+      newsCount: recentArticles.length,
+      analyzedAt: new Date(),
+      sourceArticles: JSON.stringify(recentArticles.map(a => a.id)),
+      historicalContext: JSON.stringify({
+        predictionsUsed: historicalPredictions.length,
+        historicalTrendNote: parsed.historicalTrendNote || null,
+        lastPredictionSentiments: historicalPredictions.slice(0, 5).map(p => p.overallSentiment)
+      }),
+      analysisType: "hourly"
+    };
+    
+    await storage.saveNewsAnalysisSnapshot(snapshot);
+    
+    // Keep last 168 snapshots (7 days of hourly data)
+    await storage.deleteOldNewsAnalysisSnapshots(168);
+    
+    console.log(`[NewsService] Hourly AI analysis completed: ${prediction.overallSentiment} (${prediction.confidence}% confidence)`);
+    console.log(`[NewsService] Analyzed ${recentArticles.length} articles with ${historicalPredictions.length} historical predictions`);
+    
+    return {
+      success: true,
+      articlesAnalyzed: recentArticles.length,
+      historicalPredictionsUsed: historicalPredictions.length,
+      prediction
+    };
+    
+  } catch (error: any) {
+    console.error("[NewsService] Hourly AI analysis failed:", error.message);
+    return {
+      success: false,
+      articlesAnalyzed: 0,
+      historicalPredictionsUsed: 0,
+      prediction: null,
+      error: error.message
+    };
+  }
+}
+
 // Legacy function - kept for backward compatibility
 export async function getNewsAndAnalysis(): Promise<NewsAnalysis> {
   try {
