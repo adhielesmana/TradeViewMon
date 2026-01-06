@@ -24,7 +24,7 @@ Preferred communication style: Simple, everyday language.
 - **Unified Signal Generator**: Centralizes BUY/SELL/HOLD signals using weighted scoring from various technical indicators (EMA, RSI, MACD, Stochastic, Price Trend, Candlestick Patterns) with strict decision thresholds (netScore > 40 for BUY, < -40 for SELL).
 - **Prediction Engine**: Ensemble model combining Moving Average, Linear Regression, and multi-factor technical analysis, outputting predicted price, direction, confidence, and analysis breakdown.
 - **AI Trading Analyzer**: GPT-5-nano (or fallback to technicals) for trade validation, integrating prediction model accuracy with 6 technical indicators to generate signals with strict low-risk conditions.
-- **News Service**: RSS feed integration (configurable via Settings, default: Yahoo Finance) with OpenAI analysis to generate market predictions based on news sentiment, key factors, affected symbols, and trading recommendations.
+- **News Service**: RSS feed integration (configurable via Settings, default: Yahoo Finance) with OpenAI analysis to generate market predictions based on news sentiment, key factors, affected symbols, and trading recommendations. Features AI analysis caching (`news_analysis_snapshots` table) for fast page loads with background refresh when cache is stale (10+ minutes).
 - **Market Data Service**: Abstracted service supporting Gold-API.com (XAU, XAG, BTC) and Finnhub (GDX, GDXJ, NEM, SPX, DXY, USOIL), with on-demand historical data seeding and simulated data for unsupported symbols (US10Y).
 - **Risk Manager**: Comprehensive risk management service (`server/risk-manager.ts`) enforcing:
   - **Daily Loss Limit**: Maximum 3% of account balance or $500 per day
@@ -55,6 +55,7 @@ Every auto-trade must pass through 5 mandatory validation gates (in order):
     5.  `price_state`: Price continuity (symbol, last open/close, timestamp).
     6.  `app_settings`: Encrypted application configuration and API keys.
     7.  `monitored_symbols`: Database-driven symbol management with name, category, currency, enabled status.
+    8.  `news_analysis_snapshots`: Cached AI market predictions for fast News & AI Analysis page loads.
 
 ### Symbol & Currency Management
 - **Database-Driven Symbols**: All symbols are managed via `monitored_symbols` table with `/api/market/symbols` endpoint.
