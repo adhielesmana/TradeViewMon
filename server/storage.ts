@@ -1,7 +1,7 @@
 import { 
   marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState, aiSuggestions,
   demoAccounts, demoPositions, demoTransactions, appSettings, currencyRates, autoTradeSettings,
-  rssFeeds, monitoredSymbols, newsArticles, newsAnalysisSnapshots,
+  rssFeeds, monitoredSymbols, newsArticles, newsAnalysisSnapshots, symbolCategories,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
@@ -20,6 +20,7 @@ import {
   type AutoTradeSetting, type UpdateAutoTradeSetting,
   type RssFeed, type InsertRssFeed, type UpdateRssFeed,
   type MonitoredSymbol, type InsertMonitoredSymbol,
+  type SymbolCategory, type InsertSymbolCategory,
   type NewsArticle, type InsertNewsArticle,
   type NewsAnalysisSnapshot, type InsertNewsAnalysisSnapshot
 } from "@shared/schema";
@@ -131,6 +132,13 @@ export interface IStorage {
   createRssFeed(feed: InsertRssFeed): Promise<RssFeed>;
   updateRssFeed(id: number, updates: UpdateRssFeed): Promise<RssFeed | null>;
   deleteRssFeed(id: number): Promise<boolean>;
+
+  // Symbol Categories
+  getSymbolCategories(): Promise<SymbolCategory[]>;
+  getSymbolCategoryById(id: number): Promise<SymbolCategory | null>;
+  createSymbolCategory(category: InsertSymbolCategory): Promise<SymbolCategory>;
+  updateSymbolCategory(id: number, updates: Partial<InsertSymbolCategory>): Promise<SymbolCategory | null>;
+  deleteSymbolCategory(id: number): Promise<boolean>;
 
   // Monitored Symbols
   getMonitoredSymbols(): Promise<MonitoredSymbol[]>;
@@ -1224,6 +1232,41 @@ export class DatabaseStorage implements IStorage {
   async deleteRssFeed(id: number): Promise<boolean> {
     const result = await db.delete(rssFeeds)
       .where(eq(rssFeeds.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Symbol Categories CRUD
+  async getSymbolCategories(): Promise<SymbolCategory[]> {
+    return db.select()
+      .from(symbolCategories)
+      .where(eq(symbolCategories.isActive, true))
+      .orderBy(desc(symbolCategories.displayOrder), symbolCategories.name);
+  }
+
+  async getSymbolCategoryById(id: number): Promise<SymbolCategory | null> {
+    const [category] = await db.select()
+      .from(symbolCategories)
+      .where(eq(symbolCategories.id, id));
+    return category || null;
+  }
+
+  async createSymbolCategory(category: InsertSymbolCategory): Promise<SymbolCategory> {
+    const [result] = await db.insert(symbolCategories).values(category).returning();
+    return result;
+  }
+
+  async updateSymbolCategory(id: number, updates: Partial<InsertSymbolCategory>): Promise<SymbolCategory | null> {
+    const [updated] = await db.update(symbolCategories)
+      .set(updates)
+      .where(eq(symbolCategories.id, id))
+      .returning();
+    return updated || null;
+  }
+
+  async deleteSymbolCategory(id: number): Promise<boolean> {
+    const result = await db.delete(symbolCategories)
+      .where(eq(symbolCategories.id, id))
       .returning();
     return result.length > 0;
   }

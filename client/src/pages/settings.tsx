@@ -47,6 +47,13 @@ interface MonitoredSymbol {
   priority: number;
 }
 
+interface SymbolCategory {
+  id: number;
+  name: string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
 export default function SettingsPage() {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -73,6 +80,12 @@ export default function SettingsPage() {
   const [symbolCurrency, setSymbolCurrency] = useState("USD");
   const [symbolPriority, setSymbolPriority] = useState(0);
 
+  // Category Dialog State
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<SymbolCategory | null>(null);
+  const [categoryName, setCategoryName] = useState("");
+  const [categoryDisplayOrder, setCategoryDisplayOrder] = useState(0);
+
   const { data: settings, isLoading } = useQuery<SettingsData>({
     queryKey: ["/api/settings"],
     refetchInterval: false,
@@ -86,6 +99,12 @@ export default function SettingsPage() {
 
   const { data: symbols = [], isLoading: symbolsLoading } = useQuery<MonitoredSymbol[]>({
     queryKey: ["/api/settings/symbols"],
+    enabled: isSuperadmin,
+    retry: false,
+  });
+
+  const { data: categories = [], isLoading: categoriesLoading } = useQuery<SymbolCategory[]>({
+    queryKey: ["/api/settings/categories"],
     enabled: isSuperadmin,
     retry: false,
   });
@@ -227,6 +246,51 @@ export default function SettingsPage() {
     },
   });
 
+  // Category mutations
+  const createCategoryMutation = useMutation({
+    mutationFn: async (category: { name: string; displayOrder: number }) => {
+      const response = await apiRequest("POST", "/api/settings/categories", category);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Category added" });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/categories"] });
+      closeCategoryDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateCategoryMutation = useMutation({
+    mutationFn: async ({ id, ...data }: { id: number; name?: string; displayOrder?: number; isActive?: boolean }) => {
+      const response = await apiRequest("PUT", `/api/settings/categories/${id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Category updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/categories"] });
+      closeCategoryDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiRequest("DELETE", `/api/settings/categories/${id}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Category deleted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/categories"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const openAddFeedDialog = () => {
     setEditingFeed(null);
     setFeedName("");
@@ -294,6 +358,35 @@ export default function SettingsPage() {
       updateSymbolMutation.mutate({ id: editingSymbol.id, symbol: symbolCode, displayName: symbolDisplayName, category: symbolCategory, currency: symbolCurrency, priority: symbolPriority });
     } else {
       createSymbolMutation.mutate({ symbol: symbolCode, displayName: symbolDisplayName, category: symbolCategory, currency: symbolCurrency, priority: symbolPriority });
+    }
+  };
+
+  const openAddCategoryDialog = () => {
+    setEditingCategory(null);
+    setCategoryName("");
+    setCategoryDisplayOrder(0);
+    setCategoryDialogOpen(true);
+  };
+
+  const openEditCategoryDialog = (category: SymbolCategory) => {
+    setEditingCategory(category);
+    setCategoryName(category.name);
+    setCategoryDisplayOrder(category.displayOrder);
+    setCategoryDialogOpen(true);
+  };
+
+  const closeCategoryDialog = () => {
+    setCategoryDialogOpen(false);
+    setEditingCategory(null);
+    setCategoryName("");
+    setCategoryDisplayOrder(0);
+  };
+
+  const handleSaveCategory = () => {
+    if (editingCategory) {
+      updateCategoryMutation.mutate({ id: editingCategory.id, name: categoryName, displayOrder: categoryDisplayOrder });
+    } else {
+      createCategoryMutation.mutate({ name: categoryName, displayOrder: categoryDisplayOrder });
     }
   };
 
@@ -499,6 +592,66 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Symbol Categories Management */}
+      {isSuperadmin && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Settings className="h-5 w-5 text-blue-500" />
+                <CardTitle>Symbol Categories</CardTitle>
+              </div>
+              <Button onClick={openAddCategoryDialog} size="sm" data-testid="button-add-category">
+                <Plus className="h-4 w-4 mr-1" /> Add Category
+              </Button>
+            </div>
+            <CardDescription>
+              Manage categories for organizing trading symbols.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {categoriesLoading ? (
+              <div className="flex justify-center py-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
+            ) : categories.length === 0 ? (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  No categories configured. Default categories will be used.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead className="w-24">Order</TableHead>
+                    <TableHead className="w-24">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {categories.map((cat) => (
+                    <TableRow key={cat.id} data-testid={`row-category-${cat.id}`}>
+                      <TableCell className="font-medium">{cat.name}</TableCell>
+                      <TableCell>{cat.displayOrder}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => openEditCategoryDialog(cat)} data-testid={`button-edit-category-${cat.id}`}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => deleteCategoryMutation.mutate(cat.id)} disabled={deleteCategoryMutation.isPending} data-testid={`button-delete-category-${cat.id}`}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Symbols Management */}
       <Card>
         <CardHeader>
@@ -633,16 +786,22 @@ export default function SettingsPage() {
               <Label htmlFor="symbol-category">Category</Label>
               <Select value={symbolCategory} onValueChange={setSymbolCategory}>
                 <SelectTrigger data-testid="select-symbol-category">
-                  <SelectValue />
+                  <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="commodities">Commodities</SelectItem>
-                  <SelectItem value="indices">Indices</SelectItem>
-                  <SelectItem value="crypto">Crypto</SelectItem>
-                  <SelectItem value="bonds">Bonds</SelectItem>
-                  <SelectItem value="forex">Forex</SelectItem>
-                  <SelectItem value="stocks">Stocks</SelectItem>
-                  <SelectItem value="Indonesian Stocks">Indonesian Stocks</SelectItem>
+                  {categories.length > 0 ? (
+                    categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                    ))
+                  ) : (
+                    <>
+                      <SelectItem value="commodities">Commodities</SelectItem>
+                      <SelectItem value="indices">Indices</SelectItem>
+                      <SelectItem value="crypto">Crypto</SelectItem>
+                      <SelectItem value="forex">Forex</SelectItem>
+                      <SelectItem value="stocks">Stocks</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -672,6 +831,35 @@ export default function SettingsPage() {
             <Button onClick={handleSaveSymbol} disabled={!symbolCode.trim() || !symbolDisplayName.trim() || createSymbolMutation.isPending || updateSymbolMutation.isPending} data-testid="button-save-symbol">
               {(createSymbolMutation.isPending || updateSymbolMutation.isPending) ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {editingSymbol ? "Update" : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category Dialog */}
+      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingCategory ? "Edit Category" : "Add Category"}</DialogTitle>
+            <DialogDescription>
+              {editingCategory ? "Update the category details." : "Add a new category for organizing symbols."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="category-name">Category Name</Label>
+              <Input id="category-name" placeholder="e.g., Indonesian Stocks" value={categoryName} onChange={(e) => setCategoryName(e.target.value)} data-testid="input-category-name" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="category-order">Display Order (higher = first)</Label>
+              <Input id="category-order" type="number" value={categoryDisplayOrder} onChange={(e) => setCategoryDisplayOrder(parseInt(e.target.value) || 0)} data-testid="input-category-order" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeCategoryDialog}>Cancel</Button>
+            <Button onClick={handleSaveCategory} disabled={!categoryName.trim() || createCategoryMutation.isPending || updateCategoryMutation.isPending} data-testid="button-save-category">
+              {(createCategoryMutation.isPending || updateCategoryMutation.isPending) ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {editingCategory ? "Update" : "Add"}
             </Button>
           </DialogFooter>
         </DialogContent>

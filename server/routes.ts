@@ -1653,6 +1653,82 @@ export async function registerRoutes(
     }
   });
 
+  // Symbol Categories CRUD API
+  app.get("/api/settings/categories", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const categories = await storage.getSymbolCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error("Error getting categories:", error);
+      res.status(500).json({ error: "Failed to get categories" });
+    }
+  });
+
+  app.post("/api/settings/categories", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const { name, displayOrder } = req.body;
+      
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: "Category name is required" });
+      }
+      
+      const newCategory = await storage.createSymbolCategory({
+        name: name.trim(),
+        displayOrder: displayOrder || 0,
+        isActive: true,
+      });
+      
+      res.json({ success: true, category: newCategory });
+    } catch (error: any) {
+      console.error("Error creating category:", error);
+      if (error.message?.includes("unique")) {
+        return res.status(400).json({ error: "Category already exists" });
+      }
+      res.status(500).json({ error: "Failed to create category" });
+    }
+  });
+
+  app.put("/api/settings/categories/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { name, displayOrder, isActive } = req.body;
+      
+      const updated = await storage.updateSymbolCategory(id, {
+        ...(name && { name: name.trim() }),
+        ...(displayOrder !== undefined && { displayOrder }),
+        ...(isActive !== undefined && { isActive }),
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Category not found" });
+      }
+      
+      res.json({ success: true, category: updated });
+    } catch (error: any) {
+      console.error("Error updating category:", error);
+      if (error.message?.includes("unique")) {
+        return res.status(400).json({ error: "Category name already exists" });
+      }
+      res.status(500).json({ error: "Failed to update category" });
+    }
+  });
+
+  app.delete("/api/settings/categories/:id", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteSymbolCategory(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ error: "Category not found" });
+      }
+      
+      res.json({ success: true, message: "Category deleted" });
+    } catch (error) {
+      console.error("Error deleting category:", error);
+      res.status(500).json({ error: "Failed to delete category" });
+    }
+  });
+
   // Monitored Symbols CRUD API
   app.get("/api/settings/symbols", requireAuth, requireRole(["superadmin"]), async (req, res) => {
     try {

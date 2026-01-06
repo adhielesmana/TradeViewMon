@@ -243,12 +243,24 @@ export type AiSuggestionAccuracyStats = {
   holdAccuracy: number;
 };
 
+// Symbol Categories - configurable list of symbol categories
+export const symbolCategories = pgTable("symbol_categories", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: varchar("name", { length: 50 }).notNull().unique(),
+  displayOrder: integer("display_order").notNull().default(0), // Higher = shown first
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const insertSymbolCategorySchema = createInsertSchema(symbolCategories).omit({ id: true });
+export type SymbolCategory = typeof symbolCategories.$inferSelect;
+export type InsertSymbolCategory = z.infer<typeof insertSymbolCategorySchema>;
+
 // Monitored Symbols - configurable list of financial instruments
 export const monitoredSymbols = pgTable("monitored_symbols", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   symbol: varchar("symbol", { length: 20 }).notNull().unique(),
   displayName: varchar("display_name", { length: 100 }).notNull(),
-  category: varchar("category", { length: 50 }).notNull(), // 'commodities', 'indices', 'crypto', 'bonds'
+  category: varchar("category", { length: 50 }).notNull(), // References symbolCategories.name
   currency: varchar("currency", { length: 10 }).notNull().default("USD"), // 'USD', 'IDR', etc.
   isActive: boolean("is_active").notNull().default(true),
   priority: integer("priority").notNull().default(0), // Higher = more important
