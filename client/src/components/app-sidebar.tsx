@@ -29,9 +29,16 @@ import { useAuth } from "@/lib/auth-context";
 const menuItems = [
   {
     title: "Live Market",
-    url: "/",
+    url: "/dashboard",
     icon: LineChart,
     description: "Real-time prices",
+    adminOnly: false,
+  },
+  {
+    title: "News & AI",
+    url: "/news",
+    icon: Newspaper,
+    description: "AI news analysis",
     adminOnly: false,
   },
   {
@@ -67,13 +74,6 @@ const menuItems = [
     url: "/live-demo",
     icon: Wallet,
     description: "Paper trading",
-    adminOnly: false,
-  },
-  {
-    title: "News & AI",
-    url: "/news",
-    icon: Newspaper,
-    description: "AI news analysis",
     adminOnly: false,
   },
   {

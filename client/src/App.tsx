@@ -24,6 +24,7 @@ import SystemStatus from "@/pages/system-status";
 import UserManagement from "@/pages/user-management";
 import SettingsPage from "@/pages/settings";
 import NewsAnalysisPage from "@/pages/news-analysis";
+import PublicNewsPage from "@/pages/public-news";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import NotFound from "@/pages/not-found";
@@ -34,7 +35,7 @@ function ProtectedRoutes() {
   
   return (
     <Switch>
-      <Route path="/" component={LiveMarket} />
+      <Route path="/dashboard" component={LiveMarket} />
       <Route path="/predictions" component={Predictions} />
       <Route path="/ai-suggestions" component={AiSuggestions} />
       <Route path="/historical" component={Historical} />
@@ -92,7 +93,17 @@ function AuthenticatedApp() {
   }
 
   // Allow access to public routes without authentication
-  const isPublicRoute = location === "/login" || location.startsWith("/register");
+  const isPublicRoute = location === "/" || location === "/login" || location.startsWith("/register");
+  
+  // Public news page is the landing page (no auth required)
+  if (location === "/" && !isAuthenticated) {
+    return <PublicNewsPage />;
+  }
+  
+  // Redirect authenticated users from / to /dashboard
+  if (location === "/" && isAuthenticated) {
+    return <Redirect to="/dashboard" />;
+  }
   
   if (!isAuthenticated && !isPublicRoute) {
     return <Redirect to="/login" />;
@@ -100,14 +111,14 @@ function AuthenticatedApp() {
 
   if (location === "/login") {
     if (isAuthenticated) {
-      return <Redirect to="/" />;
+      return <Redirect to="/dashboard" />;
     }
     return <LoginPage />;
   }
 
   if (location.startsWith("/register")) {
     if (isAuthenticated) {
-      return <Redirect to="/" />;
+      return <Redirect to="/dashboard" />;
     }
     return <RegisterPage />;
   }

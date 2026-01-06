@@ -1932,6 +1932,73 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== PUBLIC API ENDPOINTS (No Auth Required) ====================
+
+  // Public news current analysis
+  app.get("/api/public/news/current", async (req, res) => {
+    try {
+      const analysis = await getNewsAndAnalysisCached();
+      res.json({ marketPrediction: analysis.marketPrediction });
+    } catch (error) {
+      console.error("Error fetching public news:", error);
+      res.status(500).json({ error: "Failed to fetch news analysis" });
+    }
+  });
+
+  // Public news history
+  app.get("/api/public/news/history", async (req, res) => {
+    try {
+      const result = await storage.getNewsAnalysisSnapshotsPaginated(1, 20);
+      res.json({ snapshots: result.snapshots });
+    } catch (error) {
+      console.error("Error fetching public news history:", error);
+      res.status(500).json({ error: "Failed to fetch news history" });
+    }
+  });
+
+  // Public market prices
+  app.get("/api/public/prices", async (req, res) => {
+    try {
+      const symbols = await storage.getMonitoredSymbols();
+      const activeSymbols = symbols.filter(s => s.isActive);
+      
+      const prices = await Promise.all(
+        activeSymbols.slice(0, 12).map(async (sym) => {
+          try {
+            const recentData = await storage.getRecentMarketData(sym.symbol, 2);
+            const currentPrice = recentData[0]?.close || 0;
+            const previousPrice = recentData[1]?.close || currentPrice;
+            const change = currentPrice - previousPrice;
+            const changePercent = previousPrice > 0 ? (change / previousPrice) * 100 : 0;
+            
+            return {
+              symbol: sym.symbol,
+              displayName: sym.displayName || sym.symbol,
+              price: currentPrice,
+              change,
+              changePercent,
+              currency: sym.currency || "USD",
+            };
+          } catch {
+            return {
+              symbol: sym.symbol,
+              displayName: sym.displayName || sym.symbol,
+              price: 0,
+              change: 0,
+              changePercent: 0,
+              currency: sym.currency || "USD",
+            };
+          }
+        })
+      );
+      
+      res.json({ prices });
+    } catch (error) {
+      console.error("Error fetching public prices:", error);
+      res.status(500).json({ error: "Failed to fetch prices" });
+    }
+  });
+
   wsService.initialize(httpServer);
 
   scheduler.start().catch(console.error);
