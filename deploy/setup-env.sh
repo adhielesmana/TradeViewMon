@@ -42,13 +42,13 @@ POSTGRES_DB=tradeviewmon
 # Security
 SESSION_SECRET=$SESSION_SECRET
 
-# API Keys - Add your keys here (optional - can also configure via Settings UI)
+# API Keys
 FINNHUB_API_KEY=
 
-# OpenAI API Key - Configure via Settings page after deployment
-# The app reads the OpenAI key from the database (Settings page) by default
-# Only set this if you want to override the database setting
-# OPENAI_API_KEY=
+# OpenAI API Key - REQUIRED for AI features
+# Set your OpenAI API key here for production deployment
+# Priority: OPENAI_API_KEY env var > Database (Settings page) > Replit integration
+OPENAI_API_KEY=
 EOF
 
 chmod 600 $ENV_FILE
@@ -57,15 +57,15 @@ log_info "Environment file created: $ENV_FILE"
 log_info ""
 log_info "Database will be automatically deployed via Docker"
 log_info ""
-log_warn "OPTIONAL: Configure Finnhub API key in .env.production:"
+log_warn "REQUIRED: Configure your OpenAI API key in .env.production:"
 log_warn ""
-log_warn "  FINNHUB_API_KEY (optional) - For real-time stock data"
+log_warn "  OPENAI_API_KEY=sk-your-key-here"
+log_warn "  Get key: https://platform.openai.com/api-keys"
+log_warn ""
+log_warn "OPTIONAL: Configure Finnhub API key for stock data:"
+log_warn ""
+log_warn "  FINNHUB_API_KEY=your-key"
 log_warn "  Get free key: https://finnhub.io/"
 log_warn ""
-log_info "OpenAI API Key: Configure via Settings page after deployment"
-log_info "  1. Log in as superadmin"
-log_info "  2. Go to Settings page"
-log_info "  3. Enter your OpenAI key (encrypted and stored in database)"
-log_info ""
 log_info "Ready to deploy! Run:"
 log_info "  ./deploy/deploy.sh --domain your-domain.com --email your@email.com"

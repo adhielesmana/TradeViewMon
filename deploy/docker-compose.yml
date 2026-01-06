@@ -13,6 +13,7 @@ services:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-tradeviewmon}:${POSTGRES_PASSWORD}@tradeviewmon-db:5432/${POSTGRES_DB:-tradeviewmon}"
       SESSION_SECRET: "${SESSION_SECRET}"
       FINNHUB_API_KEY: "${FINNHUB_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       USE_HTTPS: "${USE_HTTPS:-false}"
     depends_on:
       db:

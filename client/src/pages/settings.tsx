@@ -477,11 +477,20 @@ export default function SettingsPage() {
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Status:</span>
               {settings?.openaiApiKey?.isConfigured ? (
-                <Badge variant="default" className="gap-1 bg-blue-500"><CheckCircle className="h-3 w-3" />Configured</Badge>
+                settings?.openaiApiKey?.source === "database" ? (
+                  <Badge variant="default" className="gap-1 bg-green-600"><CheckCircle className="h-3 w-3" />Saved to Database</Badge>
+                ) : (
+                  <Badge variant="default" className="gap-1 bg-yellow-600"><AlertCircle className="h-3 w-3" />Environment Only</Badge>
+                )
               ) : (
                 <Badge variant="secondary" className="gap-1"><AlertCircle className="h-3 w-3" />Not Configured</Badge>
               )}
             </div>
+            {settings?.openaiApiKey?.isConfigured && settings?.openaiApiKey?.source === "environment" && (
+              <p className="text-sm text-muted-foreground">
+                Key detected from environment. For production deployment, save your own key below.
+              </p>
+            )}
             <Separator />
             <div className="space-y-2">
               <Label htmlFor="openai-key">{settings?.openaiApiKey?.isConfigured ? "Update API Key" : "Enter API Key"}</Label>

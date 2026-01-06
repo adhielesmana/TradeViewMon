@@ -14,8 +14,13 @@ interface OpenAIKeyResult {
 }
 
 async function getOpenAIKeyWithSource(): Promise<OpenAIKeyResult | null> {
-  // Priority 1: Check database for encrypted key (configured via Settings page)
-  // This is the PRIMARY source - users configure their key through the UI
+  // Priority 1: Direct OPENAI_API_KEY environment variable (best for production deployment)
+  const envKey = process.env.OPENAI_API_KEY;
+  if (envKey && envKey !== "not-configured") {
+    return { key: envKey, source: "env" };
+  }
+  
+  // Priority 2: Check database for encrypted key (configured via Settings page)
   try {
     const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
     if (encryptedKey) {
@@ -28,16 +33,10 @@ async function getOpenAIKeyWithSource(): Promise<OpenAIKeyResult | null> {
     console.error("[AI Analyzer] Failed to retrieve OpenAI key from database:", e);
   }
   
-  // Priority 2: Check for Replit's managed OpenAI integration (automatic on Replit)
+  // Priority 3: Check for Replit's managed OpenAI integration (development fallback only)
   const replitKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
   if (replitKey && replitKey !== "not-configured") {
     return { key: replitKey, source: "replit" };
-  }
-  
-  // Priority 3: Check for standard OPENAI_API_KEY environment variable (optional override)
-  const standardKey = process.env.OPENAI_API_KEY;
-  if (standardKey && standardKey !== "not-configured") {
-    return { key: standardKey, source: "env" };
   }
   
   return null;
