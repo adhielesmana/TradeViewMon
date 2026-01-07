@@ -35,42 +35,52 @@ async function getCroppedImg(
     throw new Error("No 2d context");
   }
 
-  // Calculate safe area that fits the rotated image
-  const maxSize = Math.max(image.width, image.height);
-  const safeArea = 2 * ((maxSize / 2) * Math.sqrt(2));
+  // For non-rotated images, use simple direct cropping
+  if (rotation === 0 || rotation === 360) {
+    canvas.width = pixelCrop.width;
+    canvas.height = pixelCrop.height;
 
-  // Set canvas size to safe area
-  canvas.width = safeArea;
-  canvas.height = safeArea;
+    // Draw the cropped portion directly
+    ctx.drawImage(
+      image,
+      pixelCrop.x,       // source x
+      pixelCrop.y,       // source y
+      pixelCrop.width,   // source width
+      pixelCrop.height,  // source height
+      0,                 // destination x
+      0,                 // destination y
+      pixelCrop.width,   // destination width
+      pixelCrop.height   // destination height
+    );
+  } else {
+    // For rotated images, use safe-area algorithm
+    const maxSize = Math.max(image.width, image.height);
+    const safeArea = 2 * ((maxSize / 2) * Math.sqrt(2));
 
-  // Translate to center of safe area
-  ctx.translate(safeArea / 2, safeArea / 2);
-  // Rotate
-  ctx.rotate((rotation * Math.PI) / 180);
-  // Translate back
-  ctx.translate(-safeArea / 2, -safeArea / 2);
+    canvas.width = safeArea;
+    canvas.height = safeArea;
 
-  // Draw the image in the center of the safe area
-  ctx.drawImage(
-    image,
-    safeArea / 2 - image.width / 2,
-    safeArea / 2 - image.height / 2
-  );
+    ctx.translate(safeArea / 2, safeArea / 2);
+    ctx.rotate((rotation * Math.PI) / 180);
+    ctx.translate(-safeArea / 2, -safeArea / 2);
 
-  // Get the full rotated image data
-  const data = ctx.getImageData(0, 0, safeArea, safeArea);
+    ctx.drawImage(
+      image,
+      safeArea / 2 - image.width * 0.5,
+      safeArea / 2 - image.height * 0.5
+    );
 
-  // Set output canvas to crop size
-  canvas.width = pixelCrop.width;
-  canvas.height = pixelCrop.height;
+    const data = ctx.getImageData(0, 0, safeArea, safeArea);
 
-  // Calculate the offset to extract the correct region
-  // The crop coordinates are relative to the original image center
-  const cropX = safeArea / 2 - image.width / 2 + pixelCrop.x;
-  const cropY = safeArea / 2 - image.height / 2 + pixelCrop.y;
+    canvas.width = pixelCrop.width;
+    canvas.height = pixelCrop.height;
 
-  // Put the image data offset by the crop position
-  ctx.putImageData(data, Math.round(-cropX), Math.round(-cropY));
+    ctx.putImageData(
+      data,
+      Math.round(0 - safeArea / 2 + image.width * 0.5 - pixelCrop.x),
+      Math.round(0 - safeArea / 2 + image.height * 0.5 - pixelCrop.y)
+    );
+  }
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
