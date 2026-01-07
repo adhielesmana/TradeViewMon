@@ -27,8 +27,8 @@ export default function LoginPage() {
     queryKey: ["/api/public/logo"],
     staleTime: 60000,
   });
-  const iconLogo = logoSettings?.logoIconPath || "/trady-icon.png";
-  const fullLogo = logoSettings?.logoPath || "/trady-logo.png";
+  const iconLogo = logoSettings?.logoIconPath || "/trady-icon.jpg";
+  const fullLogo = logoSettings?.logoPath || "/trady-logo.jpg";
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { username: string; password: string }) => {
@@ -66,7 +66,7 @@ export default function LoginPage() {
               src={fullLogo} 
               alt="Trady" 
               className="h-12 object-contain"
-              onError={(e) => { e.currentTarget.src = "/trady-logo.png"; }}
+              onError={(e) => { e.currentTarget.src = "/trady-logo.jpg"; }}
             />
           </div>
           <CardTitle className="text-xl">Welcome Back</CardTitle>

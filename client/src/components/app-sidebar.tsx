@@ -128,7 +128,7 @@ export function AppSidebar() {
   });
 
   // Determine which logo to display - prefer custom, fallback to default
-  const iconLogo = logoSettings?.logoIconPath || "/trady-icon.png";
+  const iconLogo = logoSettings?.logoIconPath || "/trady-icon.jpg";
   const fullLogo = logoSettings?.logoPath;
 
   return (
@@ -140,7 +140,7 @@ export function AppSidebar() {
             alt="Trady" 
             className="h-9 w-9 rounded-md object-contain"
             onError={(e) => {
-              e.currentTarget.src = "/trady-icon.png";
+              e.currentTarget.src = "/trady-icon.jpg";
             }}
           />
           <div className="flex flex-col">

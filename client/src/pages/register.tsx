@@ -34,8 +34,8 @@ export default function RegisterPage() {
     queryKey: ["/api/public/logo"],
     staleTime: 60000,
   });
-  const iconLogo = logoSettings?.logoIconPath || "/trady-icon.png";
-  const fullLogo = logoSettings?.logoPath || "/trady-logo.png";
+  const iconLogo = logoSettings?.logoIconPath || "/trady-icon.jpg";
+  const fullLogo = logoSettings?.logoPath || "/trady-logo.jpg";
 
   const { data: inviteInfo, isLoading: isLoadingInvite, error: inviteError } = useQuery<InviteInfo>({
     queryKey: ["/api/invites/validate", token],
@@ -185,7 +185,7 @@ export default function RegisterPage() {
               src={fullLogo} 
               alt="Trady" 
               className="h-12 object-contain"
-              onError={(e) => { e.currentTarget.src = "/trady-logo.png"; }}
+              onError={(e) => { e.currentTarget.src = "/trady-logo.jpg"; }}
             />
           </div>
           <CardTitle>Create Your Account</CardTitle>

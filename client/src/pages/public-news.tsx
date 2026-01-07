@@ -377,7 +377,7 @@ export default function PublicNewsPage() {
   });
 
   // Determine which logo to display - prefer custom, fallback to default
-  const iconLogo = logoSettings?.logoIconPath || "/trady-icon.png";
+  const iconLogo = logoSettings?.logoIconPath || "/trady-icon.jpg";
 
   const prediction = currentAnalysis?.marketPrediction;
   const snapshots = newsHistory?.snapshots || [];
@@ -470,7 +470,7 @@ export default function PublicNewsPage() {
                 src={iconLogo} 
                 alt="Trady" 
                 className="h-10 w-10 rounded-md object-contain"
-                onError={(e) => { e.currentTarget.src = "/trady-icon.png"; }}
+                onError={(e) => { e.currentTarget.src = "/trady-icon.jpg"; }}
               />
               <span className="hidden text-sm text-muted-foreground md:inline-block">Global Market Trading News</span>
             </div>
@@ -848,7 +848,7 @@ export default function PublicNewsPage() {
               src={iconLogo} 
               alt="Trady" 
               className="h-5 w-5 object-contain"
-              onError={(e) => { e.currentTarget.src = "/trady-icon.png"; }}
+              onError={(e) => { e.currentTarget.src = "/trady-icon.jpg"; }}
             />
             Trady
           </div>
