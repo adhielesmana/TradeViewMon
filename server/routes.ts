@@ -1956,6 +1956,24 @@ export async function registerRoutes(
     }
   });
 
+  // Public single article by ID
+  app.get("/api/public/news/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid article ID" });
+      }
+      const snapshot = await storage.getNewsAnalysisSnapshotById(id);
+      if (!snapshot) {
+        return res.status(404).json({ error: "Article not found" });
+      }
+      res.json({ snapshot });
+    } catch (error) {
+      console.error("Error fetching public article:", error);
+      res.status(500).json({ error: "Failed to fetch article" });
+    }
+  });
+
   // Public market prices
   app.get("/api/public/prices", async (req, res) => {
     try {

@@ -1,13 +1,18 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Minus, Clock, ArrowRight, BarChart3, LogIn, Newspaper, ChevronRight, LayoutDashboard } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Clock, ArrowRight, BarChart3, LogIn, Newspaper, ChevronRight, LayoutDashboard, X, AlertTriangle, Target, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/lib/auth-context";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 
 import marketAnalysisImage from "@assets/stock_images/stock_market_trading_4aea7bde.jpg";
 
@@ -35,6 +40,18 @@ interface NewsSnapshot {
   riskLevel: string;
   analyzedAt: string;
   generatedArticle?: string;
+  keyFactors?: string;
+  affectedSymbols?: string;
+  tradingRecommendation?: string;
+}
+
+interface FullArticle extends NewsSnapshot {
+  keyFactorsParsed: string[];
+  affectedSymbolsParsed: Array<{
+    symbol: string;
+    impact: "POSITIVE" | "NEGATIVE" | "NEUTRAL";
+    reason: string;
+  }>;
 }
 
 interface SymbolPrice {
@@ -72,6 +89,7 @@ function formatPrice(price: number, currency: string): string {
 export default function PublicNewsPage() {
   const { user } = useAuth();
   const isLoggedIn = !!user;
+  const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null);
 
   const { data: currentAnalysis, isLoading: isLoadingAnalysis } = useQuery<{ marketPrediction: MarketPrediction }>({
     queryKey: ["/api/public/news/current"],
@@ -88,9 +106,42 @@ export default function PublicNewsPage() {
     refetchInterval: 30000,
   });
 
+  // Fetch selected article details
+  const { data: selectedArticleData, isLoading: isLoadingArticle } = useQuery<{ snapshot: NewsSnapshot }>({
+    queryKey: [`/api/public/news/${selectedArticleId}`],
+    enabled: selectedArticleId !== null,
+  });
+
   const prediction = currentAnalysis?.marketPrediction;
   const snapshots = newsHistory?.snapshots || [];
   const prices = marketPrices?.prices || [];
+
+  // Safely parse JSON fields for the selected article
+  const safeParseJSON = <T,>(jsonString: string | null | undefined, fallback: T): T => {
+    if (!jsonString) return fallback;
+    try {
+      return JSON.parse(jsonString) as T;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const selectedArticle: FullArticle | null = selectedArticleData?.snapshot ? {
+    ...selectedArticleData.snapshot,
+    keyFactorsParsed: safeParseJSON<string[]>(selectedArticleData.snapshot.keyFactors, []),
+    affectedSymbolsParsed: safeParseJSON<Array<{ symbol: string; impact: "POSITIVE" | "NEGATIVE" | "NEUTRAL"; reason: string }>>(
+      selectedArticleData.snapshot.affectedSymbols, 
+      []
+    ),
+  } : null;
+
+  const handleArticleClick = (id: number) => {
+    setSelectedArticleId(id);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedArticleId(null);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -166,8 +217,15 @@ export default function PublicNewsPage() {
               </div>
             ) : prediction ? (
               <article data-testid="featured-article">
-                {/* Featured Image */}
-                <div className="relative mb-4 overflow-hidden rounded-lg">
+                {/* Featured Image - Clickable to open modal */}
+                <div 
+                  className="relative mb-4 overflow-hidden rounded-lg cursor-pointer"
+                  onClick={() => snapshots[0]?.id && handleArticleClick(snapshots[0].id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && snapshots[0]?.id && handleArticleClick(snapshots[0].id)}
+                  data-testid="button-featured-article"
+                >
                   <img
                     src={marketAnalysisImage}
                     alt="Market Analysis"
@@ -267,6 +325,7 @@ export default function PublicNewsPage() {
                   key={snapshot.id} 
                   className="transition-colors hover-elevate cursor-pointer"
                   data-testid={`news-card-${snapshot.id}`}
+                  onClick={() => handleArticleClick(snapshot.id)}
                 >
                   <CardContent className="p-4">
                     <div className="mb-2 flex items-center gap-2">
@@ -342,7 +401,12 @@ export default function PublicNewsPage() {
             <h2 className="mb-4 text-xl font-bold">Past Market Analysis</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {snapshots.slice(5, 11).map((snapshot) => (
-                <Card key={snapshot.id} className="hover-elevate cursor-pointer" data-testid={`past-article-${snapshot.id}`}>
+                <Card 
+                  key={snapshot.id} 
+                  className="hover-elevate cursor-pointer" 
+                  data-testid={`past-article-${snapshot.id}`}
+                  onClick={() => handleArticleClick(snapshot.id)}
+                >
                   <CardContent className="p-4">
                     <div className="mb-2 flex items-center gap-2">
                       <SentimentIcon sentiment={snapshot.overallSentiment} />
@@ -379,6 +443,165 @@ export default function PublicNewsPage() {
           </p>
         </div>
       </footer>
+
+      {/* Article Modal */}
+      <Dialog open={selectedArticleId !== null} onOpenChange={(open) => !open && handleCloseModal()}>
+        <DialogContent className="max-w-3xl max-h-[90vh] p-0" data-testid="modal-article">
+          <VisuallyHidden>
+            <DialogTitle>Article Details</DialogTitle>
+          </VisuallyHidden>
+          {isLoadingArticle ? (
+            <div className="p-6 space-y-4">
+              <Skeleton className="h-8 w-3/4" />
+              <Skeleton className="h-48 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          ) : selectedArticle ? (
+            <ScrollArea className="max-h-[85vh]">
+              <div className="p-6">
+                {/* Header with Image */}
+                <div className="relative mb-6 overflow-hidden rounded-lg">
+                  <img
+                    src={marketAnalysisImage}
+                    alt="Market Analysis"
+                    className="aspect-video w-full object-cover"
+                    data-testid="img-modal-article"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-4">
+                    <Badge 
+                      variant={selectedArticle.overallSentiment === "BULLISH" ? "default" : selectedArticle.overallSentiment === "BEARISH" ? "destructive" : "secondary"}
+                      className="mb-2"
+                    >
+                      {selectedArticle.overallSentiment} Market
+                    </Badge>
+                    <h2 className="text-xl font-bold text-white md:text-2xl" data-testid="text-modal-headline">
+                      {selectedArticle.headline || `${selectedArticle.overallSentiment} Market Analysis`}
+                    </h2>
+                    <div className="mt-2 flex items-center gap-4 text-white/80 text-sm">
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        {format(new Date(selectedArticle.analyzedAt), "MMMM d, yyyy 'at' HH:mm")}
+                      </span>
+                      <span>Confidence: {selectedArticle.confidence}%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Summary */}
+                <div className="mb-6">
+                  <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold">
+                    <FileText className="h-5 w-5 text-primary" />
+                    Quick Summary
+                  </h3>
+                  <p className="text-muted-foreground leading-relaxed" data-testid="text-modal-summary">
+                    {selectedArticle.summary}
+                  </p>
+                </div>
+
+                <Separator className="my-4" />
+
+                {/* Full Article */}
+                {selectedArticle.generatedArticle && (
+                  <div className="mb-6">
+                    <h3 className="mb-3 text-lg font-semibold">Full Analysis</h3>
+                    <div className="prose prose-sm dark:prose-invert max-w-none" data-testid="text-modal-article">
+                      {selectedArticle.generatedArticle.split('\n').map((paragraph, i) => (
+                        paragraph.trim() && <p key={i} className="mb-3 text-muted-foreground">{paragraph}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Key Factors */}
+                {selectedArticle.keyFactorsParsed.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+                      <ChevronRight className="h-5 w-5 text-primary" />
+                      Key Market Factors
+                    </h3>
+                    <ul className="space-y-2">
+                      {selectedArticle.keyFactorsParsed.map((factor, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground" data-testid={`text-modal-factor-${i}`}>
+                          <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          {factor}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <Separator className="my-4" />
+
+                {/* Trading Recommendation */}
+                {selectedArticle.tradingRecommendation && (
+                  <div className="mb-6">
+                    <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+                      <Target className="h-5 w-5 text-primary" />
+                      Trading Recommendation
+                    </h3>
+                    <Card className="border-primary/20 bg-primary/5">
+                      <CardContent className="p-4">
+                        <p className="text-sm" data-testid="text-modal-recommendation">
+                          {selectedArticle.tradingRecommendation}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Risk Level */}
+                {selectedArticle.riskLevel && (
+                  <div className="mb-6">
+                    <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+                      <AlertTriangle className="h-5 w-5 text-primary" />
+                      Risk Assessment
+                    </h3>
+                    <Badge 
+                      variant={selectedArticle.riskLevel === "LOW" ? "default" : selectedArticle.riskLevel === "HIGH" ? "destructive" : "secondary"}
+                      className="text-sm"
+                      data-testid="badge-modal-risk"
+                    >
+                      {selectedArticle.riskLevel} Risk
+                    </Badge>
+                  </div>
+                )}
+
+                {/* Symbol Impact */}
+                {selectedArticle.affectedSymbolsParsed.length > 0 && (
+                  <div className="mb-4">
+                    <h3 className="mb-3 text-lg font-semibold">Symbol Impact</h3>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {selectedArticle.affectedSymbolsParsed.map((s, i) => (
+                        <Card key={i} className="border-l-4" style={{ borderLeftColor: s.impact === "POSITIVE" ? "rgb(34 197 94)" : s.impact === "NEGATIVE" ? "rgb(239 68 68)" : "rgb(234 179 8)" }}>
+                          <CardContent className="p-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-bold" data-testid={`text-modal-symbol-${s.symbol}`}>{s.symbol}</span>
+                              <Badge 
+                                variant="outline"
+                                className={s.impact === "POSITIVE" ? "border-green-500/50 text-green-600 dark:text-green-400" : s.impact === "NEGATIVE" ? "border-red-500/50 text-red-600 dark:text-red-400" : ""}
+                              >
+                                <SentimentIcon sentiment={s.impact === "POSITIVE" ? "BULLISH" : s.impact === "NEGATIVE" ? "BEARISH" : "NEUTRAL"} />
+                                <span className="ml-1">{s.impact}</span>
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{s.reason}</p>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="flex h-40 items-center justify-center">
+              <p className="text-muted-foreground">Article not found</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
