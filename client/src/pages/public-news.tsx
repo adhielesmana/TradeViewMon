@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface MarketPrediction {
   headline?: string;
@@ -76,6 +77,93 @@ function PriceChange({ change, changePercent }: { change?: number; changePercent
     <span className={`text-xs font-medium ${isPositive ? "text-green-500" : "text-red-500"}`}>
       {isPositive ? "+" : ""}{changePercent.toFixed(2)}%
     </span>
+  );
+}
+
+// Inline share button for article cards (compact popover version)
+function InlineShareButton({ headline, summary, articleId }: { headline: string; summary: string; articleId: number }) {
+  const [copied, setCopied] = useState(false);
+  const [open, setOpen] = useState(false);
+  
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const shareUrl = `${baseUrl}/?article=${articleId}`;
+  const shareTitle = headline || "Market Analysis";
+  const shareText = `${shareTitle}: ${summary.slice(0, 100)}...`;
+  
+  const encodedUrl = encodeURIComponent(shareUrl);
+  const encodedText = encodeURIComponent(shareText);
+  
+  const handleCopyLink = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+        setOpen(false);
+      }, 1500);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+  
+  const handleShareClick = (url: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.open(url, "_blank", "noopener,noreferrer,width=600,height=400");
+    setOpen(false);
+  };
+  
+  const shareLinks = [
+    { name: "Facebook", icon: SiFacebook, url: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`, color: "text-[#1877F2]" },
+    { name: "X", icon: SiX, url: `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`, color: "text-foreground" },
+    { name: "WhatsApp", icon: SiWhatsapp, url: `https://wa.me/?text=${encodedText}%20${encodedUrl}`, color: "text-[#25D366]" },
+    { name: "Telegram", icon: SiTelegram, url: `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`, color: "text-[#0088CC]" },
+  ];
+  
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(!open);
+          }}
+          data-testid={`button-inline-share-${articleId}`}
+        >
+          <Share2 className="h-4 w-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2" align="end" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
+          {shareLinks.map((link) => (
+            <Button
+              key={link.name}
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 ${link.color}`}
+              onClick={(e) => handleShareClick(link.url, e)}
+              title={`Share on ${link.name}`}
+              data-testid={`button-inline-share-${link.name.toLowerCase()}-${articleId}`}
+            >
+              <link.icon className="h-4 w-4" />
+            </Button>
+          ))}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={handleCopyLink}
+            title="Copy link"
+            data-testid={`button-inline-copy-${articleId}`}
+          >
+            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Link2 className="h-4 w-4" />}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -565,9 +653,16 @@ export default function PublicNewsPage() {
                           {format(new Date(snapshot.analyzedAt), "MMM d, yyyy")}
                         </span>
                       </div>
-                      <h3 className="mb-2 font-semibold leading-tight line-clamp-2">
-                        {snapshot.headline || `${snapshot.overallSentiment} Market Outlook`}
-                      </h3>
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <h3 className="font-semibold leading-tight line-clamp-2">
+                          {snapshot.headline || `${snapshot.overallSentiment} Market Outlook`}
+                        </h3>
+                        <InlineShareButton 
+                          headline={snapshot.headline || `${snapshot.overallSentiment} Market Outlook`}
+                          summary={snapshot.summary}
+                          articleId={snapshot.id}
+                        />
+                      </div>
                       <p className="text-sm text-muted-foreground line-clamp-2 text-justify">
                         {snapshot.summary}
                       </p>
