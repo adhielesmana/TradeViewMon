@@ -1945,11 +1945,18 @@ export async function registerRoutes(
     }
   });
 
-  // Public news history
+  // Public news history with pagination
   app.get("/api/public/news/history", async (req, res) => {
     try {
-      const result = await storage.getNewsAnalysisSnapshotsPaginated(1, 20);
-      res.json({ snapshots: result.snapshots });
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 6;
+      const result = await storage.getNewsAnalysisSnapshotsPaginated(page, limit);
+      res.json({ 
+        snapshots: result.snapshots,
+        total: result.total,
+        totalPages: result.totalPages,
+        currentPage: page
+      });
     } catch (error) {
       console.error("Error fetching public news history:", error);
       res.status(500).json({ error: "Failed to fetch news history" });

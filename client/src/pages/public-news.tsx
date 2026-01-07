@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Minus, Clock, ArrowRight, BarChart3, LogIn, Newspaper, ChevronRight, LayoutDashboard, X, AlertTriangle, Target, FileText } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Clock, ArrowRight, BarChart3, LogIn, Newspaper, ChevronRight, ChevronLeft, LayoutDashboard, X, AlertTriangle, Target, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -86,18 +86,32 @@ function formatPrice(price: number, currency: string): string {
   return `$${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+interface PaginatedNewsHistory {
+  snapshots: NewsSnapshot[];
+  total: number;
+  totalPages: number;
+  currentPage: number;
+}
+
 export default function PublicNewsPage() {
   const { user } = useAuth();
   const isLoggedIn = !!user;
   const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null);
+  const [pastArticlesPage, setPastArticlesPage] = useState(1);
+  const ARTICLES_PER_PAGE = 6;
 
   const { data: currentAnalysis, isLoading: isLoadingAnalysis } = useQuery<{ marketPrediction: MarketPrediction }>({
     queryKey: ["/api/public/news/current"],
     refetchInterval: 60000,
   });
 
-  const { data: newsHistory, isLoading: isLoadingHistory } = useQuery<{ snapshots: NewsSnapshot[] }>({
-    queryKey: ["/api/public/news/history"],
+  const { data: newsHistory, isLoading: isLoadingHistory } = useQuery<PaginatedNewsHistory>({
+    queryKey: ["/api/public/news/history", pastArticlesPage],
+    queryFn: async () => {
+      const res = await fetch(`/api/public/news/history?page=${pastArticlesPage}&limit=${ARTICLES_PER_PAGE}`);
+      if (!res.ok) throw new Error("Failed to fetch news history");
+      return res.json();
+    },
     refetchInterval: 120000,
   });
 
@@ -114,6 +128,7 @@ export default function PublicNewsPage() {
 
   const prediction = currentAnalysis?.marketPrediction;
   const snapshots = newsHistory?.snapshots || [];
+  const totalPages = newsHistory?.totalPages || 1;
   const prices = marketPrices?.prices || [];
 
   // Safely parse JSON fields for the selected article
@@ -400,37 +415,105 @@ export default function PublicNewsPage() {
           </div>
         </section>
 
-        {/* Past Articles Section */}
-        {snapshots.length > 5 && (
-          <section className="mt-8">
-            <h2 className="mb-4 text-xl font-bold">Past Market Analysis</h2>
+        {/* Past Articles Section with Pagination */}
+        <section className="mt-8">
+          <h2 className="mb-4 text-xl font-bold">Past Market Analysis</h2>
+          
+          {isLoadingHistory ? (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {snapshots.slice(5, 11).map((snapshot) => (
-                <Card 
-                  key={snapshot.id} 
-                  className="hover-elevate cursor-pointer" 
-                  data-testid={`past-article-${snapshot.id}`}
-                  onClick={() => handleArticleClick(snapshot.id)}
-                >
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Card key={i}>
                   <CardContent className="p-4">
-                    <div className="mb-2 flex items-center gap-2">
-                      <SentimentIcon sentiment={snapshot.overallSentiment} />
-                      <span className="text-xs text-muted-foreground">
-                        {format(new Date(snapshot.analyzedAt), "MMM d, yyyy")}
-                      </span>
-                    </div>
-                    <h3 className="mb-2 font-semibold leading-tight line-clamp-2">
-                      {snapshot.headline || `${snapshot.overallSentiment} Market Outlook`}
-                    </h3>
-                    <p className="text-sm text-muted-foreground line-clamp-3">
-                      {snapshot.summary}
-                    </p>
+                    <Skeleton className="mb-2 h-4 w-24" />
+                    <Skeleton className="mb-2 h-6 w-full" />
+                    <Skeleton className="h-16 w-full" />
                   </CardContent>
                 </Card>
               ))}
             </div>
-          </section>
-        )}
+          ) : snapshots.length > 0 ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {snapshots.map((snapshot) => (
+                  <Card 
+                    key={snapshot.id} 
+                    className="hover-elevate cursor-pointer" 
+                    data-testid={`past-article-${snapshot.id}`}
+                    onClick={() => handleArticleClick(snapshot.id)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="mb-2 flex items-center gap-2">
+                        <SentimentIcon sentiment={snapshot.overallSentiment} />
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(snapshot.analyzedAt), "MMM d, yyyy")}
+                        </span>
+                      </div>
+                      <h3 className="mb-2 font-semibold leading-tight line-clamp-2">
+                        {snapshot.headline || `${snapshot.overallSentiment} Market Outlook`}
+                      </h3>
+                      <p className="text-sm text-muted-foreground line-clamp-3 text-justify">
+                        {snapshot.summary}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="mt-6 flex items-center justify-center gap-2" data-testid="pagination-controls">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setPastArticlesPage(p => Math.max(1, p - 1))}
+                    disabled={pastArticlesPage === 1}
+                    data-testid="button-prev-page"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (pastArticlesPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (pastArticlesPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = pastArticlesPage - 2 + i;
+                    }
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={pastArticlesPage === pageNum ? "default" : "outline"}
+                        size="icon"
+                        onClick={() => setPastArticlesPage(pageNum)}
+                        data-testid={`button-page-${pageNum}`}
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                  
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setPastArticlesPage(p => Math.min(totalPages, p + 1))}
+                    disabled={pastArticlesPage === totalPages}
+                    data-testid="button-next-page"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex h-40 items-center justify-center rounded-lg border border-dashed">
+              <p className="text-muted-foreground">No past articles available</p>
+            </div>
+          )}
+        </section>
       </main>
 
       {/* Footer */}
