@@ -71,3 +71,28 @@ export const useTheme = () => {
 
   return context;
 };
+
+/**
+ * Get the resolved theme (light or dark), handling "system" preference
+ */
+export const useResolvedTheme = (): "light" | "dark" => {
+  const { theme } = useTheme();
+  const [resolved, setResolved] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    if (theme === "system") {
+      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setResolved(isDark ? "dark" : "light");
+      
+      // Listen for system theme changes
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      const handler = (e: MediaQueryListEvent) => setResolved(e.matches ? "dark" : "light");
+      mediaQuery.addEventListener("change", handler);
+      return () => mediaQuery.removeEventListener("change", handler);
+    } else {
+      setResolved(theme);
+    }
+  }, [theme]);
+
+  return resolved;
+};

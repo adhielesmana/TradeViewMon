@@ -11,9 +11,10 @@ interface UploadMetadata {
 const uploadedFilesMap = new Map<string, string>();
 
 interface UploadResponse {
-  uploadURL: string;
+  uploadURL?: string;
   objectPath: string;
   metadata: UploadMetadata;
+  useLocalUpload?: boolean;
 }
 
 interface UseUploadOptions {
@@ -108,7 +109,31 @@ export function useUpload(options: UseUploadOptions = {}) {
   );
 
   /**
-   * Upload a file using the presigned URL flow.
+   * Upload a file directly using FormData (for self-hosted local storage).
+   */
+  const uploadLocalFile = useCallback(
+    async (file: File): Promise<UploadResponse> => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/uploads/local", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to upload file");
+      }
+
+      return response.json();
+    },
+    []
+  );
+
+  /**
+   * Upload a file using the presigned URL flow or local upload.
+   * Automatically detects self-hosted mode.
    *
    * @param file - The file to upload
    * @returns The upload response containing the object path
@@ -120,17 +145,29 @@ export function useUpload(options: UseUploadOptions = {}) {
       setProgress(0);
 
       try {
-        // Step 1: Request presigned URL (send metadata as JSON)
+        // Step 1: Request upload info
         setProgress(10);
-        const uploadResponse = await requestUploadUrl(file);
+        const uploadInfo = await requestUploadUrl(file);
 
-        // Step 2: Upload file directly to presigned URL
-        setProgress(30);
-        await uploadToPresignedUrl(file, uploadResponse.uploadURL);
+        let finalResponse: UploadResponse;
+
+        // Check if self-hosted mode (local upload)
+        if (uploadInfo.useLocalUpload) {
+          console.log("[Upload] Using local upload for self-hosted mode");
+          setProgress(30);
+          finalResponse = await uploadLocalFile(file);
+        } else if (uploadInfo.uploadURL) {
+          // Replit mode: use presigned URL
+          setProgress(30);
+          await uploadToPresignedUrl(file, uploadInfo.uploadURL);
+          finalResponse = uploadInfo;
+        } else {
+          throw new Error("Invalid upload response from server");
+        }
 
         setProgress(100);
-        options.onSuccess?.(uploadResponse);
-        return uploadResponse;
+        options.onSuccess?.(finalResponse);
+        return finalResponse;
       } catch (err) {
         const error = err instanceof Error ? err : new Error("Upload failed");
         setError(error);
@@ -140,7 +177,7 @@ export function useUpload(options: UseUploadOptions = {}) {
         setIsUploading(false);
       }
     },
-    [requestUploadUrl, uploadToPresignedUrl, options]
+    [requestUploadUrl, uploadToPresignedUrl, uploadLocalFile, options]
   );
 
   /**
