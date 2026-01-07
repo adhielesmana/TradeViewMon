@@ -256,7 +256,7 @@ export default function PublicNewsPage() {
                 </div>
 
                 {/* Article Summary */}
-                <p className="mb-4 text-lg text-muted-foreground leading-relaxed" data-testid="text-summary-featured">
+                <p className="mb-4 text-lg text-muted-foreground leading-relaxed text-justify" data-testid="text-summary-featured">
                   {prediction.summary}
                 </p>
 
@@ -500,7 +500,7 @@ export default function PublicNewsPage() {
                     <FileText className="h-5 w-5 text-primary" />
                     Quick Summary
                   </h3>
-                  <p className="text-muted-foreground leading-relaxed" data-testid="text-modal-summary">
+                  <p className="text-muted-foreground leading-relaxed text-justify" data-testid="text-modal-summary">
                     {selectedArticle.summary}
                   </p>
                 </div>
@@ -513,7 +513,7 @@ export default function PublicNewsPage() {
                     <h3 className="mb-3 text-lg font-semibold">Full Analysis</h3>
                     <div className="prose prose-sm dark:prose-invert max-w-none" data-testid="text-modal-article">
                       {selectedArticle.generatedArticle.split('\n').map((paragraph, i) => (
-                        paragraph.trim() && <p key={i} className="mb-3 text-muted-foreground">{paragraph}</p>
+                        paragraph.trim() && <p key={i} className="mb-3 text-muted-foreground text-justify">{paragraph}</p>
                       ))}
                     </div>
                   </div>
