@@ -783,6 +783,9 @@ Generate your market prediction now.`
     // Generate article text for history display
     const generatedArticle = generateArticleText(prediction, recentArticles.length, "hourly");
     
+    // Pick featured image from source articles (first article with image)
+    const featuredImageUrl = recentArticles.find(a => a.imageUrl)?.imageUrl || null;
+    
     // Save enhanced analysis to database with source tracking
     const snapshot: InsertNewsAnalysisSnapshot = {
       overallSentiment: prediction.overallSentiment,
@@ -803,6 +806,7 @@ Generate your market prediction now.`
       }),
       analysisType: "hourly",
       generatedArticle: generatedArticle,
+      imageUrl: featuredImageUrl,
     };
     
     await storage.saveNewsAnalysisSnapshot(snapshot);
@@ -870,6 +874,70 @@ interface FetchedNewsItem {
   content: string;
   source: string;
   feedId?: number;
+  imageUrl?: string;
+}
+
+function extractImageFromRssItem(item: any): string | undefined {
+  // Helper to extract URL from media object (handles both object and array forms)
+  const extractMediaUrl = (media: any): string | undefined => {
+    if (!media) return undefined;
+    
+    // If it's an array, iterate and find first valid image
+    if (Array.isArray(media)) {
+      for (const m of media) {
+        const url = m?.$ && m.$.url;
+        if (url && isValidImageUrl(url)) return url;
+      }
+      return undefined;
+    }
+    
+    // Single object form
+    const url = media.$ && media.$.url;
+    if (url && isValidImageUrl(url)) return url;
+    
+    return undefined;
+  };
+  
+  // Priority 1: media:content (most common for news feeds)
+  const mediaContentUrl = extractMediaUrl(item.mediaContent);
+  if (mediaContentUrl) return mediaContentUrl;
+  
+  // Priority 2: media:thumbnail
+  const mediaThumbnailUrl = extractMediaUrl(item.mediaThumbnail);
+  if (mediaThumbnailUrl) return mediaThumbnailUrl;
+  
+  // Priority 3: enclosure (common in podcasts and media feeds)
+  if (item.enclosure) {
+    const enclosure = Array.isArray(item.enclosure) ? item.enclosure[0] : item.enclosure;
+    const encUrl = enclosure?.url || enclosure?.$?.url;
+    if (encUrl && isValidImageUrl(encUrl)) return encUrl;
+  }
+  
+  // Priority 4: Extract from content/description using regex
+  const content = item.content || item['content:encoded'] || item.description || '';
+  const imgMatch = content.match(/<img[^>]+src=["']([^"']+)["']/i);
+  if (imgMatch && imgMatch[1] && isValidImageUrl(imgMatch[1])) {
+    return imgMatch[1];
+  }
+  
+  return undefined;
+}
+
+function isValidImageUrl(url: string): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    // Must be http/https and look like an image
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    const lowerUrl = url.toLowerCase();
+    return lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || 
+           lowerUrl.includes('.png') || lowerUrl.includes('.gif') || 
+           lowerUrl.includes('.webp') || lowerUrl.includes('/image') ||
+           lowerUrl.includes('img') || lowerUrl.includes('photo') ||
+           lowerUrl.includes('media');
+  } catch {
+    return false;
+  }
 }
 
 async function fetchFromSingleFeedWithMeta(
@@ -888,6 +956,7 @@ async function fetchFromSingleFeedWithMeta(
       content: item.contentSnippet || item.content || "",
       source: feedName || feed.title || "News",
       feedId,
+      imageUrl: extractImageFromRssItem(item),
     }));
   } catch (error: any) {
     console.error(`[NewsService] Failed to fetch RSS feed ${feedName}:`, error.message);
@@ -925,6 +994,7 @@ export async function fetchAndStoreNews(): Promise<{ stored: number; total: numb
     linkHash: generateLinkHash(item.link),
     content: item.content,
     source: item.source,
+    imageUrl: item.imageUrl || null,
     publishedAt: item.pubDate ? new Date(item.pubDate) : null,
     fetchedAt: new Date(),
     sentiment: null,

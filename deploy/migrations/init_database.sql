@@ -531,6 +531,15 @@ BEGIN
         ALTER TABLE news_analysis_snapshots ADD COLUMN generated_article TEXT;
     END IF;
     
+    -- Add image_url columns for article images
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='news_articles' AND column_name='image_url') THEN
+        ALTER TABLE news_articles ADD COLUMN image_url TEXT;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='news_analysis_snapshots' AND column_name='image_url') THEN
+        ALTER TABLE news_analysis_snapshots ADD COLUMN image_url TEXT;
+    END IF;
+    
     -- Add missing columns to monitored_symbols
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='monitored_symbols' AND column_name='created_at') THEN
         ALTER TABLE monitored_symbols ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT NOW();

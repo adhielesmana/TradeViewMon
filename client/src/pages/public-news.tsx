@@ -43,6 +43,7 @@ interface NewsSnapshot {
   keyFactors?: string;
   affectedSymbols?: string;
   tradingRecommendation?: string;
+  imageUrl?: string;
 }
 
 interface FullArticle extends NewsSnapshot {
@@ -242,10 +243,11 @@ export default function PublicNewsPage() {
                   data-testid="button-featured-article"
                 >
                   <img
-                    src={marketAnalysisImage}
+                    src={snapshots[0]?.imageUrl || marketAnalysisImage}
                     alt="Market Analysis"
                     className="aspect-video w-full object-cover"
                     data-testid="img-featured-article"
+                    onError={(e) => { (e.target as HTMLImageElement).src = marketAnalysisImage; }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
                   <div className="absolute bottom-0 left-0 right-0 p-6">
@@ -437,10 +439,26 @@ export default function PublicNewsPage() {
                 {snapshots.map((snapshot) => (
                   <Card 
                     key={snapshot.id} 
-                    className="hover-elevate cursor-pointer" 
+                    className="hover-elevate cursor-pointer overflow-hidden" 
                     data-testid={`past-article-${snapshot.id}`}
                     onClick={() => handleArticleClick(snapshot.id)}
                   >
+                    {/* Thumbnail Image */}
+                    <div className="relative h-32 overflow-hidden">
+                      <img
+                        src={snapshot.imageUrl || marketAnalysisImage}
+                        alt={snapshot.headline || "Market Analysis"}
+                        className="h-full w-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).src = marketAnalysisImage; }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                      <Badge 
+                        variant={snapshot.overallSentiment === "BULLISH" ? "default" : snapshot.overallSentiment === "BEARISH" ? "destructive" : "secondary"}
+                        className="absolute bottom-2 left-2"
+                      >
+                        {snapshot.overallSentiment}
+                      </Badge>
+                    </div>
                     <CardContent className="p-4">
                       <div className="mb-2 flex items-center gap-2">
                         <SentimentIcon sentiment={snapshot.overallSentiment} />
@@ -451,7 +469,7 @@ export default function PublicNewsPage() {
                       <h3 className="mb-2 font-semibold leading-tight line-clamp-2">
                         {snapshot.headline || `${snapshot.overallSentiment} Market Outlook`}
                       </h3>
-                      <p className="text-sm text-muted-foreground line-clamp-3 text-justify">
+                      <p className="text-sm text-muted-foreground line-clamp-2 text-justify">
                         {snapshot.summary}
                       </p>
                     </CardContent>
@@ -551,10 +569,11 @@ export default function PublicNewsPage() {
                 {/* Header with Image */}
                 <div className="relative mb-6 overflow-hidden rounded-lg">
                   <img
-                    src={marketAnalysisImage}
+                    src={selectedArticle.imageUrl || marketAnalysisImage}
                     alt="Market Analysis"
                     className="aspect-video w-full object-cover"
                     data-testid="img-modal-article"
+                    onError={(e) => { (e.target as HTMLImageElement).src = marketAnalysisImage; }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
                   <div className="absolute bottom-0 left-0 right-0 p-4">

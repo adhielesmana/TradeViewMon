@@ -442,6 +442,7 @@ export const newsArticles = pgTable("news_articles", {
   linkHash: varchar("link_hash", { length: 64 }).notNull().unique(), // SHA-256 hash for deduplication
   content: text("content"),
   source: varchar("source", { length: 100 }),
+  imageUrl: text("image_url"), // Image URL from RSS feed (enclosure, media:content, og:image)
   publishedAt: timestamp("published_at"),
   fetchedAt: timestamp("fetched_at").notNull().default(sql`now()`),
   sentiment: varchar("sentiment", { length: 20 }), // 'BULLISH', 'BEARISH', 'NEUTRAL' - AI analyzed
@@ -476,6 +477,7 @@ export const newsAnalysisSnapshots = pgTable("news_analysis_snapshots", {
   historicalContext: text("historical_context"), // JSON summary of last 7 days predictions used
   analysisType: varchar("analysis_type", { length: 50 }).default("regular"), // 'hourly' or 'regular'
   generatedArticle: text("generated_article"), // Full generated article text for history display
+  imageUrl: text("image_url"), // Featured image URL from source articles
 });
 
 export const insertNewsAnalysisSnapshotSchema = createInsertSchema(newsAnalysisSnapshots).omit({ id: true });
