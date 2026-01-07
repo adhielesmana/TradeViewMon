@@ -316,10 +316,10 @@ export default function PublicNewsPage() {
             )}
           </div>
 
-          {/* Right Sidebar - Symbol Impact */}
+          {/* Right Sidebar - Trends */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">Symbol Impact</h2>
+              <h2 className="text-lg font-bold">Trends</h2>
               <Link href="/login">
                 <Button variant="ghost" size="sm" className="text-primary" data-testid="button-view-all-symbols">
                   View All <ArrowRight className="ml-1 h-4 w-4" />
@@ -371,7 +371,7 @@ export default function PublicNewsPage() {
               ))
             ) : (
               <div className="flex h-40 items-center justify-center rounded-lg border border-dashed">
-                <p className="text-sm text-muted-foreground">No symbol impact data available</p>
+                <p className="text-sm text-muted-foreground">No trends data available</p>
               </div>
             )}
           </div>
@@ -675,10 +675,10 @@ export default function PublicNewsPage() {
                   </div>
                 )}
 
-                {/* Symbol Impact */}
+                {/* Trends */}
                 {selectedArticle.affectedSymbolsParsed.length > 0 && (
                   <div className="mb-4">
-                    <h3 className="mb-3 text-lg font-semibold">Symbol Impact</h3>
+                    <h3 className="mb-3 text-lg font-semibold">Trends</h3>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {selectedArticle.affectedSymbolsParsed.map((s, i) => (
                         <Card key={i} className="border-l-4" style={{ borderLeftColor: s.impact === "POSITIVE" ? "rgb(34 197 94)" : s.impact === "NEGATIVE" ? "rgb(239 68 68)" : "rgb(234 179 8)" }}>
