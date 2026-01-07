@@ -1038,12 +1038,9 @@ function extractKeywordsFromHeadline(headline: string): string[] {
 }
 
 function generateStockImageUrl(headline: string, articleId: number): string {
-  const keywords = extractKeywordsFromHeadline(headline);
-  const query = keywords.join(",");
-  
-  // Use Unsplash Source API - provides free, high-quality stock images
-  // The sig parameter ensures different images for different articles
-  return `https://source.unsplash.com/800x450/?${encodeURIComponent(query)}&sig=${articleId}`;
+  // Use Picsum for reliable, beautiful placeholder images
+  // The seed ensures deterministic unique images per article
+  return `https://picsum.photos/seed/article${articleId}/800/450`;
 }
 
 // Backfill images for articles that don't have them

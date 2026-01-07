@@ -14,8 +14,6 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
-import marketAnalysisImage from "@assets/stock_images/stock_market_trading_4aea7bde.jpg";
-
 interface MarketPrediction {
   headline?: string;
   overallSentiment: "BULLISH" | "BEARISH" | "NEUTRAL";
@@ -85,6 +83,18 @@ function formatPrice(price: number, currency: string): string {
     return `Rp ${price.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   }
   return `$${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Generate unique image URL based on article content using Picsum (reliable, no API key needed)
+function generateArticleImage(article: { id?: number; headline?: string; summary?: string; overallSentiment?: string }): string {
+  const text = (article.headline || article.summary || "market").toLowerCase();
+  
+  // Use article ID or hash of headline for stable, unique image per article
+  const stableId = article.id || Math.abs(text.split("").reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0));
+  
+  // Picsum provides reliable, beautiful placeholder images with consistent seeding
+  // Format: https://picsum.photos/seed/{seed}/{width}/{height}
+  return `https://picsum.photos/seed/article${stableId}/800/450`;
 }
 
 interface PaginatedNewsHistory {
@@ -243,11 +253,10 @@ export default function PublicNewsPage() {
                   data-testid="button-featured-article"
                 >
                   <img
-                    src={snapshots[0]?.imageUrl || marketAnalysisImage}
+                    src={snapshots[0]?.imageUrl || generateArticleImage({ id: snapshots[0]?.id, headline: prediction.headline, summary: prediction.summary })}
                     alt="Market Analysis"
                     className="aspect-video w-full object-cover"
                     data-testid="img-featured-article"
-                    onError={(e) => { (e.target as HTMLImageElement).src = marketAnalysisImage; }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
                   <div className="absolute bottom-0 left-0 right-0 p-6">
@@ -446,10 +455,9 @@ export default function PublicNewsPage() {
                     {/* Thumbnail Image */}
                     <div className="relative h-32 overflow-hidden">
                       <img
-                        src={snapshot.imageUrl || marketAnalysisImage}
+                        src={snapshot.imageUrl || generateArticleImage(snapshot)}
                         alt={snapshot.headline || "Market Analysis"}
                         className="h-full w-full object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).src = marketAnalysisImage; }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                       <Badge 
@@ -569,11 +577,10 @@ export default function PublicNewsPage() {
                 {/* Header with Image */}
                 <div className="relative mb-6 overflow-hidden rounded-lg">
                   <img
-                    src={selectedArticle.imageUrl || marketAnalysisImage}
+                    src={selectedArticle.imageUrl || generateArticleImage(selectedArticle)}
                     alt="Market Analysis"
                     className="aspect-video w-full object-cover"
                     data-testid="img-modal-article"
-                    onError={(e) => { (e.target as HTMLImageElement).src = marketAnalysisImage; }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
                   <div className="absolute bottom-0 left-0 right-0 p-4">
