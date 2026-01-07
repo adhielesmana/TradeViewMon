@@ -78,8 +78,8 @@ app.use(
       createTableIfMissing: false, // We create it ourselves above
       pruneSessionInterval: 60 * 15, // Prune every 15 minutes
     }),
-    secret: process.env.SESSION_SECRET || "tradeviewmon-secret-key-change-in-production",
-    name: "tradeviewmon.sid",
+    secret: process.env.SESSION_SECRET || "trady-secret-key-change-in-production",
+    name: "trady.sid",
     resave: false,
     saveUninitialized: false,
     cookie: {

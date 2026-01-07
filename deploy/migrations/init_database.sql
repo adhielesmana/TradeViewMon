@@ -1,4 +1,4 @@
--- TradeViewMon Database Initialization
+-- Trady Database Initialization
 -- Creates all tables if they don't exist, adds missing columns to existing tables
 -- Safe to run multiple times (idempotent)
 

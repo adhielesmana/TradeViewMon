@@ -168,8 +168,8 @@ export default function RegisterPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex items-center gap-2 text-primary">
-            <TrendingUp className="h-8 w-8" />
-            <span className="text-2xl font-bold">TradeViewMon</span>
+            <img src="/trady-icon.png" alt="Trady" className="h-8 w-8" />
+            <span className="text-2xl font-bold">Trady</span>
           </div>
           <CardTitle>Create Your Account</CardTitle>
           <CardDescription>

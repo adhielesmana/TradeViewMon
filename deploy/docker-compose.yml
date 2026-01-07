@@ -3,14 +3,14 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    container_name: tradeviewmon
+    container_name: trady
     restart: unless-stopped
     ports:
       - "127.0.0.1:${APP_PORT:-5000}:5000"
     environment:
       NODE_ENV: production
       PORT: "5000"
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-tradeviewmon}:${POSTGRES_PASSWORD}@tradeviewmon-db:5432/${POSTGRES_DB:-tradeviewmon}"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-trady}:${POSTGRES_PASSWORD}@trady-db:5432/${POSTGRES_DB:-trady}"
       SESSION_SECRET: "${SESSION_SECRET}"
       FINNHUB_API_KEY: "${FINNHUB_API_KEY:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
@@ -19,7 +19,7 @@ services:
       db:
         condition: service_healthy
     networks:
-      - tradeviewmon-network
+      - trady-network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/api/system/status"]
       interval: 30s
@@ -34,25 +34,25 @@ services:
 
   db:
     image: postgres:15-alpine
-    container_name: tradeviewmon-db
+    container_name: trady-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: "${POSTGRES_USER:-tradeviewmon}"
+      POSTGRES_USER: "${POSTGRES_USER:-trady}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-      POSTGRES_DB: "${POSTGRES_DB:-tradeviewmon}"
+      POSTGRES_DB: "${POSTGRES_DB:-trady}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - tradeviewmon-network
+      - trady-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tradeviewmon} -d ${POSTGRES_DB:-tradeviewmon}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trady} -d ${POSTGRES_DB:-trady}"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
 
 networks:
-  tradeviewmon-network:
+  trady-network:
     driver: bridge
 
 volumes:

@@ -96,7 +96,7 @@ async function fetchAsHtmlPage(pageUrl: string, feedName: string, maxItems: numb
   try {
     const response = await fetch(pageUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; TradeViewMon/1.0; +https://tradeviewmon.replit.app)",
+        "User-Agent": "Mozilla/5.0 (compatible; Trady/1.0; +https://trady.replit.app)",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       },
     });

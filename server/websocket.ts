@@ -40,7 +40,7 @@ class WebSocketService {
 
       ws.send(JSON.stringify({
         type: "connected",
-        message: "Connected to TradeViewMon WebSocket",
+        message: "Connected to Trady WebSocket",
         timestamp: new Date().toISOString(),
       }));
 

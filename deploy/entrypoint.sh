@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-echo "[Startup] TradeViewMon Production Server"
+echo "[Startup] Trady Production Server"
 echo "[Startup] Waiting for database connection..."
 
 # Wait for PostgreSQL to be ready

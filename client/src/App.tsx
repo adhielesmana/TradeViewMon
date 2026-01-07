@@ -151,7 +151,7 @@ function AuthenticatedApp() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark" storageKey="tradeviewmon-theme">
+      <ThemeProvider defaultTheme="dark" storageKey="trady-theme">
         <TooltipProvider>
           <AuthProvider>
             <AuthenticatedApp />

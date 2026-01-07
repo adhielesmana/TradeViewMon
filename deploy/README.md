@@ -1,4 +1,4 @@
-# TradeViewMon Production Deployment
+# Trady Production Deployment
 
 ## Quick Start
 
@@ -12,8 +12,8 @@ Ensure you have:
 ### 2. Clone and Deploy
 
 ```bash
-git clone <your-repo-url> /opt/tradeviewmon
-cd /opt/tradeviewmon
+git clone <your-repo-url> /opt/trady
+cd /opt/trady
 
 chmod +x deploy/*.sh
 
@@ -41,7 +41,7 @@ chmod +x deploy/*.sh
 
 ## What the Script Does
 
-1. **TradeViewMon Shutdown**: Stops ONLY existing TradeViewMon containers (other apps are not touched)
+1. **Trady Shutdown**: Stops ONLY existing Trady containers (other apps are not touched)
 2. **Port Detection**: Checks if port 5000 (or specified port) is in use by Docker or other services
 3. **Auto Port Selection**: If the port is busy, automatically finds the next available port
 4. **Nginx Check**: Detects if Nginx is installed
@@ -51,13 +51,13 @@ chmod +x deploy/*.sh
 
 ### Safe Shutdown Behavior
 
-When you run `./deploy/deploy.sh`, it **ONLY** stops TradeViewMon:
-- Stops and removes `tradeviewmon` and `tradeviewmon-db` Docker containers
-- Cleans up any containers with "tradeviewmon" in the name
+When you run `./deploy/deploy.sh`, it **ONLY** stops Trady:
+- Stops and removes `trady` and `trady-db` Docker containers
+- Cleans up any containers with "trady" in the name
 - **Does NOT kill other applications** on any ports
 - **Does NOT stop unrelated Docker containers**
 
-If port 5000 is in use by another app, TradeViewMon will automatically use the next available port (5001, 5002, etc.).
+If port 5000 is in use by another app, Trady will automatically use the next available port (5001, 5002, etc.).
 
 ## Environment Variables
 
@@ -106,10 +106,10 @@ The deploy script automatically handles database setup:
 If you need to manually run database migrations:
 ```bash
 # Run the init script
-docker exec -i tradeviewmon-db psql -U tradeviewmon -d tradeviewmon < deploy/migrations/init_database.sql
+docker exec -i trady-db psql -U trady -d trady < deploy/migrations/init_database.sql
 
 # Or use drizzle push
-docker exec tradeviewmon npm run db:push
+docker exec trady npm run db:push
 ```
 
 ## Using Docker Compose
@@ -127,13 +127,13 @@ docker-compose up -d
 ## Management Commands
 
 ```bash
-docker logs -f tradeviewmon
+docker logs -f trady
 
-docker restart tradeviewmon
+docker restart trady
 
-docker stop tradeviewmon
+docker stop trady
 
-docker start tradeviewmon
+docker start trady
 
 docker pull <image> && docker-compose up -d
 ```
@@ -148,11 +148,11 @@ certbot renew
 
 ## Nginx Configuration
 
-The deployment script creates an Nginx config at `/etc/nginx/sites-available/tradeviewmon`.
+The deployment script creates an Nginx config at `/etc/nginx/sites-available/trady`.
 
 To manually update:
 ```bash
-nano /etc/nginx/sites-available/tradeviewmon
+nano /etc/nginx/sites-available/trady
 nginx -t
 systemctl reload nginx
 ```
@@ -168,8 +168,8 @@ docker ps --format '{{.Ports}}' | grep 5000
 
 ### Docker Container Not Starting
 ```bash
-docker logs tradeviewmon
-docker inspect tradeviewmon
+docker logs trady
+docker inspect trady
 ```
 
 ### Nginx Issues

@@ -1,4 +1,4 @@
-# TradeViewMon Design Guidelines
+# Trady Design Guidelines
 
 ## Design Approach
 
@@ -42,7 +42,7 @@
 ## Component Library
 
 ### Navigation
-**Top Bar**: Fixed header with TradeViewMon logo/title, real-time status indicator (green pulse dot), last update timestamp
+**Top Bar**: Fixed header with Trady logo/title, real-time status indicator (green pulse dot), last update timestamp
 **Side Navigation**: Vertical menu with icons + labels for: Live Market, Predictions, Historical Data, System Status
 
 ### Data Display Cards

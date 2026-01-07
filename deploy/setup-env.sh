@@ -11,7 +11,7 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
 ENV_FILE=".env.production"
 
-log_info "TradeViewMon Environment Setup"
+log_info "Trady Environment Setup"
 log_info "================================"
 echo ""
 
@@ -27,7 +27,7 @@ SESSION_SECRET=$(openssl rand -hex 32)
 log_info "Generating secure credentials..."
 
 # Database will be deployed via Docker, so use internal Docker network URL
-DATABASE_URL="postgresql://tradeviewmon:${POSTGRES_PASSWORD}@tradeviewmon-db:5432/tradeviewmon"
+DATABASE_URL="postgresql://trady:${POSTGRES_PASSWORD}@trady-db:5432/trady"
 
 cat > $ENV_FILE << EOF
 NODE_ENV=production
@@ -35,9 +35,9 @@ PORT=5000
 
 # Database (auto-deployed via Docker)
 DATABASE_URL=$DATABASE_URL
-POSTGRES_USER=tradeviewmon
+POSTGRES_USER=trady
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-POSTGRES_DB=tradeviewmon
+POSTGRES_DB=trady
 
 # Security
 SESSION_SECRET=$SESSION_SECRET

@@ -44,7 +44,7 @@ type SymbolContextType = {
 
 const SymbolContext = createContext<SymbolContextType | null>(null);
 
-const STORAGE_KEY = "tradeviewmon-symbol";
+const STORAGE_KEY = "trady-symbol";
 
 export function SymbolProvider({ children }: { children: ReactNode }) {
   // Fetch symbols from database via API

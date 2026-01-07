@@ -119,11 +119,9 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary">
-            <BarChart3 className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <img src="/trady-icon.png" alt="Trady" className="h-9 w-9 rounded-md" />
           <div className="flex flex-col">
-            <span className="text-base font-semibold tracking-tight">TradeViewMon</span>
+            <span className="text-base font-semibold tracking-tight">Trady</span>
             <span className="text-xs text-muted-foreground">Market Intelligence</span>
           </div>
         </div>

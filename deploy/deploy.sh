@@ -2,7 +2,7 @@
 
 set -e
 
-APP_NAME="tradeviewmon"
+APP_NAME="trady"
 DEFAULT_PORT=5000
 DOMAIN=""
 EMAIL=""
@@ -86,7 +86,7 @@ check_docker() {
 }
 
 log_info "=========================================="
-log_info "  TradeViewMon Deployment Script"
+log_info "  Trady Deployment Script"
 log_info "=========================================="
 echo ""
 
@@ -102,23 +102,23 @@ if ! check_docker; then
 fi
 
 # ============================================
-# STEP 1: Shutdown existing TradeViewMon ONLY
+# STEP 1: Shutdown existing Trady ONLY
 # ============================================
-log_info "Shutting down existing TradeViewMon instances..."
+log_info "Shutting down existing Trady instances..."
 
-# IMPORTANT: We ONLY stop TradeViewMon containers, NOT other apps!
-# Stop any existing TradeViewMon containers by name
-log_info "Stopping TradeViewMon containers..."
+# IMPORTANT: We ONLY stop Trady containers, NOT other apps!
+# Stop any existing Trady containers by name
+log_info "Stopping Trady containers..."
 docker compose -f deploy/docker-compose.yml down 2>/dev/null || true
-docker stop tradeviewmon 2>/dev/null || true
-docker stop tradeviewmon-db 2>/dev/null || true
-docker rm -f tradeviewmon 2>/dev/null || true
-docker rm -f tradeviewmon-db 2>/dev/null || true
+docker stop trady 2>/dev/null || true
+docker stop trady-db 2>/dev/null || true
+docker rm -f trady 2>/dev/null || true
+docker rm -f trady-db 2>/dev/null || true
 
-# Clean up any containers with tradeviewmon in the name (only TradeViewMon!)
-docker ps -a --filter "name=tradeviewmon" --format "{{.ID}}" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
+# Clean up any containers with trady in the name (only Trady!)
+docker ps -a --filter "name=trady" --format "{{.ID}}" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
 
-log_info "TradeViewMon instances stopped (other apps untouched)"
+log_info "Trady instances stopped (other apps untouched)"
 echo ""
 
 # Git pull to get latest code (unless skipped)
@@ -164,13 +164,13 @@ if [ ! -f "$ENV_FILE" ]; then
     SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 64 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 64)
     
     cat > $ENV_FILE << EOF
-# TradeViewMon Production Environment
+# Trady Production Environment
 # Auto-generated on $(date)
 
 # Database Configuration
-POSTGRES_USER=tradeviewmon
+POSTGRES_USER=trady
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-POSTGRES_DB=tradeviewmon
+POSTGRES_DB=trady
 
 # Security
 SESSION_SECRET=$SESSION_SECRET
@@ -230,7 +230,7 @@ export APP_PORT
 export USE_HTTPS
 
 log_info "Cleaning up old Docker images (to ensure fresh build)..."
-docker rmi -f tradeviewmon:latest 2>/dev/null || true
+docker rmi -f trady:latest 2>/dev/null || true
 docker builder prune -f 2>/dev/null || true
 
 log_info "Building and starting services (with no cache)..."
@@ -241,13 +241,13 @@ docker compose -f deploy/docker-compose.yml up -d
 log_info "Waiting for services to start..."
 echo -n "  Database: "
 for i in {1..30}; do
-    if docker exec tradeviewmon-db pg_isready -U tradeviewmon &>/dev/null; then
+    if docker exec trady-db pg_isready -U trady &>/dev/null; then
         echo -e "${GREEN}Ready${NC}"
         break
     fi
     if [ $i -eq 30 ]; then
         echo -e "${RED}Failed${NC}"
-        log_error "Database failed to start. Check logs: docker logs tradeviewmon-db"
+        log_error "Database failed to start. Check logs: docker logs trady-db"
         exit 1
     fi
     echo -n "."
@@ -279,20 +279,20 @@ if [ -f "deploy/migrations/init_database.sql" ]; then
     
     # Copy SQL file to container first (most reliable method)
     log_info "Copying migration file to database container..."
-    docker cp deploy/migrations/init_database.sql tradeviewmon-db:/tmp/init_database.sql
+    docker cp deploy/migrations/init_database.sql trady-db:/tmp/init_database.sql
     
     # Execute the SQL file with verbose output
     log_info "Executing SQL migration..."
-    if docker exec tradeviewmon-db psql -U tradeviewmon -d tradeviewmon -f /tmp/init_database.sql; then
+    if docker exec trady-db psql -U trady -d trady -f /tmp/init_database.sql; then
         log_info "Database migration executed successfully!"
     else
         log_error "Database migration failed! Check the SQL file for errors."
         log_info "Attempting to show database error..."
-        docker exec tradeviewmon-db psql -U tradeviewmon -d tradeviewmon -f /tmp/init_database.sql 2>&1 || true
+        docker exec trady-db psql -U trady -d trady -f /tmp/init_database.sql 2>&1 || true
     fi
     
     # Cleanup
-    docker exec tradeviewmon-db rm -f /tmp/init_database.sql 2>/dev/null || true
+    docker exec trady-db rm -f /tmp/init_database.sql 2>/dev/null || true
 else
     log_error "Database init script not found at deploy/migrations/init_database.sql"
     log_error "Make sure you have pulled the latest code!"
@@ -301,7 +301,7 @@ fi
 
 # Then try drizzle push for any remaining schema updates (non-interactive)
 log_info "Checking for additional schema updates via Drizzle..."
-docker exec tradeviewmon sh -c "echo 'y' | npm run db:push 2>/dev/null" || log_warn "Drizzle push skipped (optional)"
+docker exec trady sh -c "echo 'y' | npm run db:push 2>/dev/null" || log_warn "Drizzle push skipped (optional)"
 log_info "Database schema initialization complete"
 
 # Configure Nginx if domain is provided
@@ -311,7 +311,7 @@ if [ -n "$DOMAIN" ]; then
         
         NGINX_CONF="/etc/nginx/sites-available/$APP_NAME"
         
-        cat > /tmp/tradeviewmon-nginx.conf << EOF
+        cat > /tmp/trady-nginx.conf << EOF
 server {
     listen 80;
     listen [::]:80;
@@ -344,7 +344,7 @@ server {
 EOF
         
         if [ -w /etc/nginx/sites-available ] || [ "$(id -u)" = "0" ]; then
-            cp /tmp/tradeviewmon-nginx.conf $NGINX_CONF
+            cp /tmp/trady-nginx.conf $NGINX_CONF
             ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
             rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
             nginx -t && systemctl reload nginx
@@ -358,7 +358,7 @@ EOF
             fi
         else
             log_warn "Cannot write to /etc/nginx. Run with sudo or copy config manually:"
-            log_warn "  sudo cp /tmp/tradeviewmon-nginx.conf $NGINX_CONF"
+            log_warn "  sudo cp /tmp/trady-nginx.conf $NGINX_CONF"
             log_warn "  sudo ln -sf $NGINX_CONF /etc/nginx/sites-enabled/"
             log_warn "  sudo nginx -t && sudo systemctl reload nginx"
         fi
@@ -374,7 +374,7 @@ log_info "=========================================="
 echo ""
 
 log_info "Container Status:"
-docker ps --filter "name=tradeviewmon" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+docker ps --filter "name=trady" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 echo ""
 
 log_info "Application running on port: $APP_PORT"
@@ -395,8 +395,8 @@ log_info "  Password: admin123"
 echo ""
 
 log_info "Useful commands:"
-log_info "  View app logs:    docker logs -f tradeviewmon"
-log_info "  View db logs:     docker logs -f tradeviewmon-db"
+log_info "  View app logs:    docker logs -f trady"
+log_info "  View db logs:     docker logs -f trady-db"
 log_info "  Restart all:      docker compose -f deploy/docker-compose.yml restart"
 log_info "  Stop all:         docker compose -f deploy/docker-compose.yml down"
 log_info "  Redeploy:         ./deploy/deploy.sh"

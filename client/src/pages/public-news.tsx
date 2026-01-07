@@ -356,10 +356,8 @@ export default function PublicNewsPage() {
           {/* Upper nav */}
           <div className="flex h-14 items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary">
-                <BarChart3 className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold tracking-tight">TradeViewMon</span>
+              <img src="/trady-icon.png" alt="Trady" className="h-9 w-9 rounded-md" />
+              <span className="text-xl font-bold tracking-tight">Trady</span>
               <span className="hidden text-sm text-muted-foreground md:inline-block">Market Intelligence</span>
             </div>
             
@@ -732,14 +730,14 @@ export default function PublicNewsPage() {
       <footer className="mt-12 border-t bg-muted/50 py-8">
         <div className="container mx-auto px-4 text-center">
           <div className="flex items-center justify-center gap-2 text-lg font-bold">
-            <BarChart3 className="h-5 w-5 text-primary" />
-            TradeViewMon
+            <img src="/trady-icon.png" alt="Trady" className="h-5 w-5" />
+            Trady
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
             AI-powered market intelligence and trading insights
           </p>
           <p className="mt-4 text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} TradeViewMon. All rights reserved.
+            &copy; {new Date().getFullYear()} Trady. All rights reserved.
           </p>
         </div>
       </footer>
