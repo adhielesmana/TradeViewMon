@@ -695,40 +695,50 @@ export default function SettingsPage() {
                     </div>
                     <Separator />
                     <div className="flex flex-wrap gap-2">
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="absolute inset-0 cursor-pointer opacity-0"
-                          onChange={(e) => handleLogoFileSelect(e, "full")}
-                          data-testid="input-replace-full-logo"
-                        />
-                        <Button variant="outline" className="gap-2" disabled={isUploadingLogo}>
-                          {isUploadingLogo && cropType === "full" ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Upload className="h-4 w-4" />
-                          )}
-                          Replace Full Logo
-                        </Button>
-                      </div>
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="absolute inset-0 cursor-pointer opacity-0"
-                          onChange={(e) => handleLogoFileSelect(e, "icon")}
-                          data-testid="input-replace-icon-logo"
-                        />
-                        <Button variant="outline" className="gap-2" disabled={isUploadingLogo}>
-                          {isUploadingLogo && cropType === "icon" ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Upload className="h-4 w-4" />
-                          )}
-                          Replace Icon Logo
-                        </Button>
-                      </div>
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        disabled={isUploadingLogo}
+                        onClick={() => document.getElementById('input-replace-full-logo')?.click()}
+                        data-testid="button-replace-full-logo"
+                      >
+                        {isUploadingLogo && cropType === "full" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4" />
+                        )}
+                        Replace Full Logo
+                      </Button>
+                      <input
+                        id="input-replace-full-logo"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleLogoFileSelect(e, "full")}
+                        data-testid="input-replace-full-logo"
+                      />
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        disabled={isUploadingLogo}
+                        onClick={() => document.getElementById('input-replace-icon-logo')?.click()}
+                        data-testid="button-replace-icon-logo"
+                      >
+                        {isUploadingLogo && cropType === "icon" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4" />
+                        )}
+                        Replace Icon Logo
+                      </Button>
+                      <input
+                        id="input-replace-icon-logo"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleLogoFileSelect(e, "icon")}
+                        data-testid="input-replace-icon-logo"
+                      />
                     </div>
                   </div>
                 ) : (
@@ -744,40 +754,50 @@ export default function SettingsPage() {
                       </AlertDescription>
                     </Alert>
                     <div className="flex flex-wrap gap-2">
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="absolute inset-0 cursor-pointer opacity-0"
-                          onChange={(e) => handleLogoFileSelect(e, "full")}
-                          data-testid="button-upload-logo"
-                        />
-                        <Button variant="outline" className="gap-2" disabled={isUploadingLogo}>
-                          {isUploadingLogo && cropType === "full" ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Upload className="h-4 w-4" />
-                          )}
-                          Upload Full Logo
-                        </Button>
-                      </div>
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="absolute inset-0 cursor-pointer opacity-0"
-                          onChange={(e) => handleLogoFileSelect(e, "icon")}
-                          data-testid="input-upload-icon-logo"
-                        />
-                        <Button variant="outline" className="gap-2" disabled={isUploadingLogo}>
-                          {isUploadingLogo && cropType === "icon" ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Upload className="h-4 w-4" />
-                          )}
-                          Upload Icon Logo
-                        </Button>
-                      </div>
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        disabled={isUploadingLogo}
+                        onClick={() => document.getElementById('input-upload-full-logo')?.click()}
+                        data-testid="button-upload-logo"
+                      >
+                        {isUploadingLogo && cropType === "full" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4" />
+                        )}
+                        Upload Full Logo
+                      </Button>
+                      <input
+                        id="input-upload-full-logo"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleLogoFileSelect(e, "full")}
+                        data-testid="input-upload-full-logo"
+                      />
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        disabled={isUploadingLogo}
+                        onClick={() => document.getElementById('input-upload-icon-logo')?.click()}
+                        data-testid="button-upload-icon-logo"
+                      >
+                        {isUploadingLogo && cropType === "icon" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4" />
+                        )}
+                        Upload Icon Logo
+                      </Button>
+                      <input
+                        id="input-upload-icon-logo"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleLogoFileSelect(e, "icon")}
+                        data-testid="input-upload-icon-logo"
+                      />
                     </div>
                   </div>
                 )}
