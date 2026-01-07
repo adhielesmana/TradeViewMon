@@ -35,6 +35,7 @@ export default function RegisterPage() {
     staleTime: 60000,
   });
   const iconLogo = logoSettings?.logoIconPath || "/trady-icon.png";
+  const fullLogo = logoSettings?.logoPath || "/trady-logo.png";
 
   const { data: inviteInfo, isLoading: isLoadingInvite, error: inviteError } = useQuery<InviteInfo>({
     queryKey: ["/api/invites/validate", token],
@@ -179,14 +180,13 @@ export default function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex items-center gap-2 text-primary">
+          <div className="mx-auto mb-4 flex items-center justify-center">
             <img 
-              src={iconLogo} 
+              src={fullLogo} 
               alt="Trady" 
-              className="h-8 w-8 object-contain"
-              onError={(e) => { e.currentTarget.src = "/trady-icon.png"; }}
+              className="h-12 object-contain"
+              onError={(e) => { e.currentTarget.src = "/trady-logo.png"; }}
             />
-            <span className="text-2xl font-bold">Trady</span>
           </div>
           <CardTitle>Create Your Account</CardTitle>
           <CardDescription>

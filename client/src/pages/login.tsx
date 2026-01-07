@@ -28,6 +28,7 @@ export default function LoginPage() {
     staleTime: 60000,
   });
   const iconLogo = logoSettings?.logoIconPath || "/trady-icon.png";
+  const fullLogo = logoSettings?.logoPath || "/trady-logo.png";
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { username: string; password: string }) => {
@@ -60,14 +61,13 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-2">
-          <div className="flex items-center justify-center gap-2 mb-2">
+          <div className="flex items-center justify-center mb-2">
             <img 
-              src={iconLogo} 
+              src={fullLogo} 
               alt="Trady" 
-              className="h-8 w-8 object-contain"
-              onError={(e) => { e.currentTarget.src = "/trady-icon.png"; }}
+              className="h-12 object-contain"
+              onError={(e) => { e.currentTarget.src = "/trady-logo.png"; }}
             />
-            <span className="text-2xl font-bold">Trady</span>
           </div>
           <CardTitle className="text-xl">Welcome Back</CardTitle>
           <CardDescription>

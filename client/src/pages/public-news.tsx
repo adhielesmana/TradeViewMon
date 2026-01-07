@@ -469,10 +469,9 @@ export default function PublicNewsPage() {
               <img 
                 src={iconLogo} 
                 alt="Trady" 
-                className="h-9 w-9 rounded-md object-contain"
+                className="h-10 w-10 rounded-md object-contain"
                 onError={(e) => { e.currentTarget.src = "/trady-icon.png"; }}
               />
-              <span className="text-xl font-bold tracking-tight">Trady</span>
               <span className="hidden text-sm text-muted-foreground md:inline-block">Global Market Trading News</span>
             </div>
             
