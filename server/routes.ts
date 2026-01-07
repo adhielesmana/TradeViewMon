@@ -12,6 +12,7 @@ import { predictionEngine } from "./prediction-engine";
 import { generateUnifiedSignal, convertToLegacyIndicatorSignal, convertToMultiFactorAnalysis, detectAllCandlestickPatterns } from "./unified-signal-generator";
 import { encrypt, decrypt, maskApiKey } from "./encryption";
 import { getNewsAndAnalysisCached, forceRefreshNewsAnalysis, getRssFeedUrl, setRssFeedUrl, getNewsStats, getStoredNewsSince } from "./news-service";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { z } from "zod";
 
 const updateUserSchema = z.object({
@@ -147,6 +148,9 @@ export async function registerRoutes(
 ): Promise<Server> {
   await seedSuperadmin();
   await seedTestUsers();
+  
+  // Register object storage routes for file uploads
+  registerObjectStorageRoutes(app);
   
   // Initialize market data service with database API key
   await marketDataService.initializeFromDatabase(() => storage.getSetting("FINNHUB_API_KEY"));
@@ -1932,7 +1936,70 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== LOGO SETTINGS ====================
+  
+  // Get logo settings
+  app.get("/api/settings/logo", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const logoPath = await storage.getSetting("LOGO_PATH");
+      const logoIconPath = await storage.getSetting("LOGO_ICON_PATH");
+      res.json({ 
+        logoPath: logoPath || null,
+        logoIconPath: logoIconPath || null 
+      });
+    } catch (error) {
+      console.error("Error fetching logo settings:", error);
+      res.status(500).json({ error: "Failed to fetch logo settings" });
+    }
+  });
+
+  // Save logo settings
+  app.post("/api/settings/logo", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const { logoPath, logoIconPath } = req.body;
+      
+      if (logoPath !== undefined) {
+        await storage.setSetting("LOGO_PATH", logoPath || "");
+      }
+      if (logoIconPath !== undefined) {
+        await storage.setSetting("LOGO_ICON_PATH", logoIconPath || "");
+      }
+      
+      res.json({ success: true, message: "Logo settings saved" });
+    } catch (error) {
+      console.error("Error saving logo settings:", error);
+      res.status(500).json({ error: "Failed to save logo settings" });
+    }
+  });
+
+  // Delete logo settings
+  app.delete("/api/settings/logo", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      await storage.deleteSetting("LOGO_PATH");
+      await storage.deleteSetting("LOGO_ICON_PATH");
+      res.json({ success: true, message: "Logo settings cleared" });
+    } catch (error) {
+      console.error("Error clearing logo settings:", error);
+      res.status(500).json({ error: "Failed to clear logo settings" });
+    }
+  });
+
   // ==================== PUBLIC API ENDPOINTS (No Auth Required) ====================
+
+  // Public logo settings (for landing page)
+  app.get("/api/public/logo", async (req, res) => {
+    try {
+      const logoPath = await storage.getSetting("LOGO_PATH");
+      const logoIconPath = await storage.getSetting("LOGO_ICON_PATH");
+      res.json({ 
+        logoPath: logoPath || null,
+        logoIconPath: logoIconPath || null 
+      });
+    } catch (error) {
+      console.error("Error fetching public logo:", error);
+      res.status(500).json({ error: "Failed to fetch logo" });
+    }
+  });
 
   // Public news current analysis
   app.get("/api/public/news/current", async (req, res) => {
