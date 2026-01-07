@@ -14,7 +14,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, Key, CheckCircle, AlertCircle, Info, Loader2, Eye, EyeOff, Bot, Rss, Plus, Pencil, Trash2, TrendingUp } from "lucide-react";
+import { Settings, Key, CheckCircle, AlertCircle, Info, Loader2, Eye, EyeOff, Bot, Rss, Plus, Pencil, Trash2, TrendingUp, Upload, Image, X } from "lucide-react";
+import { ObjectUploader } from "@/components/ObjectUploader";
+import { useUpload } from "@/hooks/use-upload";
 
 interface ApiKeyStatus {
   isConfigured: boolean;
@@ -86,6 +88,9 @@ export default function SettingsPage() {
   const [categoryName, setCategoryName] = useState("");
   const [categoryDisplayOrder, setCategoryDisplayOrder] = useState(0);
 
+  // Logo upload hook
+  const { getUploadParameters } = useUpload();
+
   const { data: settings, isLoading } = useQuery<SettingsData>({
     queryKey: ["/api/settings"],
     refetchInterval: false,
@@ -107,6 +112,46 @@ export default function SettingsPage() {
     queryKey: ["/api/settings/categories"],
     enabled: isSuperadmin,
     retry: false,
+  });
+
+  // Logo settings query
+  interface LogoSettings {
+    logoPath: string | null;
+    logoIconPath: string | null;
+  }
+  const { data: logoSettings, isLoading: logoLoading } = useQuery<LogoSettings>({
+    queryKey: ["/api/settings/logo"],
+    enabled: isSuperadmin,
+    retry: false,
+  });
+
+  // Logo mutations
+  const saveLogoMutation = useMutation({
+    mutationFn: async (data: { logoPath?: string; logoIconPath?: string }) => {
+      const response = await apiRequest("POST", "/api/settings/logo", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Logo saved successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/logo"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const clearLogoMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("DELETE", "/api/settings/logo");
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Logo cleared" });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/logo"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const updateFinnhubKeyMutation = useMutation({
@@ -522,6 +567,179 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Logo Settings */}
+      {isSuperadmin && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Image className="h-5 w-5 text-purple-500" />
+                <CardTitle>Logo Settings</CardTitle>
+              </div>
+              {logoSettings?.logoPath && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => clearLogoMutation.mutate()}
+                  disabled={clearLogoMutation.isPending}
+                  data-testid="button-clear-logo"
+                >
+                  {clearLogoMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <X className="h-4 w-4 mr-1" />}
+                  Clear Logo
+                </Button>
+              )}
+            </div>
+            <CardDescription>
+              Upload a custom logo for your Trady application. The logo will appear in the sidebar and public pages.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {logoLoading ? (
+              <div className="flex justify-center py-4"><Loader2 className="h-6 w-6 animate-spin" /></div>
+            ) : (
+              <>
+                {logoSettings?.logoPath ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Status:</span>
+                      <Badge variant="default" className="gap-1"><CheckCircle className="h-3 w-3" />Logo Configured</Badge>
+                    </div>
+                    <Separator />
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Full Logo</Label>
+                        <div className="border rounded-lg p-4 bg-muted/50 flex items-center justify-center min-h-[100px]">
+                          <img 
+                            src={logoSettings.logoPath} 
+                            alt="Full Logo" 
+                            className="max-h-20 object-contain"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                            data-testid="img-full-logo"
+                          />
+                        </div>
+                      </div>
+                      {logoSettings.logoIconPath && (
+                        <div className="space-y-2">
+                          <Label>Icon Logo (Sidebar)</Label>
+                          <div className="border rounded-lg p-4 bg-muted/50 flex items-center justify-center min-h-[100px]">
+                            <img 
+                              src={logoSettings.logoIconPath} 
+                              alt="Icon Logo" 
+                              className="max-h-16 object-contain"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                              data-testid="img-icon-logo"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <Separator />
+                    <div className="flex flex-wrap gap-2">
+                      <ObjectUploader
+                        maxNumberOfFiles={1}
+                        maxFileSize={5242880}
+                        onGetUploadParameters={getUploadParameters}
+                        onComplete={(result) => {
+                          const successfulFile = result.successful?.[0];
+                          if (successfulFile) {
+                            const objectPath = (successfulFile.response?.body as { objectPath?: string })?.objectPath 
+                              || (successfulFile as { objectPath?: string }).objectPath;
+                            if (objectPath) {
+                              saveLogoMutation.mutate({ logoPath: objectPath });
+                            }
+                          }
+                        }}
+                        buttonClassName="gap-2"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Replace Full Logo
+                      </ObjectUploader>
+                      <ObjectUploader
+                        maxNumberOfFiles={1}
+                        maxFileSize={5242880}
+                        onGetUploadParameters={getUploadParameters}
+                        onComplete={(result) => {
+                          const successfulFile = result.successful?.[0];
+                          if (successfulFile) {
+                            const objectPath = (successfulFile.response?.body as { objectPath?: string })?.objectPath 
+                              || (successfulFile as { objectPath?: string }).objectPath;
+                            if (objectPath) {
+                              saveLogoMutation.mutate({ logoIconPath: objectPath });
+                            }
+                          }
+                        }}
+                        buttonClassName="gap-2"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Replace Icon Logo
+                      </ObjectUploader>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Status:</span>
+                      <Badge variant="secondary" className="gap-1"><AlertCircle className="h-3 w-3" />No Custom Logo</Badge>
+                    </div>
+                    <Alert>
+                      <Info className="h-4 w-4" />
+                      <AlertDescription>
+                        No custom logo configured. The default Trady logo will be used. Upload a custom logo to personalize your application.
+                      </AlertDescription>
+                    </Alert>
+                    <div className="flex flex-wrap gap-2">
+                      <ObjectUploader
+                        maxNumberOfFiles={1}
+                        maxFileSize={5242880}
+                        onGetUploadParameters={getUploadParameters}
+                        onComplete={(result) => {
+                          const successfulFile = result.successful?.[0];
+                          if (successfulFile) {
+                            const objectPath = (successfulFile.response?.body as { objectPath?: string })?.objectPath 
+                              || (successfulFile as { objectPath?: string }).objectPath;
+                            if (objectPath) {
+                              saveLogoMutation.mutate({ logoPath: objectPath });
+                            }
+                          }
+                        }}
+                        buttonClassName="gap-2"
+                        data-testid="button-upload-logo"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Upload Full Logo
+                      </ObjectUploader>
+                      <ObjectUploader
+                        maxNumberOfFiles={1}
+                        maxFileSize={5242880}
+                        onGetUploadParameters={getUploadParameters}
+                        onComplete={(result) => {
+                          const successfulFile = result.successful?.[0];
+                          if (successfulFile) {
+                            const objectPath = (successfulFile.response?.body as { objectPath?: string })?.objectPath 
+                              || (successfulFile as { objectPath?: string }).objectPath;
+                            if (objectPath) {
+                              saveLogoMutation.mutate({ logoIconPath: objectPath });
+                            }
+                          }
+                        }}
+                        buttonClassName="gap-2"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Upload Icon Logo
+                      </ObjectUploader>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* RSS Feeds Management */}
       <Card>
