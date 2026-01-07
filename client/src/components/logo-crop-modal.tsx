@@ -170,7 +170,7 @@ export function LogoCropModal({
               <Slider
                 value={[zoom]}
                 min={1}
-                max={3}
+                max={5}
                 step={0.1}
                 onValueChange={([value]) => setZoom(value)}
                 className="flex-1"
