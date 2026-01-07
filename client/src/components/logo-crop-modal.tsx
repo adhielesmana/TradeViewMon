@@ -160,6 +160,8 @@ export function LogoCropModal({
               onZoomChange={onZoomChange}
               onCropComplete={onCropCompleteCallback}
               showGrid
+              minZoom={1}
+              maxZoom={5}
             />
           </div>
 
