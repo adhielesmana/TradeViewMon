@@ -22,18 +22,6 @@ interface LogoCropModalProps {
   title?: string;
 }
 
-function getRadianAngle(degreeValue: number): number {
-  return (degreeValue * Math.PI) / 180;
-}
-
-function rotateSize(width: number, height: number, rotation: number): { width: number; height: number } {
-  const rotRad = getRadianAngle(rotation);
-  return {
-    width: Math.abs(Math.cos(rotRad) * width) + Math.abs(Math.sin(rotRad) * height),
-    height: Math.abs(Math.sin(rotRad) * width) + Math.abs(Math.cos(rotRad) * height),
-  };
-}
-
 async function getCroppedImg(
   imageSrc: string,
   pixelCrop: Area,
@@ -47,54 +35,45 @@ async function getCroppedImg(
     throw new Error("No 2d context");
   }
 
-  const rotRad = getRadianAngle(rotation);
+  // Calculate safe area that fits the rotated image
+  const maxSize = Math.max(image.width, image.height);
+  const safeArea = 2 * ((maxSize / 2) * Math.sqrt(2));
 
-  // Calculate bounding box of the rotated image
-  const { width: bBoxWidth, height: bBoxHeight } = rotateSize(
-    image.width,
-    image.height,
-    rotation
+  // Set canvas size to safe area
+  canvas.width = safeArea;
+  canvas.height = safeArea;
+
+  // Translate to center of safe area
+  ctx.translate(safeArea / 2, safeArea / 2);
+  // Rotate
+  ctx.rotate((rotation * Math.PI) / 180);
+  // Translate back
+  ctx.translate(-safeArea / 2, -safeArea / 2);
+
+  // Draw the image in the center of the safe area
+  ctx.drawImage(
+    image,
+    safeArea / 2 - image.width / 2,
+    safeArea / 2 - image.height / 2
   );
 
-  // Set canvas size to match the bounding box
-  canvas.width = bBoxWidth;
-  canvas.height = bBoxHeight;
+  // Get the full rotated image data
+  const data = ctx.getImageData(0, 0, safeArea, safeArea);
 
-  // Translate canvas context to center, rotate, then draw image centered
-  ctx.translate(bBoxWidth / 2, bBoxHeight / 2);
-  ctx.rotate(rotRad);
-  ctx.translate(-image.width / 2, -image.height / 2);
+  // Set output canvas to crop size
+  canvas.width = pixelCrop.width;
+  canvas.height = pixelCrop.height;
 
-  // Draw the rotated image
-  ctx.drawImage(image, 0, 0);
+  // Calculate the offset to extract the correct region
+  // The crop coordinates are relative to the original image center
+  const cropX = safeArea / 2 - image.width / 2 + pixelCrop.x;
+  const cropY = safeArea / 2 - image.height / 2 + pixelCrop.y;
 
-  // Extract the cropped area using getImageData
-  const croppedCanvas = document.createElement("canvas");
-  const croppedCtx = croppedCanvas.getContext("2d");
-
-  if (!croppedCtx) {
-    throw new Error("No 2d context for cropped canvas");
-  }
-
-  // Set the size of the cropped canvas
-  croppedCanvas.width = pixelCrop.width;
-  croppedCanvas.height = pixelCrop.height;
-
-  // Draw the cropped portion from the rotated canvas
-  croppedCtx.drawImage(
-    canvas,
-    pixelCrop.x,
-    pixelCrop.y,
-    pixelCrop.width,
-    pixelCrop.height,
-    0,
-    0,
-    pixelCrop.width,
-    pixelCrop.height
-  );
+  // Put the image data offset by the crop position
+  ctx.putImageData(data, Math.round(-cropX), Math.round(-cropY));
 
   return new Promise((resolve, reject) => {
-    croppedCanvas.toBlob(
+    canvas.toBlob(
       (blob) => {
         if (blob) {
           resolve(blob);
