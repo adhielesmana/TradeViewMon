@@ -17,6 +17,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Settings, Key, CheckCircle, AlertCircle, Info, Loader2, Eye, EyeOff, Bot, Rss, Plus, Pencil, Trash2, TrendingUp, Upload, Image, X } from "lucide-react";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { useUpload } from "@/hooks/use-upload";
+import { LogoCropModal } from "@/components/logo-crop-modal";
 
 interface ApiKeyStatus {
   isConfigured: boolean;
@@ -89,7 +90,13 @@ export default function SettingsPage() {
   const [categoryDisplayOrder, setCategoryDisplayOrder] = useState(0);
 
   // Logo upload hook
-  const { getUploadParameters } = useUpload();
+  const { getUploadParameters, getObjectPath, uploadFile } = useUpload();
+
+  // Logo crop modal state
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropImageUrl, setCropImageUrl] = useState<string | null>(null);
+  const [cropType, setCropType] = useState<"full" | "icon">("full");
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   const { data: settings, isLoading } = useQuery<SettingsData>({
     queryKey: ["/api/settings"],
@@ -153,6 +160,54 @@ export default function SettingsPage() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  // Logo crop handlers
+  const handleLogoFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: "full" | "icon") => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const imageUrl = URL.createObjectURL(file);
+      setCropImageUrl(imageUrl);
+      setCropType(type);
+      setCropModalOpen(true);
+    }
+    // Reset the input so the same file can be selected again
+    e.target.value = "";
+  };
+
+  const handleCropComplete = async (croppedBlob: Blob) => {
+    setIsUploadingLogo(true);
+    try {
+      // Create a File from the blob
+      const fileName = `logo-${cropType}-${Date.now()}.png`;
+      const file = new File([croppedBlob], fileName, { type: "image/png" });
+      
+      // Upload the cropped image
+      const result = await uploadFile(file);
+      
+      if (result?.objectPath) {
+        // Save the logo path
+        if (cropType === "full") {
+          saveLogoMutation.mutate({ logoPath: result.objectPath });
+        } else {
+          saveLogoMutation.mutate({ logoIconPath: result.objectPath });
+        }
+      }
+    } catch (error) {
+      console.error("Error uploading cropped logo:", error);
+      toast({ 
+        title: "Error", 
+        description: "Failed to upload cropped image", 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsUploadingLogo(false);
+      // Clean up the object URL
+      if (cropImageUrl) {
+        URL.revokeObjectURL(cropImageUrl);
+        setCropImageUrl(null);
+      }
+    }
+  };
 
   const updateFinnhubKeyMutation = useMutation({
     mutationFn: async (newApiKey: string) => {
@@ -640,44 +695,40 @@ export default function SettingsPage() {
                     </div>
                     <Separator />
                     <div className="flex flex-wrap gap-2">
-                      <ObjectUploader
-                        maxNumberOfFiles={1}
-                        maxFileSize={5242880}
-                        onGetUploadParameters={getUploadParameters}
-                        onComplete={(result) => {
-                          const successfulFile = result.successful?.[0];
-                          if (successfulFile) {
-                            const objectPath = (successfulFile.response?.body as { objectPath?: string })?.objectPath 
-                              || (successfulFile as { objectPath?: string }).objectPath;
-                            if (objectPath) {
-                              saveLogoMutation.mutate({ logoPath: objectPath });
-                            }
-                          }
-                        }}
-                        buttonClassName="gap-2"
-                      >
-                        <Upload className="h-4 w-4" />
-                        Replace Full Logo
-                      </ObjectUploader>
-                      <ObjectUploader
-                        maxNumberOfFiles={1}
-                        maxFileSize={5242880}
-                        onGetUploadParameters={getUploadParameters}
-                        onComplete={(result) => {
-                          const successfulFile = result.successful?.[0];
-                          if (successfulFile) {
-                            const objectPath = (successfulFile.response?.body as { objectPath?: string })?.objectPath 
-                              || (successfulFile as { objectPath?: string }).objectPath;
-                            if (objectPath) {
-                              saveLogoMutation.mutate({ logoIconPath: objectPath });
-                            }
-                          }
-                        }}
-                        buttonClassName="gap-2"
-                      >
-                        <Upload className="h-4 w-4" />
-                        Replace Icon Logo
-                      </ObjectUploader>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="absolute inset-0 cursor-pointer opacity-0"
+                          onChange={(e) => handleLogoFileSelect(e, "full")}
+                          data-testid="input-replace-full-logo"
+                        />
+                        <Button variant="outline" className="gap-2" disabled={isUploadingLogo}>
+                          {isUploadingLogo && cropType === "full" ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4" />
+                          )}
+                          Replace Full Logo
+                        </Button>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="absolute inset-0 cursor-pointer opacity-0"
+                          onChange={(e) => handleLogoFileSelect(e, "icon")}
+                          data-testid="input-replace-icon-logo"
+                        />
+                        <Button variant="outline" className="gap-2" disabled={isUploadingLogo}>
+                          {isUploadingLogo && cropType === "icon" ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4" />
+                          )}
+                          Replace Icon Logo
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -693,45 +744,40 @@ export default function SettingsPage() {
                       </AlertDescription>
                     </Alert>
                     <div className="flex flex-wrap gap-2">
-                      <ObjectUploader
-                        maxNumberOfFiles={1}
-                        maxFileSize={5242880}
-                        onGetUploadParameters={getUploadParameters}
-                        onComplete={(result) => {
-                          const successfulFile = result.successful?.[0];
-                          if (successfulFile) {
-                            const objectPath = (successfulFile.response?.body as { objectPath?: string })?.objectPath 
-                              || (successfulFile as { objectPath?: string }).objectPath;
-                            if (objectPath) {
-                              saveLogoMutation.mutate({ logoPath: objectPath });
-                            }
-                          }
-                        }}
-                        buttonClassName="gap-2"
-                        data-testid="button-upload-logo"
-                      >
-                        <Upload className="h-4 w-4" />
-                        Upload Full Logo
-                      </ObjectUploader>
-                      <ObjectUploader
-                        maxNumberOfFiles={1}
-                        maxFileSize={5242880}
-                        onGetUploadParameters={getUploadParameters}
-                        onComplete={(result) => {
-                          const successfulFile = result.successful?.[0];
-                          if (successfulFile) {
-                            const objectPath = (successfulFile.response?.body as { objectPath?: string })?.objectPath 
-                              || (successfulFile as { objectPath?: string }).objectPath;
-                            if (objectPath) {
-                              saveLogoMutation.mutate({ logoIconPath: objectPath });
-                            }
-                          }
-                        }}
-                        buttonClassName="gap-2"
-                      >
-                        <Upload className="h-4 w-4" />
-                        Upload Icon Logo
-                      </ObjectUploader>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="absolute inset-0 cursor-pointer opacity-0"
+                          onChange={(e) => handleLogoFileSelect(e, "full")}
+                          data-testid="button-upload-logo"
+                        />
+                        <Button variant="outline" className="gap-2" disabled={isUploadingLogo}>
+                          {isUploadingLogo && cropType === "full" ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4" />
+                          )}
+                          Upload Full Logo
+                        </Button>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="absolute inset-0 cursor-pointer opacity-0"
+                          onChange={(e) => handleLogoFileSelect(e, "icon")}
+                          data-testid="input-upload-icon-logo"
+                        />
+                        <Button variant="outline" className="gap-2" disabled={isUploadingLogo}>
+                          {isUploadingLogo && cropType === "icon" ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4" />
+                          )}
+                          Upload Icon Logo
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1091,6 +1137,24 @@ export default function SettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Logo Crop Modal */}
+      {cropImageUrl && (
+        <LogoCropModal
+          isOpen={cropModalOpen}
+          onClose={() => {
+            setCropModalOpen(false);
+            if (cropImageUrl) {
+              URL.revokeObjectURL(cropImageUrl);
+              setCropImageUrl(null);
+            }
+          }}
+          imageUrl={cropImageUrl}
+          aspectRatio={cropType === "icon" ? 1 : 3}
+          onCropComplete={handleCropComplete}
+          title={cropType === "icon" ? "Crop Icon Logo (Square)" : "Crop Full Logo (Wide)"}
+        />
+      )}
     </div>
   );
 }

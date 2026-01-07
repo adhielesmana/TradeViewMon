@@ -8,6 +8,11 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { TrendingUp, User, Lock, AlertCircle, CheckCircle } from "lucide-react";
 
+interface LogoSettings {
+  logoPath: string | null;
+  logoIconPath: string | null;
+}
+
 interface InviteInfo {
   email: string;
   role: string;
@@ -23,6 +28,13 @@ export default function RegisterPage() {
 
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get("token");
+
+  // Fetch custom logo
+  const { data: logoSettings } = useQuery<LogoSettings>({
+    queryKey: ["/api/public/logo"],
+    staleTime: 60000,
+  });
+  const iconLogo = logoSettings?.logoIconPath || "/trady-icon.png";
 
   const { data: inviteInfo, isLoading: isLoadingInvite, error: inviteError } = useQuery<InviteInfo>({
     queryKey: ["/api/invites/validate", token],
@@ -168,7 +180,12 @@ export default function RegisterPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex items-center gap-2 text-primary">
-            <img src="/trady-icon.png" alt="Trady" className="h-8 w-8" />
+            <img 
+              src={iconLogo} 
+              alt="Trady" 
+              className="h-8 w-8 object-contain"
+              onError={(e) => { e.currentTarget.src = "/trady-icon.png"; }}
+            />
             <span className="text-2xl font-bold">Trady</span>
           </div>
           <CardTitle>Create Your Account</CardTitle>

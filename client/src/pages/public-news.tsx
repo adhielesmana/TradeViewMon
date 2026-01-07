@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
@@ -62,6 +62,60 @@ interface SymbolPrice {
   change?: number;
   changePercent?: number;
   currency: string;
+}
+
+interface LogoSettings {
+  logoPath: string | null;
+  logoIconPath: string | null;
+}
+
+// Extract relevant keywords from article content for SEO meta tags
+function extractKeywords(article: NewsSnapshot | null): string {
+  if (!article) return "trading, market analysis, forex, stocks, cryptocurrency, investment";
+  
+  // Stop words to filter out
+  const stopWords = new Set([
+    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
+    "by", "from", "as", "is", "was", "are", "were", "been", "be", "have", "has", "had",
+    "do", "does", "did", "will", "would", "could", "should", "may", "might", "must",
+    "shall", "can", "need", "dare", "ought", "used", "this", "that", "these", "those",
+    "i", "you", "he", "she", "it", "we", "they", "what", "which", "who", "whom",
+    "its", "his", "her", "their", "our", "my", "your", "than", "then", "so", "if",
+    "when", "where", "why", "how", "all", "each", "every", "both", "few", "more",
+    "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same",
+    "too", "very", "just", "also", "now", "here", "there", "about", "into", "over",
+    "after", "before", "between", "under", "again", "further", "once", "during"
+  ]);
+  
+  // Combine headline, summary, and keyFactors for text analysis
+  const text = [
+    article.headline || "",
+    article.summary || "",
+    article.keyFactors || ""
+  ].join(" ").toLowerCase();
+  
+  // Extract words (alphanumeric only, 3+ chars)
+  const words = text.match(/\b[a-z]{3,}\b/g) || [];
+  
+  // Count word frequency
+  const wordCounts = new Map<string, number>();
+  words.forEach(word => {
+    if (!stopWords.has(word)) {
+      wordCounts.set(word, (wordCounts.get(word) || 0) + 1);
+    }
+  });
+  
+  // Sort by frequency and take top keywords
+  const topKeywords = Array.from(wordCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([word]) => word);
+  
+  // Add some common trading keywords
+  const baseKeywords = ["trading", "market", "analysis", "investment"];
+  const allKeywords = [...new Set([...topKeywords, ...baseKeywords])];
+  
+  return allKeywords.slice(0, 20).join(", ");
 }
 
 function SentimentIcon({ sentiment }: { sentiment: string }) {
@@ -316,10 +370,66 @@ export default function PublicNewsPage() {
     enabled: selectedArticleId !== null,
   });
 
+  // Fetch custom logo settings
+  const { data: logoSettings } = useQuery<LogoSettings>({
+    queryKey: ["/api/public/logo"],
+    staleTime: 60000,
+  });
+
+  // Determine which logo to display - prefer custom, fallback to default
+  const iconLogo = logoSettings?.logoIconPath || "/trady-icon.png";
+
   const prediction = currentAnalysis?.marketPrediction;
   const snapshots = newsHistory?.snapshots || [];
   const totalPages = newsHistory?.totalPages || 1;
   const prices = marketPrices?.prices || [];
+
+  // Get the latest article for dynamic meta tags
+  const latestArticle = snapshots.length > 0 ? snapshots[0] : null;
+
+  // Dynamic SEO meta tags based on article content
+  useEffect(() => {
+    // Update page title
+    const headline = latestArticle?.headline || selectedArticleData?.snapshot?.headline;
+    if (headline) {
+      document.title = `${headline} - Trady Global Market Trading News`;
+    } else {
+      document.title = "Trady - Global Market Trading News";
+    }
+
+    // Update meta keywords
+    const activeArticle = selectedArticleData?.snapshot || latestArticle;
+    const keywords = extractKeywords(activeArticle);
+    
+    let metaKeywords = document.querySelector('meta[name="keywords"]');
+    if (!metaKeywords) {
+      metaKeywords = document.createElement('meta');
+      metaKeywords.setAttribute('name', 'keywords');
+      document.head.appendChild(metaKeywords);
+    }
+    metaKeywords.setAttribute('content', keywords);
+
+    // Update meta description
+    const description = activeArticle?.summary 
+      ? `${activeArticle.summary.slice(0, 155)}...`
+      : "Trady - Global Market Trading News with AI-powered analysis and real-time trading insights";
+    
+    let metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) {
+      metaDesc.setAttribute('content', description);
+    }
+
+    // Update OG tags
+    let ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) {
+      ogTitle.setAttribute('content', headline || "Trady - Global Market Trading News");
+    }
+    
+    let ogDesc = document.querySelector('meta[property="og:description"]');
+    if (ogDesc) {
+      ogDesc.setAttribute('content', description);
+    }
+  }, [latestArticle, selectedArticleData?.snapshot]);
 
   // Safely parse JSON fields for the selected article
   const safeParseJSON = <T,>(jsonString: string | null | undefined, fallback: T): T => {
@@ -356,9 +466,14 @@ export default function PublicNewsPage() {
           {/* Upper nav */}
           <div className="flex h-14 items-center justify-between">
             <div className="flex items-center gap-3">
-              <img src="/trady-icon.png" alt="Trady" className="h-9 w-9 rounded-md" />
+              <img 
+                src={iconLogo} 
+                alt="Trady" 
+                className="h-9 w-9 rounded-md object-contain"
+                onError={(e) => { e.currentTarget.src = "/trady-icon.png"; }}
+              />
               <span className="text-xl font-bold tracking-tight">Trady</span>
-              <span className="hidden text-sm text-muted-foreground md:inline-block">Market Intelligence</span>
+              <span className="hidden text-sm text-muted-foreground md:inline-block">Global Market Trading News</span>
             </div>
             
             <div className="flex items-center gap-2">
@@ -730,11 +845,16 @@ export default function PublicNewsPage() {
       <footer className="mt-12 border-t bg-muted/50 py-8">
         <div className="container mx-auto px-4 text-center">
           <div className="flex items-center justify-center gap-2 text-lg font-bold">
-            <img src="/trady-icon.png" alt="Trady" className="h-5 w-5" />
+            <img 
+              src={iconLogo} 
+              alt="Trady" 
+              className="h-5 w-5 object-contain"
+              onError={(e) => { e.currentTarget.src = "/trady-icon.png"; }}
+            />
             Trady
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            AI-powered market intelligence and trading insights
+            Global Market Trading News - AI-powered trading insights
           </p>
           <p className="mt-4 text-xs text-muted-foreground">
             &copy; {new Date().getFullYear()} Trady. All rights reserved.

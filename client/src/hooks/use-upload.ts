@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { UppyFile } from "@uppy/core";
 
 interface UploadMetadata {
@@ -6,6 +6,9 @@ interface UploadMetadata {
   size: number;
   contentType: string;
 }
+
+// Track uploaded files and their object paths
+const uploadedFilesMap = new Map<string, string>();
 
 interface UploadResponse {
   uploadURL: string;
@@ -179,6 +182,11 @@ export function useUpload(options: UseUploadOptions = {}) {
       }
 
       const data = await response.json();
+      
+      // Store the objectPath for later retrieval after upload completes
+      // Use file.id as key since it's unique per upload
+      uploadedFilesMap.set(file.id, data.objectPath);
+      
       return {
         method: "PUT",
         url: data.uploadURL,
@@ -188,9 +196,18 @@ export function useUpload(options: UseUploadOptions = {}) {
     []
   );
 
+  /**
+   * Get the object path for a file that was uploaded.
+   * Call this in onComplete to get the storage path of the uploaded file.
+   */
+  const getObjectPath = useCallback((fileId: string): string | undefined => {
+    return uploadedFilesMap.get(fileId);
+  }, []);
+
   return {
     uploadFile,
     getUploadParameters,
+    getObjectPath,
     isUploading,
     error,
     progress,

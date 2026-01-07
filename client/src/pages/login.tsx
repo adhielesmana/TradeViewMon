@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
@@ -10,12 +10,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TrendingUp, Lock, User } from "lucide-react";
 
+interface LogoSettings {
+  logoPath: string | null;
+  logoIconPath: string | null;
+}
+
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { refreshAuth } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+
+  // Fetch custom logo
+  const { data: logoSettings } = useQuery<LogoSettings>({
+    queryKey: ["/api/public/logo"],
+    staleTime: 60000,
+  });
+  const iconLogo = logoSettings?.logoIconPath || "/trady-icon.png";
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { username: string; password: string }) => {
@@ -49,7 +61,12 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-2">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <img src="/trady-icon.png" alt="Trady" className="h-8 w-8" />
+            <img 
+              src={iconLogo} 
+              alt="Trady" 
+              className="h-8 w-8 object-contain"
+              onError={(e) => { e.currentTarget.src = "/trady-icon.png"; }}
+            />
             <span className="text-2xl font-bold">Trady</span>
           </div>
           <CardTitle className="text-xl">Welcome Back</CardTitle>

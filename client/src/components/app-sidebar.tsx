@@ -1,4 +1,5 @@
 import { useLocation, Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { 
   LineChart, 
   TrendingUp, 
@@ -26,6 +27,11 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/lib/auth-context";
+
+interface LogoSettings {
+  logoPath: string | null;
+  logoIconPath: string | null;
+}
 
 const menuItems = [
   {
@@ -115,14 +121,31 @@ export function AppSidebar() {
   
   const visibleMenuItems = menuItems.filter(item => !item.adminOnly || isAdmin);
 
+  // Fetch custom logo settings - use public endpoint so it works without auth
+  const { data: logoSettings } = useQuery<LogoSettings>({
+    queryKey: ["/api/public/logo"],
+    staleTime: 60000, // Cache for 1 minute
+  });
+
+  // Determine which logo to display - prefer custom, fallback to default
+  const iconLogo = logoSettings?.logoIconPath || "/trady-icon.png";
+  const fullLogo = logoSettings?.logoPath;
+
   return (
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-3">
-          <img src="/trady-icon.png" alt="Trady" className="h-9 w-9 rounded-md" />
+          <img 
+            src={iconLogo} 
+            alt="Trady" 
+            className="h-9 w-9 rounded-md object-contain"
+            onError={(e) => {
+              e.currentTarget.src = "/trady-icon.png";
+            }}
+          />
           <div className="flex flex-col">
             <span className="text-base font-semibold tracking-tight">Trady</span>
-            <span className="text-xs text-muted-foreground">Market Intelligence</span>
+            <span className="text-xs text-muted-foreground">Global Market Trading News</span>
           </div>
         </div>
       </SidebarHeader>
