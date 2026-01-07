@@ -111,6 +111,7 @@ export interface IStorage {
   // App Settings
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string | null): Promise<AppSetting>;
+  deleteSetting(key: string): Promise<boolean>;
   getAllSettings(): Promise<AppSetting[]>;
 
   // Currency Rates
@@ -1071,6 +1072,13 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSettings(): Promise<AppSetting[]> {
     return db.select().from(appSettings);
+  }
+
+  async deleteSetting(key: string): Promise<boolean> {
+    const result = await db.delete(appSettings)
+      .where(eq(appSettings.key, key))
+      .returning();
+    return result.length > 0;
   }
 
   // Currency Rate Methods
