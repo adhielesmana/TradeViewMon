@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Minus, Clock, ArrowRight, BarChart3, LogIn, Newspaper, ChevronRight, ChevronLeft, LayoutDashboard, X, AlertTriangle, Target, FileText } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Clock, ArrowRight, BarChart3, LogIn, Newspaper, ChevronRight, ChevronLeft, LayoutDashboard, X, AlertTriangle, Target, FileText, Share2, Link2, Check } from "lucide-react";
+import { SiFacebook, SiX, SiWhatsapp, SiTelegram } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -75,6 +76,96 @@ function PriceChange({ change, changePercent }: { change?: number; changePercent
     <span className={`text-xs font-medium ${isPositive ? "text-green-500" : "text-red-500"}`}>
       {isPositive ? "+" : ""}{changePercent.toFixed(2)}%
     </span>
+  );
+}
+
+// Share buttons component for social media sharing
+function ShareButtons({ headline, summary, articleId }: { headline: string; summary: string; articleId: number }) {
+  const [copied, setCopied] = useState(false);
+  
+  // Build share URL - use window location with article hash for deep linking
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const shareUrl = `${baseUrl}/?article=${articleId}`;
+  const shareTitle = headline || "Market Analysis";
+  const shareText = `${shareTitle}: ${summary.slice(0, 100)}...`;
+  
+  const encodedUrl = encodeURIComponent(shareUrl);
+  const encodedTitle = encodeURIComponent(shareTitle);
+  const encodedText = encodeURIComponent(shareText);
+  
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+  
+  const shareLinks = [
+    {
+      name: "Facebook",
+      icon: SiFacebook,
+      url: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedTitle}`,
+      color: "hover:bg-[#1877F2]/10 hover:text-[#1877F2]",
+      testId: "button-share-facebook"
+    },
+    {
+      name: "X (Twitter)",
+      icon: SiX,
+      url: `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`,
+      color: "hover:bg-foreground/10 hover:text-foreground",
+      testId: "button-share-twitter"
+    },
+    {
+      name: "WhatsApp",
+      icon: SiWhatsapp,
+      url: `https://wa.me/?text=${encodedText}%20${encodedUrl}`,
+      color: "hover:bg-[#25D366]/10 hover:text-[#25D366]",
+      testId: "button-share-whatsapp"
+    },
+    {
+      name: "Telegram",
+      icon: SiTelegram,
+      url: `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`,
+      color: "hover:bg-[#0088CC]/10 hover:text-[#0088CC]",
+      testId: "button-share-telegram"
+    }
+  ];
+  
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex items-center gap-1 text-sm text-muted-foreground">
+        <Share2 className="h-4 w-4" />
+        Share:
+      </span>
+      <div className="flex items-center gap-1">
+        {shareLinks.map((link) => (
+          <Button
+            key={link.name}
+            variant="ghost"
+            size="icon"
+            className={`h-8 w-8 ${link.color}`}
+            onClick={() => window.open(link.url, "_blank", "noopener,noreferrer,width=600,height=400")}
+            title={`Share on ${link.name}`}
+            data-testid={link.testId}
+          >
+            <link.icon className="h-4 w-4" />
+          </Button>
+        ))}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 hover:bg-primary/10 hover:text-primary"
+          onClick={handleCopyLink}
+          title="Copy link"
+          data-testid="button-share-copy"
+        >
+          {copied ? <Check className="h-4 w-4 text-green-500" /> : <Link2 className="h-4 w-4" />}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -601,6 +692,15 @@ export default function PublicNewsPage() {
                       <span>Confidence: {selectedArticle.confidence}%</span>
                     </div>
                   </div>
+                </div>
+
+                {/* Share Buttons */}
+                <div className="mb-4 flex justify-end" data-testid="share-buttons-container">
+                  <ShareButtons 
+                    headline={selectedArticle.headline || `${selectedArticle.overallSentiment} Market Analysis`}
+                    summary={selectedArticle.summary}
+                    articleId={selectedArticle.id}
+                  />
                 </div>
 
                 {/* Quick Summary */}
