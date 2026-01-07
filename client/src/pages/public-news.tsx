@@ -299,57 +299,62 @@ export default function PublicNewsPage() {
             )}
           </div>
 
-          {/* Right Sidebar - Latest News */}
+          {/* Right Sidebar - Symbol Impact */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">Latest News</h2>
+              <h2 className="text-lg font-bold">Symbol Impact</h2>
               <Link href="/login">
-                <Button variant="ghost" size="sm" className="text-primary" data-testid="button-view-all-news">
+                <Button variant="ghost" size="sm" className="text-primary" data-testid="button-view-all-symbols">
                   View All <ArrowRight className="ml-1 h-4 w-4" />
                 </Button>
               </Link>
             </div>
             
-            {isLoadingHistory ? (
+            {isLoadingAnalysis ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <Card key={i}>
                   <CardContent className="p-4">
+                    <Skeleton className="mb-2 h-5 w-16" />
                     <Skeleton className="mb-2 h-4 w-3/4" />
                     <Skeleton className="h-3 w-1/2" />
                   </CardContent>
                 </Card>
               ))
-            ) : snapshots.length > 0 ? (
-              snapshots.slice(0, 5).map((snapshot) => (
+            ) : prediction && prediction.affectedSymbols.length > 0 ? (
+              prediction.affectedSymbols.map((symbol, index) => (
                 <Card 
-                  key={snapshot.id} 
-                  className="transition-colors hover-elevate cursor-pointer"
-                  data-testid={`news-card-${snapshot.id}`}
-                  onClick={() => handleArticleClick(snapshot.id)}
+                  key={`${symbol.symbol}-${index}`} 
+                  className="transition-colors hover-elevate"
+                  data-testid={`impact-card-${symbol.symbol}`}
                 >
                   <CardContent className="p-4">
-                    <div className="mb-2 flex items-center gap-2">
-                      <SentimentIcon sentiment={snapshot.overallSentiment} />
-                      <Badge variant="outline" className="text-xs">
-                        {snapshot.overallSentiment}
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <SentimentIcon sentiment={symbol.impact === "POSITIVE" ? "BULLISH" : symbol.impact === "NEGATIVE" ? "BEARISH" : "NEUTRAL"} />
+                        <span className="font-bold">{symbol.symbol}</span>
+                      </div>
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs ${
+                          symbol.impact === "POSITIVE" 
+                            ? "border-green-500/50 text-green-600 dark:text-green-400" 
+                            : symbol.impact === "NEGATIVE" 
+                              ? "border-red-500/50 text-red-600 dark:text-red-400" 
+                              : "border-yellow-500/50 text-yellow-600 dark:text-yellow-400"
+                        }`}
+                      >
+                        {symbol.impact}
                       </Badge>
                     </div>
-                    <h3 className="mb-1 font-medium leading-tight line-clamp-2" data-testid={`headline-${snapshot.id}`}>
-                      {snapshot.headline || `${snapshot.overallSentiment} Market Analysis`}
-                    </h3>
-                    <p className="mb-2 text-xs text-muted-foreground line-clamp-2">
-                      {snapshot.summary}
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {symbol.reason}
                     </p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {formatDistanceToNow(new Date(snapshot.analyzedAt), { addSuffix: true })}
-                    </div>
                   </CardContent>
                 </Card>
               ))
             ) : (
               <div className="flex h-40 items-center justify-center rounded-lg border border-dashed">
-                <p className="text-sm text-muted-foreground">No news history available</p>
+                <p className="text-sm text-muted-foreground">No symbol impact data available</p>
               </div>
             )}
           </div>
