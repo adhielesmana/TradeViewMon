@@ -95,14 +95,9 @@ function AuthenticatedApp() {
   // Allow access to public routes without authentication
   const isPublicRoute = location === "/" || location === "/login" || location.startsWith("/register");
   
-  // Public news page is the landing page (no auth required)
-  if (location === "/" && !isAuthenticated) {
+  // Public news page is the landing page (accessible to everyone)
+  if (location === "/") {
     return <PublicNewsPage />;
-  }
-  
-  // Redirect authenticated users from / to /dashboard
-  if (location === "/" && isAuthenticated) {
-    return <Redirect to="/dashboard" />;
   }
   
   if (!isAuthenticated && !isPublicRoute) {

@@ -10,7 +10,8 @@ import {
   Brain,
   Wallet,
   Settings,
-  Newspaper
+  Newspaper,
+  Home
 } from "lucide-react";
 import {
   Sidebar,
@@ -27,6 +28,13 @@ import {
 import { useAuth } from "@/lib/auth-context";
 
 const menuItems = [
+  {
+    title: "Homepage",
+    url: "/",
+    icon: Home,
+    description: "Public landing",
+    adminOnly: false,
+  },
   {
     title: "Live Market",
     url: "/dashboard",
@@ -136,7 +144,7 @@ export function AppSidebar() {
                       isActive={isActive}
                       className="transition-colors"
                     >
-                      <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(' ', '-')}`}>
+                      <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
                         <item.icon className={isActive ? "text-primary" : ""} />
                         <span>{item.title}</span>
                       </Link>

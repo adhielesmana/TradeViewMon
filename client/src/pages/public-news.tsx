@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Minus, Clock, ArrowRight, BarChart3, LogIn, Newspaper, ChevronRight } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Clock, ArrowRight, BarChart3, LogIn, Newspaper, ChevronRight, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useAuth } from "@/lib/auth-context";
 
 import marketAnalysisImage from "@assets/stock_images/stock_market_trading_4aea7bde.jpg";
 
@@ -69,6 +70,9 @@ function formatPrice(price: number, currency: string): string {
 }
 
 export default function PublicNewsPage() {
+  const { user } = useAuth();
+  const isLoggedIn = !!user;
+
   const { data: currentAnalysis, isLoading: isLoadingAnalysis } = useQuery<{ marketPrediction: MarketPrediction }>({
     queryKey: ["/api/public/news/current"],
     refetchInterval: 60000,
@@ -105,12 +109,21 @@ export default function PublicNewsPage() {
             
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <Link href="/login">
-                <Button variant="outline" size="sm" data-testid="button-login">
-                  <LogIn className="mr-2 h-4 w-4" />
-                  Sign In
-                </Button>
-              </Link>
+              {isLoggedIn ? (
+                <Link href="/dashboard">
+                  <Button variant="default" size="sm" data-testid="button-dashboard">
+                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                    Dashboard
+                  </Button>
+                </Link>
+              ) : (
+                <Link href="/login">
+                  <Button variant="outline" size="sm" data-testid="button-login">
+                    <LogIn className="mr-2 h-4 w-4" />
+                    Sign In
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
           
