@@ -28,6 +28,8 @@ async function getCroppedImg(
   rotation = 0
 ): Promise<Blob> {
   const image = await createImage(imageSrc);
+  
+  // Create output canvas with the final crop dimensions
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
 
@@ -35,32 +37,60 @@ async function getCroppedImg(
     throw new Error("No 2d context");
   }
 
-  const maxSize = Math.max(image.width, image.height);
-  const safeArea = 2 * ((maxSize / 2) * Math.sqrt(2));
-
-  canvas.width = safeArea;
-  canvas.height = safeArea;
-
-  ctx.translate(safeArea / 2, safeArea / 2);
-  ctx.rotate((rotation * Math.PI) / 180);
-  ctx.translate(-safeArea / 2, -safeArea / 2);
-
-  ctx.drawImage(
-    image,
-    safeArea / 2 - image.width * 0.5,
-    safeArea / 2 - image.height * 0.5
-  );
-
-  const data = ctx.getImageData(0, 0, safeArea, safeArea);
-
+  // Set output canvas to the crop size
   canvas.width = pixelCrop.width;
   canvas.height = pixelCrop.height;
 
-  ctx.putImageData(
-    data,
-    Math.round(0 - safeArea / 2 + image.width * 0.5 - pixelCrop.x),
-    Math.round(0 - safeArea / 2 + image.height * 0.5 - pixelCrop.y)
-  );
+  // If no rotation, use simple drawImage with source rectangle
+  if (rotation === 0) {
+    ctx.drawImage(
+      image,
+      pixelCrop.x,
+      pixelCrop.y,
+      pixelCrop.width,
+      pixelCrop.height,
+      0,
+      0,
+      pixelCrop.width,
+      pixelCrop.height
+    );
+  } else {
+    // For rotation, we need to:
+    // 1. First create a rotated version of the full image
+    const rotRad = (rotation * Math.PI) / 180;
+    const sin = Math.abs(Math.sin(rotRad));
+    const cos = Math.abs(Math.cos(rotRad));
+    
+    // Bounding box of rotated image
+    const rotWidth = image.width * cos + image.height * sin;
+    const rotHeight = image.width * sin + image.height * cos;
+    
+    // Create temp canvas for rotated image
+    const rotCanvas = document.createElement("canvas");
+    const rotCtx = rotCanvas.getContext("2d");
+    if (!rotCtx) throw new Error("No 2d context for rotation");
+    
+    rotCanvas.width = rotWidth;
+    rotCanvas.height = rotHeight;
+    
+    // Rotate around center
+    rotCtx.translate(rotWidth / 2, rotHeight / 2);
+    rotCtx.rotate(rotRad);
+    rotCtx.drawImage(image, -image.width / 2, -image.height / 2);
+    
+    // 2. Now extract the crop area from the rotated image
+    ctx.drawImage(
+      rotCanvas,
+      pixelCrop.x,
+      pixelCrop.y,
+      pixelCrop.width,
+      pixelCrop.height,
+      0,
+      0,
+      pixelCrop.width,
+      pixelCrop.height
+    );
+  }
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
