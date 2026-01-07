@@ -467,8 +467,8 @@ async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"],
     
     await storage.saveNewsAnalysisSnapshot(snapshot);
     
-    // Clean up old snapshots (keep last 10)
-    await storage.deleteOldNewsAnalysisSnapshots(10);
+    // Clean up old snapshots (keep last 168 - 7 days of hourly data)
+    await storage.deleteOldNewsAnalysisSnapshots(168);
     
     console.log("[NewsService] Analysis cached successfully");
   } catch (error) {

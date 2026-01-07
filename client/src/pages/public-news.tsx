@@ -378,6 +378,7 @@ export default function PublicNewsPage() {
 
   // Determine which logo to display - prefer custom, fallback to default
   const iconLogo = logoSettings?.logoIconPath || "/trady-icon.jpg";
+  const fullLogo = logoSettings?.logoPath || "/trady-logo.jpg";
 
   const prediction = currentAnalysis?.marketPrediction;
   const snapshots = newsHistory?.snapshots || [];
@@ -467,10 +468,10 @@ export default function PublicNewsPage() {
           <div className="flex h-14 items-center justify-between">
             <div className="flex items-center gap-3">
               <img 
-                src={iconLogo} 
+                src={fullLogo} 
                 alt="Trady" 
-                className="h-10 w-10 rounded-md object-contain"
-                onError={(e) => { e.currentTarget.src = "/trady-icon.jpg"; }}
+                className="h-10 object-contain"
+                onError={(e) => { e.currentTarget.src = "/trady-logo.jpg"; }}
               />
               <span className="hidden text-sm text-muted-foreground md:inline-block">Global Market Trading News</span>
             </div>
