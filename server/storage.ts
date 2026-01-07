@@ -175,6 +175,12 @@ export interface IStorage {
   // News Articles for hourly AI analysis
   getNewsArticlesLastHour(): Promise<NewsArticle[]>;
   
+  // Image backfill methods
+  getNewsArticlesWithoutImages(limit: number): Promise<NewsArticle[]>;
+  updateArticleImageUrl(id: number, imageUrl: string): Promise<void>;
+  getNewsSnapshotsWithoutImages(limit: number): Promise<NewsAnalysisSnapshot[]>;
+  updateSnapshotImageUrl(id: number, imageUrl: string): Promise<void>;
+  
   // All open positions for scheduled tasks
   getAllOpenProfitablePositions(): Promise<DemoPosition[]>;
 }
@@ -1493,6 +1499,35 @@ export class DatabaseStorage implements IStorage {
       .from(newsArticles)
       .where(gte(newsArticles.fetchedAt, oneHourAgo))
       .orderBy(desc(newsArticles.fetchedAt));
+  }
+
+  // Image backfill methods
+  async getNewsArticlesWithoutImages(limit: number): Promise<NewsArticle[]> {
+    return db.select()
+      .from(newsArticles)
+      .where(sql`${newsArticles.imageUrl} IS NULL`)
+      .orderBy(desc(newsArticles.fetchedAt))
+      .limit(limit);
+  }
+
+  async updateArticleImageUrl(id: number, imageUrl: string): Promise<void> {
+    await db.update(newsArticles)
+      .set({ imageUrl })
+      .where(eq(newsArticles.id, id));
+  }
+
+  async getNewsSnapshotsWithoutImages(limit: number): Promise<NewsAnalysisSnapshot[]> {
+    return db.select()
+      .from(newsAnalysisSnapshots)
+      .where(sql`${newsAnalysisSnapshots.imageUrl} IS NULL`)
+      .orderBy(desc(newsAnalysisSnapshots.analyzedAt))
+      .limit(limit);
+  }
+
+  async updateSnapshotImageUrl(id: number, imageUrl: string): Promise<void> {
+    await db.update(newsAnalysisSnapshots)
+      .set({ imageUrl })
+      .where(eq(newsAnalysisSnapshots.id, id));
   }
 }
 

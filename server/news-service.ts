@@ -443,6 +443,12 @@ async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"],
   try {
     const generatedArticle = generateArticleText(prediction, newsCount, "regular");
     
+    // Generate stock image using stable ID based on headline hash
+    // This ensures deterministic image URLs for CDN caching
+    const headlineForImage = prediction.headline || prediction.summary.slice(0, 50);
+    const stableId = Math.abs(hashCode(headlineForImage));
+    const stockImageUrl = generateStockImageUrl(headlineForImage, stableId);
+    
     const snapshot: InsertNewsAnalysisSnapshot = {
       overallSentiment: prediction.overallSentiment,
       confidence: prediction.confidence,
@@ -456,6 +462,7 @@ async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"],
       analyzedAt: new Date(),
       analysisType: "regular",
       generatedArticle: generatedArticle,
+      imageUrl: stockImageUrl,
     };
     
     await storage.saveNewsAnalysisSnapshot(snapshot);
@@ -784,7 +791,12 @@ Generate your market prediction now.`
     const generatedArticle = generateArticleText(prediction, recentArticles.length, "hourly");
     
     // Pick featured image from source articles (first article with image)
-    const featuredImageUrl = recentArticles.find(a => a.imageUrl)?.imageUrl || null;
+    // Fallback to stock image if no RSS image available
+    const rssImageUrl = recentArticles.find(a => a.imageUrl)?.imageUrl;
+    const headlineForImage = prediction.headline || prediction.summary.slice(0, 50);
+    // Use stable hash-based ID for deterministic image URLs (better for CDN caching)
+    const stableId = Math.abs(hashCode(headlineForImage));
+    const featuredImageUrl = rssImageUrl || generateStockImageUrl(headlineForImage, stableId);
     
     // Save enhanced analysis to database with source tracking
     const snapshot: InsertNewsAnalysisSnapshot = {
@@ -937,6 +949,160 @@ function isValidImageUrl(url: string): boolean {
            lowerUrl.includes('media');
   } catch {
     return false;
+  }
+}
+
+// ============================================
+// Stock Image Generation for Articles
+// ============================================
+
+// Financial keywords to search terms mapping
+const KEYWORD_MAPPINGS: Record<string, string[]> = {
+  // Precious metals
+  gold: ["gold bars", "gold bullion", "gold investment"],
+  silver: ["silver coins", "silver bars", "precious metals"],
+  platinum: ["platinum", "precious metals"],
+  
+  // Crypto
+  bitcoin: ["bitcoin", "cryptocurrency", "digital currency"],
+  crypto: ["cryptocurrency", "blockchain", "digital assets"],
+  btc: ["bitcoin", "cryptocurrency"],
+  ethereum: ["ethereum", "blockchain"],
+  
+  // Markets
+  stock: ["stock market", "trading floor", "wall street"],
+  market: ["stock market", "financial market", "trading"],
+  trading: ["stock trading", "financial charts", "market analysis"],
+  investor: ["investor", "business meeting", "finance"],
+  
+  // Economic
+  inflation: ["inflation", "economy", "money"],
+  recession: ["recession", "economic downturn", "finance"],
+  economy: ["economy", "business", "finance"],
+  fed: ["federal reserve", "banking", "finance"],
+  interest: ["interest rates", "banking", "finance"],
+  
+  // Energy
+  oil: ["oil barrel", "crude oil", "petroleum"],
+  gas: ["natural gas", "energy", "oil rig"],
+  energy: ["energy", "power", "renewable"],
+  
+  // General finance
+  bull: ["bull market", "stock market", "trading"],
+  bear: ["bear market", "stock market", "downtrend"],
+  rally: ["stock rally", "market growth", "bull run"],
+  surge: ["market surge", "stock growth", "uptrend"],
+  drop: ["market crash", "stock decline", "recession"],
+  crash: ["market crash", "financial crisis", "recession"],
+  
+  // Companies/sectors
+  tech: ["technology", "silicon valley", "startup"],
+  mining: ["gold mining", "mining industry", "excavation"],
+  bank: ["banking", "bank building", "finance"],
+};
+
+// Default fallback keywords for financial news
+const DEFAULT_KEYWORDS = ["finance", "stock market", "trading"];
+
+// Simple string hash function for stable image IDs
+function hashCode(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash;
+}
+
+function extractKeywordsFromHeadline(headline: string): string[] {
+  const lowerHeadline = headline.toLowerCase();
+  const foundKeywords: string[] = [];
+  
+  // Check for mapped keywords
+  for (const [keyword, searchTerms] of Object.entries(KEYWORD_MAPPINGS)) {
+    if (lowerHeadline.includes(keyword)) {
+      // Pick a random search term from the mapping
+      const term = searchTerms[Math.floor(Math.random() * searchTerms.length)];
+      foundKeywords.push(term);
+      if (foundKeywords.length >= 2) break; // Limit to 2 keywords
+    }
+  }
+  
+  // If no keywords found, use defaults
+  if (foundKeywords.length === 0) {
+    return DEFAULT_KEYWORDS.slice(0, 2);
+  }
+  
+  return foundKeywords;
+}
+
+function generateStockImageUrl(headline: string, articleId: number): string {
+  const keywords = extractKeywordsFromHeadline(headline);
+  const query = keywords.join(",");
+  
+  // Use Unsplash Source API - provides free, high-quality stock images
+  // The sig parameter ensures different images for different articles
+  return `https://source.unsplash.com/800x450/?${encodeURIComponent(query)}&sig=${articleId}`;
+}
+
+// Backfill images for articles that don't have them
+export async function backfillArticleImages(): Promise<{ updated: number; total: number }> {
+  console.log("[NewsService] Starting image backfill for articles without images...");
+  
+  try {
+    // Get articles without images (limit to recent ones to avoid too many updates)
+    const articlesWithoutImages = await storage.getNewsArticlesWithoutImages(50);
+    
+    if (articlesWithoutImages.length === 0) {
+      console.log("[NewsService] No articles need image backfill");
+      return { updated: 0, total: 0 };
+    }
+    
+    let updated = 0;
+    
+    for (const article of articlesWithoutImages) {
+      const imageUrl = generateStockImageUrl(article.title, article.id);
+      await storage.updateArticleImageUrl(article.id, imageUrl);
+      updated++;
+    }
+    
+    console.log(`[NewsService] Backfilled images for ${updated}/${articlesWithoutImages.length} articles`);
+    return { updated, total: articlesWithoutImages.length };
+    
+  } catch (error: any) {
+    console.error("[NewsService] Image backfill failed:", error.message);
+    return { updated: 0, total: 0 };
+  }
+}
+
+// Backfill images for snapshots that don't have them
+export async function backfillSnapshotImages(): Promise<{ updated: number; total: number }> {
+  console.log("[NewsService] Starting image backfill for snapshots without images...");
+  
+  try {
+    const snapshotsWithoutImages = await storage.getNewsSnapshotsWithoutImages(50);
+    
+    if (snapshotsWithoutImages.length === 0) {
+      console.log("[NewsService] No snapshots need image backfill");
+      return { updated: 0, total: 0 };
+    }
+    
+    let updated = 0;
+    
+    for (const snapshot of snapshotsWithoutImages) {
+      const headline = snapshot.headline || snapshot.summary.slice(0, 50);
+      const imageUrl = generateStockImageUrl(headline, snapshot.id);
+      await storage.updateSnapshotImageUrl(snapshot.id, imageUrl);
+      updated++;
+    }
+    
+    console.log(`[NewsService] Backfilled images for ${updated}/${snapshotsWithoutImages.length} snapshots`);
+    return { updated, total: snapshotsWithoutImages.length };
+    
+  } catch (error: any) {
+    console.error("[NewsService] Snapshot image backfill failed:", error.message);
+    return { updated: 0, total: 0 };
   }
 }
 

@@ -479,12 +479,20 @@ class Scheduler {
   // News fetch task: Fetch news from RSS feeds and store for AI learning
   private async runNewsFetch(): Promise<void> {
     try {
-      const { fetchAndStoreNews, getNewsStats } = await import("./news-service");
+      const { fetchAndStoreNews, getNewsStats, backfillArticleImages, backfillSnapshotImages } = await import("./news-service");
       const result = await fetchAndStoreNews();
       
       if (result.stored > 0) {
         const stats = await getNewsStats();
         console.log(`[Scheduler] News stored: ${result.stored} new articles (total: ${stats.totalArticles}, last 24h: ${stats.last24Hours})`);
+      }
+      
+      // Backfill stock images for articles/snapshots without images
+      const articleBackfill = await backfillArticleImages();
+      const snapshotBackfill = await backfillSnapshotImages();
+      
+      if (articleBackfill.updated > 0 || snapshotBackfill.updated > 0) {
+        console.log(`[Scheduler] Image backfill: ${articleBackfill.updated} articles, ${snapshotBackfill.updated} snapshots`);
       }
     } catch (error) {
       console.error("[Scheduler] Error fetching news:", error);
