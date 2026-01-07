@@ -184,7 +184,7 @@ export default function RegisterPage() {
             <img 
               src={fullLogo} 
               alt="Trady" 
-              className="h-12 object-contain"
+              className="h-12 rounded-md object-contain"
               onError={(e) => { e.currentTarget.src = "/trady-logo.jpg"; }}
             />
           </div>

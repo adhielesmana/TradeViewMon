@@ -470,7 +470,7 @@ export default function PublicNewsPage() {
               <img 
                 src={fullLogo} 
                 alt="Trady" 
-                className="h-10 object-contain"
+                className="h-10 rounded-md object-contain"
                 onError={(e) => { e.currentTarget.src = "/trady-logo.jpg"; }}
               />
               <span className="hidden text-sm text-muted-foreground md:inline-block">Global Market Trading News</span>
