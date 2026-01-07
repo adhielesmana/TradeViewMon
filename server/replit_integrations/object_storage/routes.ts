@@ -38,6 +38,7 @@ export function registerObjectStorageRoutes(app: Express): void {
   app.post("/api/uploads/request-url", async (req, res) => {
     try {
       const { name, size, contentType } = req.body;
+      console.log("[Upload] Request received:", { name, size, contentType });
 
       if (!name) {
         return res.status(400).json({
@@ -45,10 +46,13 @@ export function registerObjectStorageRoutes(app: Express): void {
         });
       }
 
+      console.log("[Upload] Getting presigned URL...");
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      console.log("[Upload] Got presigned URL, normalizing path...");
 
       // Extract object path from the presigned URL for later reference
       const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      console.log("[Upload] Object path:", objectPath);
 
       res.json({
         uploadURL,
@@ -56,9 +60,13 @@ export function registerObjectStorageRoutes(app: Express): void {
         // Echo back the metadata for client convenience
         metadata: { name, size, contentType },
       });
-    } catch (error) {
-      console.error("Error generating upload URL:", error);
-      res.status(500).json({ error: "Failed to generate upload URL" });
+    } catch (error: any) {
+      console.error("[Upload] Error generating upload URL:", error?.message || error);
+      console.error("[Upload] Full error:", error);
+      res.status(500).json({ 
+        error: "Failed to generate upload URL",
+        details: error?.message || "Unknown error"
+      });
     }
   });
 

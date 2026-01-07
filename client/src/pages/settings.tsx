@@ -181,8 +181,12 @@ export default function SettingsPage() {
       const fileName = `logo-${cropType}-${Date.now()}.png`;
       const file = new File([croppedBlob], fileName, { type: "image/png" });
       
+      console.log("[Logo Upload] Starting upload for:", fileName, "Size:", croppedBlob.size);
+      
       // Upload the cropped image
       const result = await uploadFile(file);
+      
+      console.log("[Logo Upload] Upload result:", result);
       
       if (result?.objectPath) {
         // Save the logo path
@@ -191,12 +195,23 @@ export default function SettingsPage() {
         } else {
           saveLogoMutation.mutate({ logoIconPath: result.objectPath });
         }
+        toast({ 
+          title: "Success", 
+          description: "Logo uploaded successfully" 
+        });
+      } else {
+        console.error("[Logo Upload] No objectPath in result");
+        toast({ 
+          title: "Error", 
+          description: "Upload completed but no path returned", 
+          variant: "destructive" 
+        });
       }
-    } catch (error) {
-      console.error("Error uploading cropped logo:", error);
+    } catch (error: any) {
+      console.error("[Logo Upload] Error uploading cropped logo:", error);
       toast({ 
-        title: "Error", 
-        description: "Failed to upload cropped image", 
+        title: "Upload Error", 
+        description: error?.message || "Failed to upload cropped image", 
         variant: "destructive" 
       });
     } finally {
