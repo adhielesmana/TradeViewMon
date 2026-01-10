@@ -93,10 +93,21 @@ CREATE TABLE IF NOT EXISTS users (
     password TEXT NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'user',
     is_active BOOLEAN NOT NULL DEFAULT true,
+    approval_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    approved_at TIMESTAMP,
+    approved_by VARCHAR,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     last_login TIMESTAMP
 );
+
+-- Add approval columns to existing users table
+ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) NOT NULL DEFAULT 'pending';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_by VARCHAR;
+
+-- Auto-approve existing users (those created before approval feature existed)
+UPDATE users SET approval_status = 'approved' WHERE approval_status = 'pending' AND created_at < '2026-01-10';
 
 -- ============================================
 -- TABLE: user_invites

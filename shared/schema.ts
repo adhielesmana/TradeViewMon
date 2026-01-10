@@ -146,6 +146,9 @@ export const users = pgTable("users", {
   password: text("password").notNull(), // Always stored as bcrypt hash
   role: varchar("role", { length: 20 }).notNull().default("user"), // 'superadmin', 'admin', 'user'
   isActive: boolean("is_active").notNull().default(true),
+  approvalStatus: varchar("approval_status", { length: 20 }).notNull().default("pending"), // 'pending', 'approved', 'rejected'
+  approvedAt: timestamp("approved_at"),
+  approvedBy: varchar("approved_by"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
   lastLogin: timestamp("last_login"),
