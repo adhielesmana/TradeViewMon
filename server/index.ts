@@ -41,9 +41,10 @@ const PgSession = connectPgSimple(session);
 const app = express();
 const httpServer = createServer(app);
 
-// Trust proxy when behind Nginx (for secure cookies over HTTPS)
+// Trust proxy chain when behind Cloudflare/Nginx (for secure cookies over HTTPS)
+// Use 'true' to trust all proxies in the chain, not just the first hop
 if (isProduction) {
-  app.set("trust proxy", 1);
+  app.set("trust proxy", true);
 }
 
 declare module "http" {
