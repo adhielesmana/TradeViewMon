@@ -239,9 +239,14 @@ docker compose -f deploy/docker-compose.yml up -d
 
 # Wait for services to be healthy
 log_info "Waiting for services to start..."
+
+# Get credentials from env file for healthcheck
+DB_USER="${POSTGRES_USER:-trady}"
+DB_NAME="${POSTGRES_DB:-trady}"
+
 echo -n "  Database: "
 for i in {1..30}; do
-    if docker exec trady-db pg_isready -U trady &>/dev/null; then
+    if docker exec trady-db pg_isready -U "$DB_USER" -d "$DB_NAME" &>/dev/null; then
         echo -e "${GREEN}Ready${NC}"
         break
     fi
@@ -273,6 +278,10 @@ done
 # ============================================
 log_info "Initializing database schema..."
 
+# Get database credentials from env file
+DB_USER="${POSTGRES_USER:-trady}"
+DB_NAME="${POSTGRES_DB:-trady}"
+
 # First, run the comprehensive init script that creates all tables/columns if not exist
 if [ -f "deploy/migrations/init_database.sql" ]; then
     log_info "Running database initialization script..."
@@ -281,14 +290,24 @@ if [ -f "deploy/migrations/init_database.sql" ]; then
     log_info "Copying migration file to database container..."
     docker cp deploy/migrations/init_database.sql trady-db:/tmp/init_database.sql
     
-    # Execute the SQL file with verbose output
-    log_info "Executing SQL migration..."
-    if docker exec trady-db psql -U trady -d trady -f /tmp/init_database.sql; then
+    # Execute the SQL file with verbose output using variables from env
+    log_info "Executing SQL migration (user: $DB_USER, db: $DB_NAME)..."
+    if docker exec trady-db psql -U "$DB_USER" -d "$DB_NAME" -f /tmp/init_database.sql; then
         log_info "Database migration executed successfully!"
     else
-        log_error "Database migration failed! Check the SQL file for errors."
-        log_info "Attempting to show database error..."
-        docker exec trady-db psql -U trady -d trady -f /tmp/init_database.sql 2>&1 || true
+        log_error "Database migration failed!"
+        log_info "Checking if this is a stale volume issue..."
+        
+        # Check which users exist in the database
+        log_info "Listing existing database roles..."
+        docker exec trady-db psql -U postgres -c "\\du" 2>/dev/null || true
+        
+        log_warn "If you see 'role does not exist' error, try removing the old volume:"
+        log_warn "  docker compose -f deploy/docker-compose.yml down -v"
+        log_warn "  ./deploy/deploy.sh"
+        log_warn ""
+        log_warn "Or if you have an existing database with different credentials,"
+        log_warn "update the .env file with the correct POSTGRES_USER and POSTGRES_DB values."
     fi
     
     # Cleanup

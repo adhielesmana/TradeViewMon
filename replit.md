@@ -12,6 +12,7 @@ Preferred communication style: Simple, everyday language.
 3. **Extensions**: Ensure `CREATE EXTENSION IF NOT EXISTS pgcrypto;` is at the top of the SQL file to support `gen_random_uuid()`.
 4. **Environment**: Use `DATABASE_URL` for all database connections. Avoid relying on local unix sockets or specific system roles (like "trady") in deployment scripts.
 5. **Syncing**: The `init_database.sql` script is executed on every deployment to ensure dev and prod databases are identical.
+6. **Self-Hosted**: The `deploy.sh` script uses `POSTGRES_USER` and `POSTGRES_DB` from `.env` for migrations. If you encounter "role does not exist" errors, either reset the volume (`docker compose down -v`) or update `.env` to match existing credentials.
 
 ## System Architecture
 

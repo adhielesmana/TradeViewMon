@@ -159,6 +159,29 @@ systemctl reload nginx
 
 ## Troubleshooting
 
+### Database "role does not exist" Error
+
+If you see an error like:
+```
+FATAL: role "trady" does not exist
+```
+
+This usually happens when you have a stale PostgreSQL data volume from a previous installation with different credentials.
+
+**Solution 1: Reset the database volume (if you don't have important data)**
+```bash
+docker compose -f deploy/docker-compose.yml down -v
+./deploy/deploy.sh
+```
+
+**Solution 2: Use your existing credentials**
+Edit the `.env` file and update `POSTGRES_USER` and `POSTGRES_DB` to match your existing database credentials, then redeploy:
+```bash
+nano .env
+# Update POSTGRES_USER and POSTGRES_DB to match existing credentials
+./deploy/deploy.sh
+```
+
 ### Port Already in Use
 The script automatically detects and avoids port conflicts. Check current usage:
 ```bash
