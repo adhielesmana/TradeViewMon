@@ -345,7 +345,7 @@ interface PaginatedNewsHistory {
 }
 
 export default function PublicNewsPage() {
-  const { user, refetch: refetchUser } = useAuth();
+  const { user, refreshAuth } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const isLoggedIn = !!user;
@@ -368,9 +368,10 @@ export default function PublicNewsPage() {
       const response = await apiRequest("POST", "/api/auth/login", { username, password });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      localStorage.setItem("user", JSON.stringify(data.user));
       toast({ title: "Login successful", description: "Welcome back!" });
-      refetchUser();
+      refreshAuth();
       setLoginUsername("");
       setLoginPassword("");
       setLocation("/dashboard");
