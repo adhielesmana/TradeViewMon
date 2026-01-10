@@ -6,11 +6,12 @@ Trady is a full-stack financial application providing real-time stock market dat
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
-**CRITICAL Database Sync Rules** (MUST FOLLOW):
-1. **New Tables**: When adding a new table in `shared/schema.ts`, ALSO add the `CREATE TABLE IF NOT EXISTS` statement to `deploy/migrations/init_database.sql`
-2. **New Columns**: When adding columns to existing tables in `shared/schema.ts`, ALSO add `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` statements in the migrations section of `init_database.sql`
-3. **The init_database.sql is run on EVERY deployment** - it must handle both fresh installs AND updates to existing databases
-4. This ensures development and production databases stay in sync and prevents "column does not exist" errors in production
+### Database Sync Protocol
+1. **Migrations**: All structural changes (tables/columns) MUST be added to `deploy/migrations/init_database.sql`.
+2. **Idempotency**: Use `IF NOT EXISTS` for tables, columns, and indexes.
+3. **Extensions**: Ensure `CREATE EXTENSION IF NOT EXISTS pgcrypto;` is at the top of the SQL file to support `gen_random_uuid()`.
+4. **Environment**: Use `DATABASE_URL` for all database connections. Avoid relying on local unix sockets or specific system roles (like "trady") in deployment scripts.
+5. **Syncing**: The `init_database.sql` script is executed on every deployment to ensure dev and prod databases are identical.
 
 ## System Architecture
 

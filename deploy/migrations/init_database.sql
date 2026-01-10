@@ -2,6 +2,9 @@
 -- Creates all tables if they don't exist, adds missing columns to existing tables
 -- Safe to run multiple times (idempotent)
 
+-- Ensure required extensions exist
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- ============================================
 -- TABLE: market_data
 -- ============================================
