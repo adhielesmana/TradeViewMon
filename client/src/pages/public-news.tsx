@@ -1,20 +1,23 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
-import { Link } from "wouter";
-import { TrendingUp, TrendingDown, Minus, Clock, ArrowRight, BarChart3, LogIn, Newspaper, ChevronRight, ChevronLeft, LayoutDashboard, X, AlertTriangle, Target, FileText, Share2, Link2, Check } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { TrendingUp, TrendingDown, Minus, Clock, ArrowRight, BarChart3, LogIn, Newspaper, ChevronRight, ChevronLeft, LayoutDashboard, X, AlertTriangle, Target, FileText, Share2, Link2, Check, User, Mail, Lock, UserPlus } from "lucide-react";
 import { SiFacebook, SiX, SiWhatsapp, SiTelegram } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/lib/auth-context";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogHeader } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface MarketPrediction {
   headline?: string;
@@ -342,11 +345,97 @@ interface PaginatedNewsHistory {
 }
 
 export default function PublicNewsPage() {
-  const { user } = useAuth();
+  const { user, refetch: refetchUser } = useAuth();
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const isLoggedIn = !!user;
   const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null);
   const [pastArticlesPage, setPastArticlesPage] = useState(1);
   const ARTICLES_PER_PAGE = 6;
+  
+  // Login/Signup form state
+  const [showSignupModal, setShowSignupModal] = useState(false);
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [signupUsername, setSignupUsername] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
+  
+  // Login mutation
+  const loginMutation = useMutation({
+    mutationFn: async ({ username, password }: { username: string; password: string }) => {
+      const response = await apiRequest("POST", "/api/auth/login", { username, password });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Login successful", description: "Welcome back!" });
+      refetchUser();
+      setLoginUsername("");
+      setLoginPassword("");
+      setLocation("/dashboard");
+    },
+    onError: (error: any) => {
+      const message = error.message?.includes("pending") 
+        ? "Your account is pending admin approval" 
+        : error.message?.includes("rejected")
+          ? "Your registration was rejected"
+          : "Invalid username or password";
+      toast({ title: "Login failed", description: message, variant: "destructive" });
+    },
+  });
+  
+  // Signup mutation
+  const signupMutation = useMutation({
+    mutationFn: async ({ username, email, password }: { username: string; email: string; password: string }) => {
+      const response = await apiRequest("POST", "/api/auth/signup", { username, email, password });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Registration submitted",
+        description: data.message || "Your account is pending admin approval. You'll be notified when approved.",
+      });
+      setShowSignupModal(false);
+      setSignupUsername("");
+      setSignupEmail("");
+      setSignupPassword("");
+      setSignupConfirmPassword("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Registration failed",
+        description: error.message || "Could not create account",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginUsername.trim() || !loginPassword.trim()) {
+      toast({ title: "Error", description: "Please enter username and password", variant: "destructive" });
+      return;
+    }
+    loginMutation.mutate({ username: loginUsername, password: loginPassword });
+  };
+  
+  const handleSignup = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!signupUsername.trim() || !signupPassword.trim()) {
+      toast({ title: "Error", description: "Please fill in all required fields", variant: "destructive" });
+      return;
+    }
+    if (signupPassword.length < 6) {
+      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+    if (signupPassword !== signupConfirmPassword) {
+      toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
+      return;
+    }
+    signupMutation.mutate({ username: signupUsername, email: signupEmail, password: signupPassword });
+  };
 
   const { data: currentAnalysis, isLoading: isLoadingAnalysis } = useQuery<{ marketPrediction: MarketPrediction }>({
     queryKey: ["/api/public/news/current"],
@@ -653,8 +742,80 @@ export default function PublicNewsPage() {
             )}
           </div>
 
-          {/* Right Sidebar - Trends */}
+          {/* Right Sidebar - Login + Trends */}
           <div className="space-y-4">
+            {/* Login Card - only show if not logged in */}
+            {!isLoggedIn && (
+              <Card className="border-primary/20" data-testid="card-login">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <LogIn className="h-4 w-4" />
+                    Member Login
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Access full trading dashboard
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <form onSubmit={handleLogin} className="space-y-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="login-username" className="text-xs">Username</Label>
+                      <div className="relative">
+                        <User className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="login-username"
+                          type="text"
+                          placeholder="Enter username"
+                          value={loginUsername}
+                          onChange={(e) => setLoginUsername(e.target.value)}
+                          className="pl-8 h-9 text-sm"
+                          data-testid="input-login-username"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="login-password" className="text-xs">Password</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="login-password"
+                          type="password"
+                          placeholder="Enter password"
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          className="pl-8 h-9 text-sm"
+                          data-testid="input-login-password"
+                        />
+                      </div>
+                    </div>
+                    <Button 
+                      type="submit" 
+                      className="w-full"
+                      disabled={loginMutation.isPending}
+                      data-testid="button-login-submit"
+                    >
+                      {loginMutation.isPending ? "Signing in..." : "Sign In"}
+                    </Button>
+                  </form>
+                  <Separator className="my-3" />
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground mb-2">Don't have an account?</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full"
+                      onClick={() => setShowSignupModal(true)}
+                      data-testid="button-open-signup"
+                    >
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Create Account
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Trends Section */}
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold">Trends</h2>
               <Link href="/login">
@@ -898,6 +1059,110 @@ export default function PublicNewsPage() {
           </p>
         </div>
       </footer>
+
+      {/* Signup Modal */}
+      <Dialog open={showSignupModal} onOpenChange={setShowSignupModal}>
+        <DialogContent className="max-w-md" data-testid="modal-signup">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              Create Account
+            </DialogTitle>
+            <DialogDescription>
+              Register for a new account. Your registration will be reviewed by an administrator.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSignup} className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label htmlFor="signup-username">Username *</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="signup-username"
+                  type="text"
+                  placeholder="Choose a username"
+                  value={signupUsername}
+                  onChange={(e) => setSignupUsername(e.target.value)}
+                  className="pl-9"
+                  required
+                  data-testid="input-signup-username"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="signup-email">Email (optional)</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="signup-email"
+                  type="email"
+                  placeholder="your@email.com"
+                  value={signupEmail}
+                  onChange={(e) => setSignupEmail(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-signup-email"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="signup-password">Password *</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="signup-password"
+                  type="password"
+                  placeholder="Minimum 6 characters"
+                  value={signupPassword}
+                  onChange={(e) => setSignupPassword(e.target.value)}
+                  className="pl-9"
+                  required
+                  minLength={6}
+                  data-testid="input-signup-password"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="signup-confirm-password">Confirm Password *</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="signup-confirm-password"
+                  type="password"
+                  placeholder="Repeat your password"
+                  value={signupConfirmPassword}
+                  onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                  className="pl-9"
+                  required
+                  data-testid="input-signup-confirm-password"
+                />
+              </div>
+            </div>
+            <div className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+              <AlertTriangle className="inline-block h-4 w-4 mr-2 text-yellow-500" />
+              New accounts require admin approval before you can log in.
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => setShowSignupModal(false)}
+                data-testid="button-cancel-signup"
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                className="flex-1"
+                disabled={signupMutation.isPending}
+                data-testid="button-submit-signup"
+              >
+                {signupMutation.isPending ? "Creating..." : "Create Account"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Article Modal */}
       <Dialog open={selectedArticleId !== null} onOpenChange={(open) => !open && handleCloseModal()}>
