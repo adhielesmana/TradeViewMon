@@ -179,6 +179,15 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Invalid username or password" });
       }
 
+      // Check approval status
+      const fullUser = await storage.getUserById(user.id);
+      if (fullUser?.approvalStatus === "pending") {
+        return res.status(403).json({ error: "Your account is pending admin approval. Please wait for approval." });
+      }
+      if (fullUser?.approvalStatus === "rejected") {
+        return res.status(403).json({ error: "Your account registration was rejected. Please contact support." });
+      }
+
       req.session.userId = user.id;
       req.session.user = user;
 
@@ -455,6 +464,107 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Registration error:", error);
       res.status(500).json({ error: "Registration failed" });
+    }
+  });
+
+  // Public signup (no invite token required, pending admin approval)
+  app.post("/api/auth/signup", async (req, res) => {
+    try {
+      const { username, email, password } = req.body;
+
+      if (!username || !password) {
+        return res.status(400).json({ error: "Username and password are required" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+
+      // Check if username already exists
+      const existingUser = await findUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ error: "Username already taken" });
+      }
+
+      // Check if email already exists (if provided)
+      if (email) {
+        const existingEmail = await storage.getUserByEmail(email);
+        if (existingEmail) {
+          return res.status(400).json({ error: "Email already registered" });
+        }
+      }
+
+      // Create the user with pending approval status
+      const user = await createUser(username, password, "user", email);
+
+      res.json({
+        message: "Registration submitted! Your account is pending admin approval.",
+        pendingApproval: true,
+        user: {
+          id: user.id,
+          username: user.username,
+        },
+      });
+    } catch (error) {
+      console.error("Signup error:", error);
+      res.status(500).json({ error: "Registration failed" });
+    }
+  });
+
+  // Admin: Get pending approval users
+  app.get("/api/users/pending", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const users = await storage.getPendingApprovalUsers();
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching pending users:", error);
+      res.status(500).json({ error: "Failed to fetch pending users" });
+    }
+  });
+
+  // Admin: Approve user
+  app.post("/api/users/:id/approve", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const adminId = req.session.userId;
+
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      if (user.approvalStatus === "approved") {
+        return res.status(400).json({ error: "User is already approved" });
+      }
+
+      await storage.updateUserApproval(userId, "approved", adminId);
+      res.json({ message: "User approved successfully" });
+    } catch (error) {
+      console.error("Error approving user:", error);
+      res.status(500).json({ error: "Failed to approve user" });
+    }
+  });
+
+  // Admin: Reject user
+  app.post("/api/users/:id/reject", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const adminId = req.session.userId;
+
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      if (user.approvalStatus === "rejected") {
+        return res.status(400).json({ error: "User is already rejected" });
+      }
+
+      await storage.updateUserApproval(userId, "rejected", adminId);
+      res.json({ message: "User rejected" });
+    } catch (error) {
+      console.error("Error rejecting user:", error);
+      res.status(500).json({ error: "Failed to reject user" });
     }
   });
 

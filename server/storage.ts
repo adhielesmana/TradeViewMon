@@ -59,9 +59,12 @@ export interface IStorage {
   // User Management
   getAllUsers(): Promise<SafeUser[]>;
   getUserById(id: string): Promise<SafeUser | null>;
+  getUserByEmail(email: string): Promise<SafeUser | null>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: UpdateUser): Promise<SafeUser | null>;
   deleteUser(id: string): Promise<boolean>;
+  getPendingApprovalUsers(): Promise<SafeUser[]>;
+  updateUserApproval(id: string, status: string, approvedBy?: string): Promise<SafeUser | null>;
   
   // User Invites
   createInvite(email: string, role: string, invitedById: string): Promise<UserInvite>;
@@ -418,6 +421,9 @@ export class DatabaseStorage implements IStorage {
       displayName: users.displayName,
       role: users.role,
       isActive: users.isActive,
+      approvalStatus: users.approvalStatus,
+      approvedAt: users.approvedAt,
+      approvedBy: users.approvedBy,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       lastLogin: users.lastLogin,
@@ -433,11 +439,64 @@ export class DatabaseStorage implements IStorage {
       displayName: users.displayName,
       role: users.role,
       isActive: users.isActive,
+      approvalStatus: users.approvalStatus,
+      approvedAt: users.approvedAt,
+      approvedBy: users.approvedBy,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       lastLogin: users.lastLogin,
     }).from(users).where(eq(users.id, id)).limit(1);
     return user || null;
+  }
+
+  async getUserByEmail(email: string): Promise<SafeUser | null> {
+    const [user] = await db.select({
+      id: users.id,
+      username: users.username,
+      email: users.email,
+      displayName: users.displayName,
+      role: users.role,
+      isActive: users.isActive,
+      approvalStatus: users.approvalStatus,
+      approvedAt: users.approvedAt,
+      approvedBy: users.approvedBy,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+      lastLogin: users.lastLogin,
+    }).from(users).where(eq(users.email, email)).limit(1);
+    return user || null;
+  }
+
+  async getPendingApprovalUsers(): Promise<SafeUser[]> {
+    return await db.select({
+      id: users.id,
+      username: users.username,
+      email: users.email,
+      displayName: users.displayName,
+      role: users.role,
+      isActive: users.isActive,
+      approvalStatus: users.approvalStatus,
+      approvedAt: users.approvedAt,
+      approvedBy: users.approvedBy,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+      lastLogin: users.lastLogin,
+    }).from(users).where(eq(users.approvalStatus, "pending")).orderBy(users.createdAt);
+  }
+
+  async updateUserApproval(id: string, status: string, approvedBy?: string): Promise<SafeUser | null> {
+    const [user] = await db.update(users)
+      .set({
+        approvalStatus: status,
+        approvedAt: new Date(),
+        approvedBy: approvedBy || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning();
+    if (!user) return null;
+    const { password: _, ...safeUser } = user;
+    return safeUser;
   }
 
   async createUser(user: InsertUser): Promise<User> {

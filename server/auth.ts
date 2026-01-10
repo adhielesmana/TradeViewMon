@@ -16,13 +16,19 @@ export async function verifyPassword(password: string, hashedPassword: string): 
   return bcrypt.compare(password, hashedPassword);
 }
 
-export async function createUser(username: string, password: string, role: string = "user"): Promise<SafeUser> {
+export async function createUser(username: string, password: string, role: string = "user", email?: string): Promise<SafeUser> {
   const hashedPassword = await hashPassword(password);
+  
+  // Superadmins and admins are auto-approved, regular users need approval
+  const approvalStatus = (role === "superadmin" || role === "admin") ? "approved" : "pending";
   
   const [newUser] = await db.insert(users).values({
     username,
     password: hashedPassword,
     role,
+    email: email || null,
+    approvalStatus,
+    approvedAt: approvalStatus === "approved" ? new Date() : null,
   }).returning();
 
   const { password: _, ...safeUser } = newUser;
