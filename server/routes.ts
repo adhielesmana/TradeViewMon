@@ -1936,6 +1936,211 @@ export async function registerRoutes(
     }
   });
 
+  // AI auto-detect symbol info (for user-added symbols)
+  app.post("/api/market/symbols/detect", requireAuth, async (req, res) => {
+    try {
+      const { symbolName } = req.body;
+      
+      if (!symbolName || typeof symbolName !== "string") {
+        return res.status(400).json({ error: "Symbol name is required" });
+      }
+      
+      const cleanSymbol = symbolName.trim().toUpperCase();
+      
+      // Check if symbol already exists
+      const existingSymbols = await storage.getMonitoredSymbols();
+      if (existingSymbols.find(s => s.symbol.toUpperCase() === cleanSymbol)) {
+        return res.status(400).json({ error: "Symbol already exists in the system" });
+      }
+      
+      // Try to detect symbol info using AI
+      const OpenAI = (await import("openai")).default;
+      const { decrypt } = await import("./encryption");
+      
+      // Get OpenAI key (same priority as ai-trading-analyzer)
+      let apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey || apiKey === "not-configured") {
+        const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
+        if (encryptedKey) {
+          apiKey = decrypt(encryptedKey) || undefined;
+        }
+      }
+      if (!apiKey || apiKey === "not-configured") {
+        apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      }
+      
+      if (!apiKey || apiKey === "not-configured") {
+        // Fallback: return basic detection based on common patterns
+        const fallbackInfo = detectSymbolFallback(cleanSymbol);
+        return res.json({
+          symbol: cleanSymbol,
+          ...fallbackInfo,
+          aiDetected: false,
+          message: "AI not available, using pattern detection"
+        });
+      }
+      
+      // Use AI to detect symbol info
+      const useReplitProxy = apiKey === process.env.AI_INTEGRATIONS_OPENAI_API_KEY && process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+      const openai = new OpenAI({
+        apiKey,
+        baseURL: useReplitProxy ? process.env.AI_INTEGRATIONS_OPENAI_BASE_URL : undefined,
+      });
+      
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are a financial data expert. Given a stock/forex/crypto symbol, identify its details.
+Return a JSON object with these fields:
+- displayName: Full name of the asset (e.g., "Gold Spot", "Apple Inc.", "Bitcoin", "Bank Central Asia (IDX)")
+- category: One of "forex", "stocks", "crypto", "commodities", "indices"
+- currency: The trading currency code (e.g., "USD", "IDR", "EUR")
+- exchange: The primary exchange if applicable (e.g., "NYSE", "NASDAQ", "IDX", "FOREX")
+
+For Indonesian stocks (JSX/IDX), include "(IDX)" in displayName and set currency to "IDR".
+For forex pairs, use the quote currency (e.g., XAU/USD = "USD").
+For crypto, typically "USD".
+
+Return ONLY valid JSON, no markdown or explanation.`
+          },
+          {
+            role: "user",
+            content: `Identify this trading symbol: ${cleanSymbol}`
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 200,
+      });
+      
+      const content = response.choices[0]?.message?.content || "";
+      
+      try {
+        const detected = JSON.parse(content.replace(/```json\n?|\n?```/g, "").trim());
+        
+        res.json({
+          symbol: cleanSymbol,
+          displayName: detected.displayName || cleanSymbol,
+          category: detected.category || "stocks",
+          currency: detected.currency || "USD",
+          exchange: detected.exchange || null,
+          aiDetected: true,
+          message: "Symbol detected by AI"
+        });
+      } catch (parseError) {
+        // If AI response can't be parsed, use fallback
+        const fallbackInfo = detectSymbolFallback(cleanSymbol);
+        res.json({
+          symbol: cleanSymbol,
+          ...fallbackInfo,
+          aiDetected: false,
+          message: "AI response invalid, using pattern detection"
+        });
+      }
+    } catch (error) {
+      console.error("Error detecting symbol:", error);
+      // Fallback on any error
+      const cleanSymbol = (req.body.symbolName || "").trim().toUpperCase();
+      const fallbackInfo = detectSymbolFallback(cleanSymbol);
+      res.json({
+        symbol: cleanSymbol,
+        ...fallbackInfo,
+        aiDetected: false,
+        message: "Detection failed, using pattern detection"
+      });
+    }
+  });
+  
+  // Helper function for fallback symbol detection
+  function detectSymbolFallback(symbol: string): { displayName: string; category: string; currency: string } {
+    const upperSymbol = symbol.toUpperCase();
+    
+    // Common forex pairs
+    if (upperSymbol.startsWith("XAU") || upperSymbol === "GOLD") {
+      return { displayName: "Gold Spot", category: "commodities", currency: "USD" };
+    }
+    if (upperSymbol.startsWith("XAG") || upperSymbol === "SILVER") {
+      return { displayName: "Silver Spot", category: "commodities", currency: "USD" };
+    }
+    if (upperSymbol.includes("/") || ["EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD"].some(c => upperSymbol.includes(c))) {
+      return { displayName: `${symbol} Exchange Rate`, category: "forex", currency: "USD" };
+    }
+    
+    // Crypto patterns
+    if (["BTC", "ETH", "SOL", "ADA", "XRP", "DOT", "DOGE", "AVAX", "MATIC"].includes(upperSymbol) || 
+        upperSymbol.endsWith("USDT") || upperSymbol.endsWith("USD")) {
+      const base = upperSymbol.replace(/USDT?$/, "");
+      return { displayName: `${base} Cryptocurrency`, category: "crypto", currency: "USD" };
+    }
+    
+    // Indonesian stocks (.JK suffix or common Indonesian tickers)
+    if (upperSymbol.endsWith(".JK") || ["BBCA", "BBRI", "BMRI", "TLKM", "ASII", "UNVR", "GGRM", "ICBP", "KLBF", "BBNI"].includes(upperSymbol)) {
+      const name = upperSymbol.replace(".JK", "");
+      return { displayName: `${name} (IDX)`, category: "stocks", currency: "IDR" };
+    }
+    
+    // Default to stocks
+    return { displayName: symbol, category: "stocks", currency: "USD" };
+  }
+
+  // Add symbol (user-accessible - any logged in user can add)
+  app.post("/api/market/symbols", requireAuth, async (req, res) => {
+    try {
+      const { symbol, displayName, category, currency } = req.body;
+      
+      if (!symbol || !displayName) {
+        return res.status(400).json({ error: "Symbol and display name are required" });
+      }
+      
+      const trimmedSymbol = symbol.trim().toUpperCase();
+      const trimmedDisplayName = displayName.trim();
+      const trimmedCategory = (category || "stocks").trim().toLowerCase();
+      const trimmedCurrency = (currency || "USD").trim().toUpperCase();
+      
+      // Check for duplicates
+      const existingSymbols = await storage.getMonitoredSymbols();
+      if (existingSymbols.find(s => s.symbol.toUpperCase() === trimmedSymbol)) {
+        return res.status(400).json({ error: "Symbol already exists" });
+      }
+      
+      // Auto-detect Indonesian stocks
+      const isIndonesianStock = trimmedDisplayName.includes("(IDX)") || trimmedCurrency === "IDR";
+      
+      // Get max priority for ordering
+      const maxPriority = existingSymbols.length > 0 
+        ? Math.max(...existingSymbols.map(s => s.priority)) 
+        : 0;
+      
+      const newSymbol = await storage.createMonitoredSymbol({
+        symbol: trimmedSymbol,
+        displayName: trimmedDisplayName,
+        category: isIndonesianStock ? "stocks" : trimmedCategory,
+        currency: isIndonesianStock ? "IDR" : trimmedCurrency,
+        isActive: true,
+        priority: maxPriority + 1,
+      });
+      
+      // Register with market data service if Indonesian stock
+      if (isIndonesianStock) {
+        const { marketDataService } = await import("./market-data-service");
+        marketDataService.registerIndonesianStock(trimmedSymbol);
+      }
+      
+      res.json({ 
+        success: true, 
+        symbol: newSymbol,
+        message: `Symbol ${trimmedSymbol} added successfully`
+      });
+    } catch (error: any) {
+      console.error("Error adding symbol:", error);
+      if (error.message?.includes("unique")) {
+        return res.status(400).json({ error: "Symbol already exists" });
+      }
+      res.status(500).json({ error: "Failed to add symbol" });
+    }
+  });
+
   // ==================== LOGO SETTINGS ====================
   
   // Get logo settings
