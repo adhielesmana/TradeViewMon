@@ -116,7 +116,7 @@ function extractKeywords(article: NewsSnapshot | null): string {
   
   // Add some common trading keywords
   const baseKeywords = ["trading", "market", "analysis", "investment"];
-  const allKeywords = [...new Set([...topKeywords, ...baseKeywords])];
+  const allKeywords = Array.from(new Set([...topKeywords, ...baseKeywords]));
   
   return allKeywords.slice(0, 20).join(", ");
 }
@@ -369,12 +369,18 @@ export default function PublicNewsPage() {
       return response.json();
     },
     onSuccess: (data) => {
-      localStorage.setItem("user", JSON.stringify(data.user));
+      // Set localStorage first and verify it's saved
+      const userData = JSON.stringify(data.user);
+      localStorage.setItem("user", userData);
+      
       toast({ title: "Login successful", description: "Welcome back!" });
-      refreshAuth();
       setLoginUsername("");
       setLoginPassword("");
-      setLocation("/dashboard");
+      
+      // Use setTimeout to ensure localStorage write completes before navigation
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 100);
     },
     onError: (error: any) => {
       const message = error.message?.includes("pending") 
