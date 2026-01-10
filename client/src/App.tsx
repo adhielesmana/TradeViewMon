@@ -107,14 +107,14 @@ function AuthenticatedApp() {
     if (isAuthenticated) {
       return <Redirect to="/dashboard" />;
     }
-    return <LoginPage />;
+    return <Redirect to="/" />;
   }
 
   if (location.startsWith("/register")) {
     if (isAuthenticated) {
       return <Redirect to="/dashboard" />;
     }
-    return <RegisterPage />;
+    return <Redirect to="/" />;
   }
 
   return (
