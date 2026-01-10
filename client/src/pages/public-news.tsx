@@ -135,17 +135,19 @@ function PriceChange({ change, changePercent }: { change?: number; changePercent
 }
 
 // Inline share button for article cards (compact popover version)
-function InlineShareButton({ headline, summary, articleId }: { headline: string; summary: string; articleId: number }) {
+function InlineShareButton({ headline, summary, articleId, imageUrl }: { headline: string; summary: string; articleId: number; imageUrl?: string }) {
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(false);
   
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const shareUrl = `${baseUrl}/?article=${articleId}`;
   const shareTitle = headline || "Market Analysis";
-  const shareText = `${shareTitle}: ${summary.slice(0, 100)}...`;
+  // Enhanced share text with more context for social engagement
+  const shareText = `${shareTitle}\n\n${summary.slice(0, 150)}...\n\nRead more on Trady:`;
   
   const encodedUrl = encodeURIComponent(shareUrl);
   const encodedText = encodeURIComponent(shareText);
+  const encodedImage = imageUrl ? encodeURIComponent(imageUrl) : "";
   
   const handleCopyLink = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -222,18 +224,20 @@ function InlineShareButton({ headline, summary, articleId }: { headline: string;
 }
 
 // Share buttons component for social media sharing
-function ShareButtons({ headline, summary, articleId }: { headline: string; summary: string; articleId: number }) {
+function ShareButtons({ headline, summary, articleId, imageUrl }: { headline: string; summary: string; articleId: number; imageUrl?: string }) {
   const [copied, setCopied] = useState(false);
   
   // Build share URL - use window location with article hash for deep linking
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const shareUrl = `${baseUrl}/?article=${articleId}`;
   const shareTitle = headline || "Market Analysis";
-  const shareText = `${shareTitle}: ${summary.slice(0, 100)}...`;
+  // Enhanced share text with article summary for better engagement
+  const shareText = `${shareTitle}\n\n${summary.slice(0, 150)}...\n\nGet market insights on Trady:`;
   
   const encodedUrl = encodeURIComponent(shareUrl);
   const encodedTitle = encodeURIComponent(shareTitle);
   const encodedText = encodeURIComponent(shareText);
+  const encodedImage = imageUrl ? encodeURIComponent(imageUrl) : "";
   
   const handleCopyLink = async () => {
     try {
@@ -390,46 +394,78 @@ export default function PublicNewsPage() {
 
   // Dynamic SEO meta tags based on article content
   useEffect(() => {
-    // Update page title
-    const headline = latestArticle?.headline || selectedArticleData?.snapshot?.headline;
+    const activeArticle = selectedArticleData?.snapshot || latestArticle;
+    const headline = activeArticle?.headline;
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+    
+    // Update page title - SEO optimized with primary keyword
     if (headline) {
-      document.title = `${headline} - Trady Global Market Trading News`;
+      document.title = `${headline} | Trady - Global Market Trading News & Analysis`;
     } else {
-      document.title = "Trady - Global Market Trading News";
+      document.title = "Trady - Global Market Trading News | AI-Powered Trading Insights & Analysis";
     }
 
-    // Update meta keywords
-    const activeArticle = selectedArticleData?.snapshot || latestArticle;
+    // Update meta keywords - extracted from article content
     const keywords = extractKeywords(activeArticle);
     
-    let metaKeywords = document.querySelector('meta[name="keywords"]');
-    if (!metaKeywords) {
-      metaKeywords = document.createElement('meta');
-      metaKeywords.setAttribute('name', 'keywords');
-      document.head.appendChild(metaKeywords);
-    }
-    metaKeywords.setAttribute('content', keywords);
+    const updateOrCreateMeta = (selector: string, attrName: string, attrValue: string, content: string) => {
+      let meta = document.querySelector(selector);
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute(attrName, attrValue);
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute('content', content);
+    };
+    
+    updateOrCreateMeta('meta[name="keywords"]', 'name', 'keywords', keywords);
 
-    // Update meta description
+    // SEO-friendly meta description - summarize key trading insights
+    const sentimentText = activeArticle?.overallSentiment === "BULLISH" ? "bullish outlook" : 
+                          activeArticle?.overallSentiment === "BEARISH" ? "bearish outlook" : "neutral stance";
     const description = activeArticle?.summary 
-      ? `${activeArticle.summary.slice(0, 155)}...`
-      : "Trady - Global Market Trading News with AI-powered analysis and real-time trading insights";
+      ? `${activeArticle.summary.slice(0, 140)} Market shows ${sentimentText}. Get real-time trading insights.`
+      : "Get AI-powered market analysis, real-time trading news, and expert insights. Trady delivers global market updates for forex, stocks, and cryptocurrency traders.";
     
-    let metaDesc = document.querySelector('meta[name="description"]');
-    if (metaDesc) {
-      metaDesc.setAttribute('content', description);
-    }
+    updateOrCreateMeta('meta[name="description"]', 'name', 'description', description);
+    
+    // Additional SEO meta tags
+    updateOrCreateMeta('meta[name="robots"]', 'name', 'robots', 'index, follow, max-image-preview:large');
+    updateOrCreateMeta('meta[name="author"]', 'name', 'author', 'Trady Market Analysis');
+    updateOrCreateMeta('meta[name="publisher"]', 'name', 'publisher', 'Trady');
 
-    // Update OG tags
-    let ogTitle = document.querySelector('meta[property="og:title"]');
-    if (ogTitle) {
-      ogTitle.setAttribute('content', headline || "Trady - Global Market Trading News");
-    }
+    // Open Graph tags for social sharing
+    const ogTitle = headline || "Trady - Global Market Trading News";
+    updateOrCreateMeta('meta[property="og:title"]', 'property', 'og:title', ogTitle);
+    updateOrCreateMeta('meta[property="og:description"]', 'property', 'og:description', description);
+    updateOrCreateMeta('meta[property="og:type"]', 'property', 'og:type', 'article');
+    updateOrCreateMeta('meta[property="og:site_name"]', 'property', 'og:site_name', 'Trady');
     
-    let ogDesc = document.querySelector('meta[property="og:description"]');
-    if (ogDesc) {
-      ogDesc.setAttribute('content', description);
+    // Dynamic OG URL for article deep linking
+    const articleUrl = activeArticle?.id ? `${baseUrl}/?article=${activeArticle.id}` : baseUrl;
+    updateOrCreateMeta('meta[property="og:url"]', 'property', 'og:url', articleUrl);
+    
+    // OG Image - use article image or generate one
+    const articleImage = activeArticle?.imageUrl || 
+      (activeArticle ? generateArticleImage(activeArticle) : `${baseUrl}/trady-logo.jpg`);
+    updateOrCreateMeta('meta[property="og:image"]', 'property', 'og:image', articleImage);
+    updateOrCreateMeta('meta[property="og:image:width"]', 'property', 'og:image:width', '1200');
+    updateOrCreateMeta('meta[property="og:image:height"]', 'property', 'og:image:height', '630');
+    updateOrCreateMeta('meta[property="og:image:alt"]', 'property', 'og:image:alt', ogTitle);
+    
+    // Twitter Card tags for better Twitter sharing
+    updateOrCreateMeta('meta[name="twitter:card"]', 'name', 'twitter:card', 'summary_large_image');
+    updateOrCreateMeta('meta[name="twitter:title"]', 'name', 'twitter:title', ogTitle);
+    updateOrCreateMeta('meta[name="twitter:description"]', 'name', 'twitter:description', description);
+    updateOrCreateMeta('meta[name="twitter:image"]', 'name', 'twitter:image', articleImage);
+    
+    // Article-specific meta tags
+    if (activeArticle?.analyzedAt) {
+      updateOrCreateMeta('meta[property="article:published_time"]', 'property', 'article:published_time', activeArticle.analyzedAt);
     }
+    updateOrCreateMeta('meta[property="article:section"]', 'property', 'article:section', 'Market Analysis');
+    updateOrCreateMeta('meta[property="article:tag"]', 'property', 'article:tag', 'trading, market analysis, forex, stocks');
+    
   }, [latestArticle, selectedArticleData?.snapshot]);
 
   // Safely parse JSON fields for the selected article
@@ -774,6 +810,7 @@ export default function PublicNewsPage() {
                           headline={snapshot.headline || `${snapshot.overallSentiment} Market Outlook`}
                           summary={snapshot.summary}
                           articleId={snapshot.id}
+                          imageUrl={snapshot.imageUrl || generateArticleImage(snapshot)}
                         />
                       </div>
                       <p className="text-sm text-muted-foreground line-clamp-2 text-justify">
@@ -913,6 +950,7 @@ export default function PublicNewsPage() {
                     headline={selectedArticle.headline || `${selectedArticle.overallSentiment} Market Analysis`}
                     summary={selectedArticle.summary}
                     articleId={selectedArticle.id}
+                    imageUrl={selectedArticle.imageUrl || generateArticleImage(selectedArticle)}
                   />
                 </div>
 
