@@ -59,9 +59,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiRequest("POST", "/api/auth/logout");
     },
     onSuccess: () => {
-      setUser(null);
+      // Clear localStorage first
       localStorage.removeItem("user");
       queryClient.clear();
+      // Redirect to homepage immediately (page reload will reset React state)
+      window.location.href = "/";
     },
   });
 
