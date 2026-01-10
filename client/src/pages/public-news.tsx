@@ -602,7 +602,6 @@ export default function PublicNewsPage() {
             </div>
             
             <div className="flex items-center gap-2">
-              <ThemeToggle />
               {isLoggedIn ? (
                 <Link href="/dashboard">
                   <Button variant="default" size="sm" data-testid="button-dashboard">

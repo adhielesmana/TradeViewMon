@@ -4,7 +4,6 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { StatusIndicator } from "@/components/status-indicator";
@@ -135,7 +134,6 @@ function AuthenticatedApp() {
               </div>
               <div className="flex items-center gap-4">
                 <UserMenu />
-                <ThemeToggle />
               </div>
             </header>
             <main className="flex-1 overflow-auto bg-background">
