@@ -53,7 +53,8 @@ import {
   Copy,
   Check,
   X,
-  Edit
+  Edit,
+  CheckCircle
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import type { SafeUser, UserInvite } from "@shared/schema";
@@ -455,6 +456,26 @@ export default function UserManagementPage() {
     },
   });
 
+  const approveUser = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("POST", `/api/users/${id}/approve`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "User Approved",
+        description: "The user has been approved and can now log in.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const isSuperadmin = currentUser?.role === "superadmin";
 
   return (
@@ -471,7 +492,7 @@ export default function UserManagementPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -482,6 +503,21 @@ export default function UserManagementPage() {
                 <p className="text-sm text-muted-foreground">Total Users</p>
                 <p className="text-2xl font-semibold" data-testid="text-total-users">
                   {users?.length || 0}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-yellow-500/10 p-2">
+                <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Pending Approval</p>
+                <p className="text-2xl font-semibold" data-testid="text-pending-approval">
+                  {users?.filter(u => u.approvalStatus === "pending").length || 0}
                 </p>
               </div>
             </div>
@@ -569,7 +605,12 @@ export default function UserManagementPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {user.isActive ? (
+                      {user.approvalStatus === "pending" ? (
+                        <Badge variant="outline" className="text-yellow-600 border-yellow-500/50 dark:text-yellow-400">
+                          <Clock className="mr-1 h-3 w-3" />
+                          Pending
+                        </Badge>
+                      ) : user.isActive ? (
                         <Badge variant="outline" className="text-profit border-profit/50">
                           <Check className="mr-1 h-3 w-3" />
                           Active
@@ -589,6 +630,18 @@ export default function UserManagementPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-2">
+                        {user.approvalStatus === "pending" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => approveUser.mutate(user.id)}
+                            disabled={approveUser.isPending}
+                            title="Approve user"
+                            data-testid={`button-approve-user-${user.id}`}
+                          >
+                            <CheckCircle className="h-4 w-4 text-profit" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
