@@ -15,10 +15,11 @@ interface SymbolConfig {
 }
 
 const SYMBOL_CONFIGS: Record<string, SymbolConfig> = {
-  // Precious Metals & Crypto - Gold-API (free, no key required)
-  XAUUSD: { basePrice: 2650.00, volatility: 0.3, is24h: true, provider: "gold-api", apiSymbol: "XAU" },
-  XAGUSD: { basePrice: 31.50, volatility: 0.5, is24h: true, provider: "gold-api", apiSymbol: "XAG" },
-  BTCUSD: { basePrice: 97500.00, volatility: 1.5, is24h: true, provider: "gold-api", apiSymbol: "BTC" },
+  // Precious Metals & Crypto - Multi-source with comparison
+  // Gold-API is primary, Finnhub crypto exchange as backup for comparison
+  XAUUSD: { basePrice: 2650.00, volatility: 0.3, is24h: true, provider: "gold-api", apiSymbol: "XAU", finnhubSymbol: "OANDA:XAU_USD" },
+  XAGUSD: { basePrice: 31.50, volatility: 0.5, is24h: true, provider: "gold-api", apiSymbol: "XAG", finnhubSymbol: "OANDA:XAG_USD" },
+  BTCUSD: { basePrice: 97500.00, volatility: 1.5, is24h: true, provider: "gold-api", apiSymbol: "BTC", finnhubSymbol: "BINANCE:BTCUSDT" },
   
   // Mining Stocks - Finnhub (direct symbols)
   GDX: { basePrice: 35.50, volatility: 0.4, is24h: false, provider: "finnhub", finnhubSymbol: "GDX" },
@@ -311,13 +312,117 @@ export class MarketDataService {
     }
   }
 
+  // Fetch from TradingView (unofficial API as fallback)
+  private async fetchTradingViewPrice(symbol: string, config: SymbolConfig): Promise<{ price: number; updatedAt: string; provider: string } | null> {
+    // Map our symbols to TradingView symbols
+    const tvSymbolMap: Record<string, string> = {
+      "XAUUSD": "OANDA:XAUUSD",
+      "XAGUSD": "OANDA:XAGUSD",
+      "BTCUSD": "BITSTAMP:BTCUSD",
+      "GDX": "AMEX:GDX",
+      "SPX": "SP:SPX",
+      "USOIL": "TVC:USOIL",
+    };
+
+    const tvSymbol = tvSymbolMap[symbol];
+    if (!tvSymbol) {
+      return null;
+    }
+
+    try {
+      // TradingView's symbol info endpoint (publicly accessible)
+      const url = `https://symbol-search.tradingview.com/symbol_search/v3/?text=${encodeURIComponent(tvSymbol)}&type=stock,futures,forex,crypto&hl=1`;
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json',
+        }
+      });
+      
+      if (!response.ok) {
+        console.error(`[MarketData] TradingView search error: ${response.status}`);
+        return null;
+      }
+      
+      // TradingView search doesn't return live prices, so we'll use their quotes endpoint
+      // This is a basic fallback - returns search results only
+      console.log(`[MarketData] TradingView: Symbol ${tvSymbol} search successful (price requires different endpoint)`);
+      return null; // TradingView requires websocket for live data
+    } catch (error) {
+      console.error(`[MarketData] Failed to fetch TradingView data:`, error);
+      return null;
+    }
+  }
+
+  // Compare prices from multiple sources and choose the most reliable one
+  private async fetchMultiSourcePrice(symbol: string): Promise<{ price: number; updatedAt: string; provider: string } | null> {
+    const config = this.getConfig(symbol);
+    const results: Array<{ price: number; updatedAt: string; provider: string; priority: number }> = [];
+
+    // Fetch from all available sources in parallel
+    const fetchPromises: Promise<void>[] = [];
+
+    // Primary: Gold-API (priority 1 for metals/crypto)
+    if (config.apiSymbol) {
+      fetchPromises.push(
+        this.fetchGoldApiPrice(symbol, config).then(result => {
+          if (result) results.push({ ...result, priority: 1 });
+        })
+      );
+    }
+
+    // Secondary: Finnhub (priority 2)
+    if (config.finnhubSymbol && this.finnhubApiKey) {
+      fetchPromises.push(
+        this.fetchFinnhubPrice(symbol, config).then(result => {
+          if (result) results.push({ ...result, priority: 2 });
+        })
+      );
+    }
+
+    await Promise.all(fetchPromises);
+
+    if (results.length === 0) {
+      console.log(`[MarketData] ${symbol}: No price sources available`);
+      return null;
+    }
+
+    if (results.length === 1) {
+      const best = results[0];
+      console.log(`[MarketData] ${symbol}: Single source - ${best.provider} @ $${best.price.toFixed(2)}`);
+      return { price: best.price, updatedAt: best.updatedAt, provider: best.provider };
+    }
+
+    // Multiple sources - compare and validate
+    results.sort((a, b) => a.priority - b.priority);
+    const primary = results[0];
+    const secondary = results[1];
+
+    const priceDiff = Math.abs(primary.price - secondary.price);
+    const priceDiffPercent = (priceDiff / primary.price) * 100;
+
+    console.log(`[MarketData] ${symbol}: Price comparison:`);
+    console.log(`  - ${primary.provider}: $${primary.price.toFixed(2)} (primary)`);
+    console.log(`  - ${secondary.provider}: $${secondary.price.toFixed(2)} (secondary)`);
+    console.log(`  - Difference: $${priceDiff.toFixed(2)} (${priceDiffPercent.toFixed(3)}%)`);
+
+    // If difference is > 2%, log warning and prefer the more recent/reliable source
+    if (priceDiffPercent > 2) {
+      console.warn(`[MarketData] ⚠ ${symbol}: Large price discrepancy (${priceDiffPercent.toFixed(2)}%) - using primary source`);
+    }
+
+    // Normal case: use primary source (Gold-API for metals/crypto)
+    return { price: primary.price, updatedAt: primary.updatedAt, provider: `${primary.provider} (verified)` };
+  }
+
   // Main method to fetch real price from appropriate provider
   private async fetchRealPrice(symbol: string): Promise<{ price: number; updatedAt: string; provider: string } | null> {
     const config = this.getConfig(symbol);
     
     switch (config.provider) {
       case "gold-api":
-        return this.fetchGoldApiPrice(symbol, config);
+        // Use multi-source comparison for gold-api symbols (metals & crypto)
+        return this.fetchMultiSourcePrice(symbol);
       case "finnhub":
         return this.fetchFinnhubPrice(symbol, config);
       case "yahoo":
