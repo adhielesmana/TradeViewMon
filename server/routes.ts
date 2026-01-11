@@ -1059,10 +1059,16 @@ export async function registerRoutes(
       );
 
       // Check API configurations
+      let openaiConfigured = !!process.env.OPENAI_API_KEY;
+      if (!openaiConfigured) {
+        const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
+        openaiConfigured = !!encryptedKey;
+      }
+      
       const apiStatus = {
         goldApi: { configured: true, description: "Gold-API (free, no key required)" },
         finnhub: { configured: !!process.env.FINNHUB_API_KEY, description: "Real-time stock data" },
-        openai: { configured: !!(process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY), description: "AI analysis" },
+        openai: { configured: openaiConfigured, description: "AI analysis" },
         pexels: { configured: !!process.env.PEXELS_API_KEY, description: "Stock images for articles" },
       };
 
@@ -1546,23 +1552,41 @@ export async function registerRoutes(
       const finnhubKeyStatus = marketDataService.getFinnhubKeyStatus();
       
       // Get OpenAI API key status - database takes priority, then environment fallback
-      // Priority: database (Settings page) > AI_INTEGRATIONS_OPENAI_API_KEY (Replit) > OPENAI_API_KEY (env override)
-      const replitOpenaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      // Priority: OPENAI_API_KEY (env) > database (Settings page)
+      const envOpenaiKey = process.env.OPENAI_API_KEY;
       let openaiKeyStatus;
       
-      // Check database first (primary source via Settings page)
-      const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
-      if (encryptedKey) {
-        try {
-          const decryptedKey = decrypt(encryptedKey);
-          openaiKeyStatus = {
-            isConfigured: true,
-            source: "database",
-            maskedValue: maskApiKey(decryptedKey),
-            isEditable: true
-          };
-        } catch (e) {
-          console.error("Failed to decrypt OpenAI key:", e);
+      // Check environment variable first
+      if (envOpenaiKey && envOpenaiKey !== "not-configured") {
+        openaiKeyStatus = {
+          isConfigured: true,
+          source: "environment",
+          maskedValue: maskApiKey(envOpenaiKey),
+          isEditable: true
+        };
+      } else {
+        // Check database (Settings page)
+        const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
+        if (encryptedKey) {
+          try {
+            const decryptedKey = decrypt(encryptedKey);
+            openaiKeyStatus = {
+              isConfigured: true,
+              source: "database",
+              maskedValue: maskApiKey(decryptedKey),
+              isEditable: true
+            };
+          } catch (e) {
+            console.error("Failed to decrypt OpenAI key:", e);
+            openaiKeyStatus = {
+              isConfigured: false,
+              source: "not_set",
+              maskedValue: null,
+              isEditable: true
+            };
+          }
+        } else {
+          // No key configured anywhere
           openaiKeyStatus = {
             isConfigured: false,
             source: "not_set",
@@ -1570,22 +1594,6 @@ export async function registerRoutes(
             isEditable: true
           };
         }
-      } else if (replitOpenaiKey && replitOpenaiKey !== "not-configured") {
-        // Replit's managed OpenAI integration (fallback)
-        openaiKeyStatus = {
-          isConfigured: true,
-          source: "environment",
-          maskedValue: maskApiKey(replitOpenaiKey),
-          isEditable: true  // Can still override with database key
-        };
-      } else {
-        // No key configured anywhere
-        openaiKeyStatus = {
-          isConfigured: false,
-          source: "not_set",
-          maskedValue: null,
-          isEditable: true
-        };
       }
       
       // Get RSS feed URL
@@ -2167,9 +2175,6 @@ export async function registerRoutes(
           apiKey = decrypt(encryptedKey) || undefined;
         }
       }
-      if (!apiKey || apiKey === "not-configured") {
-        apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-      }
       
       if (!apiKey || apiKey === "not-configured") {
         // Fallback: return basic detection based on common patterns
@@ -2182,12 +2187,8 @@ export async function registerRoutes(
         });
       }
       
-      // Use AI to detect symbol info
-      const useReplitProxy = apiKey === process.env.AI_INTEGRATIONS_OPENAI_API_KEY && process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-      const openai = new OpenAI({
-        apiKey,
-        baseURL: useReplitProxy ? process.env.AI_INTEGRATIONS_OPENAI_BASE_URL : undefined,
-      });
+      // Use AI to detect symbol info (always use standard OpenAI API)
+      const openai = new OpenAI({ apiKey });
       
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",

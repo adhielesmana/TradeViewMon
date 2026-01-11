@@ -49,33 +49,20 @@ async function getOpenAIClient(): Promise<OpenAI | null> {
   // Priority 1: Direct OPENAI_API_KEY environment variable (best for production deployment)
   const envKey = process.env.OPENAI_API_KEY;
   if (envKey && envKey !== "not-configured") {
-    console.log("[NewsService] Using OPENAI_API_KEY environment variable (production mode)");
+    console.log("[NewsService] Using OPENAI_API_KEY environment variable");
     return new OpenAI({ apiKey: envKey });
   }
 
-  // Priority 2: Database stored encrypted key (Settings page) - uses standard OpenAI API
+  // Priority 2: Database stored encrypted key (Settings page)
   try {
     const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
     if (encryptedKey) {
       const decryptedKey = decrypt(encryptedKey);
-      console.log("[NewsService] Using database OpenAI key (user's own key from Settings)");
-      return new OpenAI({
-        apiKey: decryptedKey,
-        // Do NOT use Replit base URL for user's own key - use standard OpenAI API
-      });
+      console.log("[NewsService] Using OpenAI key from Settings page");
+      return new OpenAI({ apiKey: decryptedKey });
     }
   } catch (e) {
     console.error("[NewsService] Failed to decrypt OpenAI key from database:", e);
-  }
-
-  // Priority 3: Replit's managed OpenAI integration (development fallback only)
-  const replitKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  if (replitKey && replitKey !== "not-configured") {
-    console.log("[NewsService] Using Replit OpenAI integration (development fallback)");
-    return new OpenAI({
-      apiKey: replitKey,
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-    });
   }
 
   console.log("[NewsService] No OpenAI key configured - set OPENAI_API_KEY env var or configure in Settings");

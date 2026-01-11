@@ -10,7 +10,7 @@ let cachedApiKey: string | null = null;
 
 interface OpenAIKeyResult {
   key: string;
-  source: "database" | "replit" | "env";
+  source: "database" | "env";
 }
 
 async function getOpenAIKeyWithSource(): Promise<OpenAIKeyResult | null> {
@@ -33,12 +33,6 @@ async function getOpenAIKeyWithSource(): Promise<OpenAIKeyResult | null> {
     console.error("[AI Analyzer] Failed to retrieve OpenAI key from database:", e);
   }
   
-  // Priority 3: Check for Replit's managed OpenAI integration (development fallback only)
-  const replitKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  if (replitKey && replitKey !== "not-configured") {
-    return { key: replitKey, source: "replit" };
-  }
-  
   return null;
 }
 
@@ -57,31 +51,24 @@ async function getOpenAIClient(): Promise<OpenAI | null> {
     return cachedOpenAIClient;
   }
   
-  // Create new client with updated key
+  // Create new client with updated key (always use standard OpenAI API)
   cachedApiKey = keyResult.key;
-  
-  // Only use Replit base URL when using Replit's managed key
-  // User's own key from database should use standard OpenAI API
-  const useReplitProxy = keyResult.source === "replit" && process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   
   cachedOpenAIClient = new OpenAI({
     apiKey: keyResult.key,
-    baseURL: useReplitProxy ? process.env.AI_INTEGRATIONS_OPENAI_BASE_URL : undefined,
   });
   
-  const sourceLabel = keyResult.source === "database" ? "user's own key" : 
-                      keyResult.source === "replit" ? "Replit integration" : "env variable";
-  console.log(`[AI Analyzer] OpenAI client initialized (${sourceLabel}, ${useReplitProxy ? 'Replit proxy' : 'direct OpenAI API'})`);
+  const sourceLabel = keyResult.source === "database" ? "Settings page" : "environment variable";
+  console.log(`[AI Analyzer] OpenAI client initialized (${sourceLabel}, direct OpenAI API)`);
   
   return cachedOpenAIClient;
 }
 
 // Log OpenAI key source on startup (actual key retrieval happens on first use)
-const replitKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-if (replitKey && replitKey !== "not-configured") {
-  console.log("[AI Analyzer] Replit OpenAI integration detected (database key takes priority if configured)");
+if (process.env.OPENAI_API_KEY) {
+  console.log("[AI Analyzer] OPENAI_API_KEY environment variable configured");
 } else {
-  console.log("[AI Analyzer] Will use OpenAI key from database (Settings page) - configure via Settings if needed");
+  console.log("[AI Analyzer] Will use OpenAI key from Settings page - configure via Settings if needed");
 }
 
 export interface AITradingAnalysis {
