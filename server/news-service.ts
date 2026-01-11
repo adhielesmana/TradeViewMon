@@ -1041,13 +1041,12 @@ function generateStockImageUrl(headline: string, articleId: number): string {
   // Extract relevant keywords from headline for targeted image search
   const keywords = extractKeywordsFromHeadline(headline);
   
-  // Use Unsplash Source API for relevant stock images based on keywords
-  // This provides free, high-quality images that match the article topic
-  const keywordQuery = keywords.join(",").replace(/\s+/g, "-");
+  // Use Loremflickr for relevant stock images based on keywords
+  // Format: https://loremflickr.com/width/height/keyword1,keyword2/all?lock=uniqueId
+  // The 'lock' parameter ensures consistent images for the same article
+  const keywordQuery = keywords.slice(0, 3).join(",").replace(/\s+/g, "-");
   
-  // Add articleId as a unique identifier to prevent caching of same image
-  // Format: https://source.unsplash.com/800x450/?keywords&sig=articleId
-  return `https://source.unsplash.com/800x450/?${encodeURIComponent(keywordQuery)}&sig=${articleId}`;
+  return `https://loremflickr.com/800/450/${encodeURIComponent(keywordQuery)}/all?lock=${articleId}`;
 }
 
 // Backfill images for articles that don't have them
@@ -1129,8 +1128,12 @@ export async function regenerateAllSnapshotImages(): Promise<{ updated: number; 
       const headline = snapshot.headline || snapshot.summary?.slice(0, 50) || "market";
       const newImageUrl = generateStockImageUrl(headline, snapshot.id);
       
-      // Only update if URL has changed (or was Picsum)
-      if (!snapshot.imageUrl || snapshot.imageUrl.includes("picsum.photos")) {
+      // Update if URL is missing, was Picsum, or was broken Unsplash Source
+      const needsUpdate = !snapshot.imageUrl || 
+        snapshot.imageUrl.includes("picsum.photos") || 
+        snapshot.imageUrl.includes("source.unsplash.com");
+      
+      if (needsUpdate) {
         await storage.updateSnapshotImageUrl(snapshot.id, newImageUrl);
         updated++;
       }
