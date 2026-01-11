@@ -1004,16 +1004,17 @@ const KEYWORD_MAPPINGS: Record<string, string[]> = {
 // Default fallback keywords for financial news
 const DEFAULT_KEYWORDS = ["finance", "stock market", "trading"];
 
-// Pexels API for stock images
+// Pexels API for stock images (primary source)
 async function searchPexelsImage(query: string): Promise<string | null> {
   const apiKey = process.env.PEXELS_API_KEY;
   if (!apiKey) {
+    console.log("[NewsService] No Pexels API key configured");
     return null;
   }
 
   try {
     const response = await fetch(
-      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape`,
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=10&orientation=landscape`,
       {
         headers: {
           Authorization: apiKey,
@@ -1028,18 +1029,89 @@ async function searchPexelsImage(query: string): Promise<string | null> {
 
     const data = await response.json();
     if (data.photos && data.photos.length > 0) {
-      // Pick a random image from top 5 results for variety
-      const randomIndex = Math.floor(Math.random() * Math.min(5, data.photos.length));
+      // Pick a random image from top 10 results for variety
+      const randomIndex = Math.floor(Math.random() * Math.min(10, data.photos.length));
       const photo = data.photos[randomIndex];
-      // Use medium size for optimal loading
-      return photo.src.medium || photo.src.original;
+      // Use large size for better quality
+      return photo.src.large || photo.src.medium || photo.src.original;
     }
 
+    console.log(`[NewsService] Pexels returned no results for: "${query}"`);
     return null;
   } catch (error: any) {
     console.error("[NewsService] Pexels search failed:", error.message);
     return null;
   }
+}
+
+// Curated fallback images by topic (high-quality stock images from Pexels CDN)
+const FALLBACK_IMAGES: Record<string, string[]> = {
+  gold: [
+    "https://images.pexels.com/photos/47047/gold-ingots-golden-treasure-47047.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/4386158/pexels-photo-4386158.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/4386442/pexels-photo-4386442.jpeg?auto=compress&w=800",
+  ],
+  bitcoin: [
+    "https://images.pexels.com/photos/844124/pexels-photo-844124.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/730564/pexels-photo-730564.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/6771900/pexels-photo-6771900.jpeg?auto=compress&w=800",
+  ],
+  crypto: [
+    "https://images.pexels.com/photos/6771607/pexels-photo-6771607.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/8370752/pexels-photo-8370752.jpeg?auto=compress&w=800",
+  ],
+  oil: [
+    "https://images.pexels.com/photos/247763/pexels-photo-247763.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/4254165/pexels-photo-4254165.jpeg?auto=compress&w=800",
+  ],
+  silver: [
+    "https://images.pexels.com/photos/4386370/pexels-photo-4386370.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/4386373/pexels-photo-4386373.jpeg?auto=compress&w=800",
+  ],
+  stock: [
+    "https://images.pexels.com/photos/6801648/pexels-photo-6801648.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/7567443/pexels-photo-7567443.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/6120214/pexels-photo-6120214.jpeg?auto=compress&w=800",
+  ],
+  market: [
+    "https://images.pexels.com/photos/6801874/pexels-photo-6801874.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/7567565/pexels-photo-7567565.jpeg?auto=compress&w=800",
+  ],
+  china: [
+    "https://images.pexels.com/photos/2412603/pexels-photo-2412603.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/1486577/pexels-photo-1486577.jpeg?auto=compress&w=800",
+  ],
+  usa: [
+    "https://images.pexels.com/photos/1202723/pexels-photo-1202723.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/356844/pexels-photo-356844.jpeg?auto=compress&w=800",
+  ],
+  mining: [
+    "https://images.pexels.com/photos/2101137/pexels-photo-2101137.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/4254164/pexels-photo-4254164.jpeg?auto=compress&w=800",
+  ],
+  default: [
+    "https://images.pexels.com/photos/6801648/pexels-photo-6801648.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/7567443/pexels-photo-7567443.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/6120214/pexels-photo-6120214.jpeg?auto=compress&w=800",
+    "https://images.pexels.com/photos/6801874/pexels-photo-6801874.jpeg?auto=compress&w=800",
+  ],
+};
+
+// Get fallback image based on keywords
+function getFallbackImage(keywords: string, articleId: number): string {
+  const lowerKeywords = keywords.toLowerCase();
+  
+  // Check which topic matches
+  for (const [topic, images] of Object.entries(FALLBACK_IMAGES)) {
+    if (topic !== 'default' && lowerKeywords.includes(topic)) {
+      // Use articleId to pick consistent image for each article
+      return images[articleId % images.length];
+    }
+  }
+  
+  // Default fallback
+  const defaultImages = FALLBACK_IMAGES.default;
+  return defaultImages[articleId % defaultImages.length];
 }
 
 // AI-powered image keyword extraction using OpenAI
@@ -1098,16 +1170,26 @@ export async function getAIRelevantImage(headline: string, summary: string, arti
   const aiKeywords = await extractImageKeywordsWithAI(headline, summary);
   console.log(`[NewsService] AI keywords for article ${articleId}: "${aiKeywords}"`);
 
-  // Step 2: Try Pexels API with AI keywords (if API key available)
+  // Step 2: Try Pexels API with AI keywords (primary source)
   const pexelsImage = await searchPexelsImage(aiKeywords);
   if (pexelsImage) {
     console.log(`[NewsService] Found Pexels image for: "${aiKeywords}"`);
     return pexelsImage;
   }
 
-  // Step 3: Fallback to Loremflickr with AI keywords
-  const keywordQuery = aiKeywords.replace(/\s+/g, ",").slice(0, 50);
-  return `https://loremflickr.com/800/450/${encodeURIComponent(keywordQuery)}/all?lock=${articleId}`;
+  // Step 3: Try simplified keywords if original query failed
+  const simplifiedKeywords = aiKeywords.split(" ").slice(0, 2).join(" ");
+  if (simplifiedKeywords !== aiKeywords) {
+    const simplifiedImage = await searchPexelsImage(simplifiedKeywords);
+    if (simplifiedImage) {
+      console.log(`[NewsService] Found Pexels image with simplified query: "${simplifiedKeywords}"`);
+      return simplifiedImage;
+    }
+  }
+
+  // Step 4: Use curated fallback images based on topic detection
+  console.log(`[NewsService] Using curated fallback for: "${aiKeywords}"`);
+  return getFallbackImage(aiKeywords + " " + headline, articleId);
 }
 
 // Simple string hash function for stable image IDs

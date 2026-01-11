@@ -162,8 +162,20 @@ app.use((req, res, next) => {
       host: "0.0.0.0",
       reusePort: true,
     },
-    () => {
+    async () => {
       log(`serving on port ${port}`);
+      
+      // Run AI-powered image regeneration if Pexels API key is configured
+      if (process.env.PEXELS_API_KEY) {
+        try {
+          const { regenerateAllSnapshotImages } = await import("./news-service");
+          log("Starting AI-powered image regeneration with Pexels...");
+          const result = await regenerateAllSnapshotImages(true); // forceAll to update all images
+          log(`Regenerated ${result.updated}/${result.total} article images with AI + Pexels`);
+        } catch (error) {
+          console.error("[Startup] Image regeneration failed:", error);
+        }
+      }
     },
   );
 })();
