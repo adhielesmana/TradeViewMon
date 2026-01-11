@@ -184,6 +184,7 @@ export interface IStorage {
   updateArticleImageUrl(id: number, imageUrl: string): Promise<void>;
   getNewsSnapshotsWithoutImages(limit: number): Promise<NewsAnalysisSnapshot[]>;
   updateSnapshotImageUrl(id: number, imageUrl: string): Promise<void>;
+  getAllNewsSnapshots(): Promise<NewsAnalysisSnapshot[]>;
   
   // All open positions for scheduled tasks
   getAllOpenProfitablePositions(): Promise<DemoPosition[]>;
@@ -1595,6 +1596,12 @@ export class DatabaseStorage implements IStorage {
     await db.update(newsAnalysisSnapshots)
       .set({ imageUrl })
       .where(eq(newsAnalysisSnapshots.id, id));
+  }
+
+  async getAllNewsSnapshots(): Promise<NewsAnalysisSnapshot[]> {
+    return db.select()
+      .from(newsAnalysisSnapshots)
+      .orderBy(desc(newsAnalysisSnapshots.analyzedAt));
   }
 }
 

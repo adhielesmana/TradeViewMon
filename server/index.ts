@@ -162,8 +162,19 @@ app.use((req, res, next) => {
       host: "0.0.0.0",
       reusePort: true,
     },
-    () => {
+    async () => {
       log(`serving on port ${port}`);
+      
+      // Run image regeneration once on startup to update existing articles with Unsplash keyword-based URLs
+      try {
+        const { regenerateAllSnapshotImages } = await import("./news-service");
+        const result = await regenerateAllSnapshotImages();
+        if (result.updated > 0) {
+          log(`Regenerated ${result.updated}/${result.total} article images with Unsplash keywords`);
+        }
+      } catch (error) {
+        console.error("[Startup] Image regeneration failed:", error);
+      }
     },
   );
 })();

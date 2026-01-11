@@ -325,16 +325,53 @@ function formatPrice(price: number, currency: string): string {
   return `$${price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// Generate unique image URL based on article content using Picsum (reliable, no API key needed)
+// Financial keywords mapping for relevant image search
+const KEYWORD_MAPPINGS: Record<string, string> = {
+  gold: "gold-bars,gold-investment",
+  silver: "silver-coins,precious-metals",
+  bitcoin: "bitcoin,cryptocurrency",
+  crypto: "cryptocurrency,blockchain",
+  btc: "bitcoin,digital-currency",
+  stock: "stock-market,trading",
+  market: "financial-market,wall-street",
+  trading: "stock-trading,charts",
+  inflation: "inflation,economy",
+  recession: "recession,economic",
+  economy: "economy,business",
+  fed: "federal-reserve,banking",
+  oil: "oil-barrel,petroleum",
+  energy: "energy,power",
+  bull: "bull-market,growth",
+  bear: "bear-market,decline",
+  tech: "technology,startup",
+  mining: "gold-mining,mining",
+  bank: "banking,finance",
+};
+
+// Generate unique image URL based on article content using Unsplash
 function generateArticleImage(article: { id?: number; headline?: string; summary?: string; overallSentiment?: string }): string {
   const text = (article.headline || article.summary || "market").toLowerCase();
   
-  // Use article ID or hash of headline for stable, unique image per article
+  // Extract keywords from headline for relevant image search
+  const keywords: string[] = [];
+  for (const [keyword, searchTerms] of Object.entries(KEYWORD_MAPPINGS)) {
+    if (text.includes(keyword)) {
+      keywords.push(searchTerms.split(",")[0]);
+      if (keywords.length >= 2) break;
+    }
+  }
+  
+  // Default to finance keywords if none found
+  if (keywords.length === 0) {
+    keywords.push("finance", "stock-market");
+  }
+  
+  // Use article ID or hash of headline for unique image per article
   const stableId = article.id || Math.abs(text.split("").reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0));
   
-  // Picsum provides reliable, beautiful placeholder images with consistent seeding
-  // Format: https://picsum.photos/seed/{seed}/{width}/{height}
-  return `https://picsum.photos/seed/article${stableId}/800/450`;
+  // Use Unsplash Source API for relevant stock images based on keywords
+  const keywordQuery = keywords.join(",");
+  return `https://source.unsplash.com/800x450/?${encodeURIComponent(keywordQuery)}&sig=${stableId}`;
 }
 
 interface PaginatedNewsHistory {

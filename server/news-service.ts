@@ -1038,9 +1038,16 @@ function extractKeywordsFromHeadline(headline: string): string[] {
 }
 
 function generateStockImageUrl(headline: string, articleId: number): string {
-  // Use Picsum for reliable, beautiful placeholder images
-  // The seed ensures deterministic unique images per article
-  return `https://picsum.photos/seed/article${articleId}/800/450`;
+  // Extract relevant keywords from headline for targeted image search
+  const keywords = extractKeywordsFromHeadline(headline);
+  
+  // Use Unsplash Source API for relevant stock images based on keywords
+  // This provides free, high-quality images that match the article topic
+  const keywordQuery = keywords.join(",").replace(/\s+/g, "-");
+  
+  // Add articleId as a unique identifier to prevent caching of same image
+  // Format: https://source.unsplash.com/800x450/?keywords&sig=articleId
+  return `https://source.unsplash.com/800x450/?${encodeURIComponent(keywordQuery)}&sig=${articleId}`;
 }
 
 // Backfill images for articles that don't have them
@@ -1099,6 +1106,41 @@ export async function backfillSnapshotImages(): Promise<{ updated: number; total
     
   } catch (error: any) {
     console.error("[NewsService] Snapshot image backfill failed:", error.message);
+    return { updated: 0, total: 0 };
+  }
+}
+
+// Regenerate ALL snapshot images with new Unsplash keyword-based URLs
+export async function regenerateAllSnapshotImages(): Promise<{ updated: number; total: number }> {
+  console.log("[NewsService] Regenerating ALL snapshot images with Unsplash keywords...");
+  
+  try {
+    // Get all snapshots
+    const allSnapshots = await storage.getAllNewsSnapshots();
+    
+    if (allSnapshots.length === 0) {
+      console.log("[NewsService] No snapshots found to regenerate");
+      return { updated: 0, total: 0 };
+    }
+    
+    let updated = 0;
+    
+    for (const snapshot of allSnapshots) {
+      const headline = snapshot.headline || snapshot.summary?.slice(0, 50) || "market";
+      const newImageUrl = generateStockImageUrl(headline, snapshot.id);
+      
+      // Only update if URL has changed (or was Picsum)
+      if (!snapshot.imageUrl || snapshot.imageUrl.includes("picsum.photos")) {
+        await storage.updateSnapshotImageUrl(snapshot.id, newImageUrl);
+        updated++;
+      }
+    }
+    
+    console.log(`[NewsService] Regenerated ${updated}/${allSnapshots.length} snapshot images`);
+    return { updated, total: allSnapshots.length };
+    
+  } catch (error: any) {
+    console.error("[NewsService] Snapshot image regeneration failed:", error.message);
     return { updated: 0, total: 0 };
   }
 }

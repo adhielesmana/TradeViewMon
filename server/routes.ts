@@ -11,7 +11,7 @@ import type { SafeUser, InsertMarketData } from "@shared/schema";
 import { predictionEngine } from "./prediction-engine";
 import { generateUnifiedSignal, convertToLegacyIndicatorSignal, convertToMultiFactorAnalysis, detectAllCandlestickPatterns } from "./unified-signal-generator";
 import { encrypt, decrypt, maskApiKey } from "./encryption";
-import { getNewsAndAnalysisCached, forceRefreshNewsAnalysis, getRssFeedUrl, setRssFeedUrl, getNewsStats, getStoredNewsSince } from "./news-service";
+import { getNewsAndAnalysisCached, forceRefreshNewsAnalysis, getRssFeedUrl, setRssFeedUrl, getNewsStats, getStoredNewsSince, regenerateAllSnapshotImages } from "./news-service";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { z } from "zod";
 
@@ -1830,6 +1830,21 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error getting news stats:", error);
       res.status(500).json({ error: "Failed to get news stats" });
+    }
+  });
+
+  // Regenerate all article images with keyword-based Unsplash URLs
+  app.post("/api/settings/regenerate-images", requireAuth, requireRole(["superadmin"]), async (req, res) => {
+    try {
+      const result = await regenerateAllSnapshotImages();
+      res.json({ 
+        success: true, 
+        message: `Regenerated ${result.updated} of ${result.total} article images`,
+        ...result 
+      });
+    } catch (error) {
+      console.error("Error regenerating images:", error);
+      res.status(500).json({ error: "Failed to regenerate images" });
     }
   });
 
