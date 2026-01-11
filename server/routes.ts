@@ -1833,13 +1833,14 @@ export async function registerRoutes(
     }
   });
 
-  // Regenerate all article images with keyword-based Unsplash URLs
+  // Regenerate all article images with AI-powered relevant images
   app.post("/api/settings/regenerate-images", requireAuth, requireRole(["superadmin"]), async (req, res) => {
     try {
-      const result = await regenerateAllSnapshotImages();
+      const forceAll = req.body?.forceAll === true;
+      const result = await regenerateAllSnapshotImages(forceAll);
       res.json({ 
         success: true, 
-        message: `Regenerated ${result.updated} of ${result.total} article images`,
+        message: `Regenerated ${result.updated} of ${result.total} article images using AI keywords`,
         ...result 
       });
     } catch (error) {

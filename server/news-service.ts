@@ -1004,6 +1004,112 @@ const KEYWORD_MAPPINGS: Record<string, string[]> = {
 // Default fallback keywords for financial news
 const DEFAULT_KEYWORDS = ["finance", "stock market", "trading"];
 
+// Pexels API for stock images
+async function searchPexelsImage(query: string): Promise<string | null> {
+  const apiKey = process.env.PEXELS_API_KEY;
+  if (!apiKey) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape`,
+      {
+        headers: {
+          Authorization: apiKey,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`[NewsService] Pexels API error: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.photos && data.photos.length > 0) {
+      // Pick a random image from top 5 results for variety
+      const randomIndex = Math.floor(Math.random() * Math.min(5, data.photos.length));
+      const photo = data.photos[randomIndex];
+      // Use medium size for optimal loading
+      return photo.src.medium || photo.src.original;
+    }
+
+    return null;
+  } catch (error: any) {
+    console.error("[NewsService] Pexels search failed:", error.message);
+    return null;
+  }
+}
+
+// AI-powered image keyword extraction using OpenAI
+async function extractImageKeywordsWithAI(headline: string, summary: string): Promise<string> {
+  try {
+    const openai = await getOpenAIClient();
+    if (!openai) {
+      console.log("[NewsService] OpenAI not available for image keywords, using fallback");
+      return extractKeywordsFromHeadline(headline).join(" ");
+    }
+
+    const prompt = `Analyze this financial news article and generate a specific image search query.
+
+HEADLINE: ${headline}
+SUMMARY: ${summary.slice(0, 500)}
+
+RULES:
+1. Identify the PRIMARY SUBJECT (e.g., gold bars, bitcoin coin, oil barrels, stock chart)
+2. Identify any COUNTRY or REGION mentioned (e.g., China, USA, Europe, Middle East)
+3. Identify any COMPANY or PRODUCT (e.g., Tesla car, Apple iPhone, mining equipment)
+4. Combine these into a descriptive image search query
+
+EXAMPLES:
+- "Gold prices rise in China" → "gold bars chinese currency yuan"
+- "Bitcoin hits new high" → "bitcoin cryptocurrency digital coin"
+- "Tesla stock surges" → "Tesla electric car factory"
+- "Oil prices drop in Middle East" → "oil barrels desert middle east"
+- "Federal Reserve interest rates" → "federal reserve building washington"
+- "Silver mining production increases" → "silver bars mining equipment"
+
+Return ONLY the image search query (3-6 words), nothing else. Be specific and visual.`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 50,
+      temperature: 0.3,
+    });
+
+    const keywords = response.choices[0]?.message?.content?.trim();
+    if (keywords && keywords.length > 0 && keywords.length < 100) {
+      console.log(`[NewsService] AI extracted image keywords: "${keywords}" for: ${headline.slice(0, 50)}...`);
+      return keywords;
+    }
+
+    return extractKeywordsFromHeadline(headline).join(" ");
+  } catch (error: any) {
+    console.error("[NewsService] AI image keyword extraction failed:", error.message);
+    return extractKeywordsFromHeadline(headline).join(" ");
+  }
+}
+
+// Get AI-powered relevant image for an article
+export async function getAIRelevantImage(headline: string, summary: string, articleId: number): Promise<string> {
+  // Step 1: Use AI to extract specific image keywords
+  const aiKeywords = await extractImageKeywordsWithAI(headline, summary);
+  console.log(`[NewsService] AI keywords for article ${articleId}: "${aiKeywords}"`);
+
+  // Step 2: Try Pexels API with AI keywords (if API key available)
+  const pexelsImage = await searchPexelsImage(aiKeywords);
+  if (pexelsImage) {
+    console.log(`[NewsService] Found Pexels image for: "${aiKeywords}"`);
+    return pexelsImage;
+  }
+
+  // Step 3: Fallback to Loremflickr with AI keywords
+  const keywordQuery = aiKeywords.replace(/\s+/g, ",").slice(0, 50);
+  return `https://loremflickr.com/800/450/${encodeURIComponent(keywordQuery)}/all?lock=${articleId}`;
+}
+
 // Simple string hash function for stable image IDs
 function hashCode(str: string): number {
   let hash = 0;
@@ -1109,9 +1215,9 @@ export async function backfillSnapshotImages(): Promise<{ updated: number; total
   }
 }
 
-// Regenerate ALL snapshot images with new Unsplash keyword-based URLs
-export async function regenerateAllSnapshotImages(): Promise<{ updated: number; total: number }> {
-  console.log("[NewsService] Regenerating ALL snapshot images with Unsplash keywords...");
+// Regenerate ALL snapshot images with AI-powered relevant images
+export async function regenerateAllSnapshotImages(forceAll: boolean = false): Promise<{ updated: number; total: number }> {
+  console.log("[NewsService] Regenerating snapshot images with AI-powered keywords...");
   
   try {
     // Get all snapshots
@@ -1125,21 +1231,28 @@ export async function regenerateAllSnapshotImages(): Promise<{ updated: number; 
     let updated = 0;
     
     for (const snapshot of allSnapshots) {
-      const headline = snapshot.headline || snapshot.summary?.slice(0, 50) || "market";
-      const newImageUrl = generateStockImageUrl(headline, snapshot.id);
+      // Skip if already has a Pexels image (unless forceAll is true)
+      if (!forceAll && snapshot.imageUrl?.includes("images.pexels.com")) {
+        continue;
+      }
       
-      // Update if URL is missing, was Picsum, or was broken Unsplash Source
-      const needsUpdate = !snapshot.imageUrl || 
-        snapshot.imageUrl.includes("picsum.photos") || 
-        snapshot.imageUrl.includes("source.unsplash.com");
+      const headline = snapshot.headline || "market analysis";
+      const summary = snapshot.summary || "";
       
-      if (needsUpdate) {
-        await storage.updateSnapshotImageUrl(snapshot.id, newImageUrl);
-        updated++;
+      // Use AI-powered image generation
+      const newImageUrl = await getAIRelevantImage(headline, summary, snapshot.id);
+      
+      await storage.updateSnapshotImageUrl(snapshot.id, newImageUrl);
+      updated++;
+      
+      // Rate limit to avoid API throttling (Pexels: 200 req/hour)
+      if (updated % 10 === 0) {
+        console.log(`[NewsService] Regenerated ${updated}/${allSnapshots.length} images...`);
+        await new Promise(resolve => setTimeout(resolve, 500)); // 0.5 sec delay every 10 images
       }
     }
     
-    console.log(`[NewsService] Regenerated ${updated}/${allSnapshots.length} snapshot images`);
+    console.log(`[NewsService] Regenerated ${updated}/${allSnapshots.length} snapshot images with AI keywords`);
     return { updated, total: allSnapshots.length };
     
   } catch (error: any) {
