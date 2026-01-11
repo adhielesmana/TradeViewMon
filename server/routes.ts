@@ -1030,6 +1030,82 @@ export async function registerRoutes(
     }
   });
 
+  // Comprehensive diagnostics endpoint for monitoring
+  app.get("/api/system/diagnostics", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const symbols = await storage.getMonitoredSymbols();
+      const activeSymbols = symbols.filter(s => s.isActive);
+      
+      // Get latest price update for each symbol
+      const priceUpdates = await Promise.all(
+        activeSymbols.map(async (sym) => {
+          try {
+            const recentData = await storage.getRecentMarketData(sym.symbol, 1);
+            const lastUpdate = recentData[0]?.timestamp;
+            const price = recentData[0]?.close || 0;
+            const ageSeconds = lastUpdate ? Math.floor((Date.now() - new Date(lastUpdate).getTime()) / 1000) : null;
+            return {
+              symbol: sym.symbol,
+              displayName: sym.displayName,
+              price,
+              lastUpdate: lastUpdate ? new Date(lastUpdate).toISOString() : null,
+              ageSeconds,
+              status: ageSeconds === null ? "no_data" : ageSeconds < 120 ? "fresh" : ageSeconds < 600 ? "stale" : "old",
+            };
+          } catch {
+            return { symbol: sym.symbol, displayName: sym.displayName, price: 0, lastUpdate: null, ageSeconds: null, status: "error" };
+          }
+        })
+      );
+
+      // Check API configurations
+      const apiStatus = {
+        goldApi: { configured: true, description: "Gold-API (free, no key required)" },
+        finnhub: { configured: !!process.env.FINNHUB_API_KEY, description: "Real-time stock data" },
+        openai: { configured: !!(process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY), description: "AI analysis" },
+        pexels: { configured: !!process.env.PEXELS_API_KEY, description: "Stock images for articles" },
+      };
+
+      // Database check
+      let dbStatus = { connected: false, latency: 0 };
+      try {
+        const start = Date.now();
+        await storage.getMonitoredSymbols();
+        dbStatus = { connected: true, latency: Date.now() - start };
+      } catch {
+        dbStatus = { connected: false, latency: 0 };
+      }
+
+      // Memory usage
+      const memUsage = process.memoryUsage();
+      const memory = {
+        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+        rss: Math.round(memUsage.rss / 1024 / 1024),
+      };
+
+      // Get system stats
+      const stats = await storage.getSystemStats();
+
+      res.json({
+        timestamp: new Date().toISOString(),
+        scheduler: {
+          status: stats.schedulerStatus,
+          lastRun: stats.lastSchedulerRun,
+          interval: "60 seconds",
+        },
+        database: dbStatus,
+        memory,
+        apis: apiStatus,
+        priceUpdates,
+        environment: process.env.NODE_ENV || "development",
+      });
+    } catch (error) {
+      console.error("Error fetching diagnostics:", error);
+      res.status(500).json({ error: "Failed to fetch diagnostics" });
+    }
+  });
+
   app.get("/api/export/market", async (req, res) => {
     try {
       const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
