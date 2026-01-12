@@ -15,11 +15,12 @@ interface SymbolConfig {
 }
 
 const SYMBOL_CONFIGS: Record<string, SymbolConfig> = {
-  // Precious Metals & Crypto - Multi-source with comparison
-  // Gold-API is primary, Finnhub crypto exchange as backup for comparison
-  XAUUSD: { basePrice: 2650.00, volatility: 0.3, is24h: true, provider: "gold-api", apiSymbol: "XAU", finnhubSymbol: "OANDA:XAU_USD" },
-  XAGUSD: { basePrice: 31.50, volatility: 0.5, is24h: true, provider: "gold-api", apiSymbol: "XAG", finnhubSymbol: "OANDA:XAG_USD" },
-  BTCUSD: { basePrice: 97500.00, volatility: 1.5, is24h: true, provider: "gold-api", apiSymbol: "BTC", finnhubSymbol: "BINANCE:BTCUSDT" },
+  // Precious Metals - Gold-API primary (accurate ~$4,600 price), Yahoo Finance futures as fallback
+  // Note: Finnhub OANDA symbols require paid subscription, so we use Gold-API + Yahoo
+  XAUUSD: { basePrice: 4600.00, volatility: 0.3, is24h: true, provider: "gold-api", apiSymbol: "XAU", yahooSymbol: "GC=F" },
+  XAGUSD: { basePrice: 84.00, volatility: 0.5, is24h: true, provider: "gold-api", apiSymbol: "XAG", yahooSymbol: "SI=F" },
+  // Crypto - Finnhub primary (BINANCE real-time), Gold-API as fallback
+  BTCUSD: { basePrice: 91000.00, volatility: 1.5, is24h: true, provider: "finnhub", apiSymbol: "BTC", finnhubSymbol: "BINANCE:BTCUSDT" },
   
   // Mining Stocks - Finnhub (direct symbols)
   GDX: { basePrice: 35.50, volatility: 0.4, is24h: false, provider: "finnhub", finnhubSymbol: "GDX" },
@@ -355,6 +356,8 @@ export class MarketDataService {
   }
 
   // Compare prices from multiple sources and choose the most reliable one
+  // For crypto: Finnhub (BINANCE) primary, Gold-API fallback
+  // For metals: Gold-API primary, Yahoo Finance futures fallback
   private async fetchMultiSourcePrice(symbol: string): Promise<{ price: number; updatedAt: string; provider: string } | null> {
     const config = this.getConfig(symbol);
     const results: Array<{ price: number; updatedAt: string; provider: string; priority: number }> = [];
@@ -362,19 +365,29 @@ export class MarketDataService {
     // Fetch from all available sources in parallel
     const fetchPromises: Promise<void>[] = [];
 
-    // Primary: Gold-API (priority 1 for metals/crypto)
-    if (config.apiSymbol) {
+    // For symbols with Finnhub (crypto): Finnhub is primary
+    if (config.finnhubSymbol && this.finnhubApiKey) {
       fetchPromises.push(
-        this.fetchGoldApiPrice(symbol, config).then(result => {
+        this.fetchFinnhubPrice(symbol, config).then(result => {
           if (result) results.push({ ...result, priority: 1 });
         })
       );
     }
 
-    // Secondary: Finnhub (priority 2)
-    if (config.finnhubSymbol && this.finnhubApiKey) {
+    // Gold-API for metals/crypto (primary for metals, fallback for crypto)
+    if (config.apiSymbol) {
+      const priority = config.finnhubSymbol ? 2 : 1; // Primary if no Finnhub
       fetchPromises.push(
-        this.fetchFinnhubPrice(symbol, config).then(result => {
+        this.fetchGoldApiPrice(symbol, config).then(result => {
+          if (result) results.push({ ...result, priority });
+        })
+      );
+    }
+
+    // Yahoo Finance for metals futures (secondary verification for XAU/XAG)
+    if (config.yahooSymbol && (symbol === "XAUUSD" || symbol === "XAGUSD")) {
+      fetchPromises.push(
+        this.fetchYahooPrice(symbol, config).then(result => {
           if (result) results.push({ ...result, priority: 2 });
         })
       );
@@ -402,16 +415,16 @@ export class MarketDataService {
     const priceDiffPercent = (priceDiff / primary.price) * 100;
 
     console.log(`[MarketData] ${symbol}: Price comparison:`);
-    console.log(`  - ${primary.provider}: $${primary.price.toFixed(2)} (primary)`);
-    console.log(`  - ${secondary.provider}: $${secondary.price.toFixed(2)} (secondary)`);
+    console.log(`  - ${primary.provider}: $${primary.price.toFixed(2)} (PRIMARY)`);
+    console.log(`  - ${secondary.provider}: $${secondary.price.toFixed(2)} (verification)`);
     console.log(`  - Difference: $${priceDiff.toFixed(2)} (${priceDiffPercent.toFixed(3)}%)`);
 
-    // If difference is > 2%, log warning and prefer the more recent/reliable source
+    // If difference is > 2%, log warning
     if (priceDiffPercent > 2) {
-      console.warn(`[MarketData] ⚠ ${symbol}: Large price discrepancy (${priceDiffPercent.toFixed(2)}%) - using primary source`);
+      console.warn(`[MarketData] ⚠ ${symbol}: Price discrepancy ${priceDiffPercent.toFixed(2)}% between sources`);
     }
 
-    // Normal case: use primary source (Gold-API for metals/crypto)
+    // Use primary source (verified against secondary)
     return { price: primary.price, updatedAt: primary.updatedAt, provider: `${primary.provider} (verified)` };
   }
 
@@ -419,12 +432,26 @@ export class MarketDataService {
   private async fetchRealPrice(symbol: string): Promise<{ price: number; updatedAt: string; provider: string } | null> {
     const config = this.getConfig(symbol);
     
+    // Use multi-source comparison for:
+    // 1. Crypto (BTCUSD): Finnhub + Gold-API
+    // 2. Metals (XAUUSD, XAGUSD): Gold-API + Yahoo Finance futures
+    if (config.finnhubSymbol && config.apiSymbol) {
+      // Crypto: Finnhub primary, Gold-API fallback
+      return this.fetchMultiSourcePrice(symbol);
+    }
+    
+    if (config.apiSymbol && config.yahooSymbol && (symbol === "XAUUSD" || symbol === "XAGUSD")) {
+      // Metals: Gold-API primary, Yahoo futures verification
+      return this.fetchMultiSourcePrice(symbol);
+    }
+    
     switch (config.provider) {
-      case "gold-api":
-        // Use multi-source comparison for gold-api symbols (metals & crypto)
-        return this.fetchMultiSourcePrice(symbol);
       case "finnhub":
+        // Finnhub-only symbols (stocks, ETFs)
         return this.fetchFinnhubPrice(symbol, config);
+      case "gold-api":
+        // Gold-API only
+        return this.fetchGoldApiPrice(symbol, config);
       case "yahoo":
         return this.fetchYahooPrice(symbol, config);
       case "simulated":

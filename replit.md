@@ -38,7 +38,11 @@ Preferred communication style: Simple, everyday language.
   - Incorporates last 7 days of stored AI predictions as supplemental context for trend analysis
   - Stores results with `sourceArticles`, `historicalContext`, and `analysisType` fields for traceability
   - Keeps last 168 hourly snapshots (7 days of data) for historical analysis
-- **Market Data Service**: Abstracted service supporting Gold-API.com (XAU, XAG, BTC) and Finnhub (GDX, GDXJ, NEM, SPX, DXY, USOIL), with on-demand historical data seeding and simulated data for unsupported symbols (US10Y).
+- **Market Data Service**: Multi-source price verification system:
+  - BTCUSD: Finnhub (BINANCE:BTCUSDT) primary, Gold-API fallback
+  - XAUUSD/XAGUSD: Gold-API primary, Yahoo Finance futures (GC=F, SI=F) verification
+  - Stocks: Finnhub (GDX, SPY, USO) or Yahoo Finance (.JK suffix for Indonesian)
+  - On-demand historical data seeding and simulated data for unsupported symbols (US10Y)
 - **Risk Manager**: Comprehensive risk management service (`server/risk-manager.ts`) enforcing:
   - **Daily Loss Limit**: Maximum 3% of account balance or $500 per day
   - **Consecutive Loss Halt**: Trading pauses after 3 consecutive losing trades
