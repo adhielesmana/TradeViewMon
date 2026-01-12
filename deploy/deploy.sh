@@ -8,6 +8,7 @@ DOMAIN=""
 EMAIL=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+DEPLOY_CONFIG="$PROJECT_DIR/.deploy-config"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -29,31 +30,77 @@ show_usage() {
     echo "  --no-pull               Skip git pull (use existing code)"
     echo "  --https                 Force HTTPS cookies (use if behind SSL proxy)"
     echo "  --no-https              Force HTTP-only cookies (default without domain)"
+    echo "  --reconfigure-ssl       Force reconfigure Nginx and SSL (when domain/email change)"
     echo "  -h, --help              Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0                                              # Simple deploy with HTTP"
-    echo "  $0 --domain tradeview.example.com --email admin@example.com  # With SSL"
+    echo "  $0                                              # Quick redeploy (uses saved config)"
+    echo "  $0 --domain tradeview.example.com --email admin@example.com  # First time with SSL"
+    echo "  $0 --reconfigure-ssl                            # Force reconfigure Nginx/SSL"
     echo "  $0 --finnhub-key YOUR_KEY                       # With API key"
+    echo ""
+    echo "Note: Domain and email are saved to .deploy-config after first use."
+    echo "      Subsequent deploys only need: ./deploy.sh"
 }
 
 FINNHUB_KEY=""
 SKIP_PULL=false
 FORCE_HTTPS=""
+RECONFIGURE_SSL=false
+DOMAIN_FROM_CLI=false
+EMAIL_FROM_CLI=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -d|--domain) DOMAIN="$2"; shift 2 ;;
-        -e|--email) EMAIL="$2"; shift 2 ;;
+        -d|--domain) DOMAIN="$2"; DOMAIN_FROM_CLI=true; shift 2 ;;
+        -e|--email) EMAIL="$2"; EMAIL_FROM_CLI=true; shift 2 ;;
         -p|--port) DEFAULT_PORT="$2"; shift 2 ;;
         -k|--finnhub-key) FINNHUB_KEY="$2"; shift 2 ;;
         --no-pull) SKIP_PULL=true; shift ;;
         --https) FORCE_HTTPS="true"; shift ;;
         --no-https) FORCE_HTTPS="false"; shift ;;
+        --reconfigure-ssl) RECONFIGURE_SSL=true; shift ;;
         -h|--help) show_usage; exit 0 ;;
         *) log_error "Unknown option: $1"; show_usage; exit 1 ;;
     esac
 done
+
+# Load saved config if exists (only if domain/email not provided via CLI)
+if [ -f "$DEPLOY_CONFIG" ]; then
+    log_info "Loading saved deployment config..."
+    source "$DEPLOY_CONFIG"
+    
+    # CLI arguments override saved config
+    if [ "$DOMAIN_FROM_CLI" = true ]; then
+        SAVED_DOMAIN="$DOMAIN"
+    elif [ -n "$SAVED_DOMAIN" ]; then
+        DOMAIN="$SAVED_DOMAIN"
+    fi
+    
+    if [ "$EMAIL_FROM_CLI" = true ]; then
+        SAVED_EMAIL="$EMAIL"
+    elif [ -n "$SAVED_EMAIL" ]; then
+        EMAIL="$SAVED_EMAIL"
+    fi
+    
+    log_info "Using domain: ${DOMAIN:-none}"
+    log_info "Using email: ${EMAIL:-none}"
+fi
+
+# Determine if we need to configure/reconfigure SSL
+NEEDS_SSL_CONFIG=false
+if [ "$RECONFIGURE_SSL" = true ]; then
+    NEEDS_SSL_CONFIG=true
+    log_info "Force reconfiguring SSL (--reconfigure-ssl flag)"
+elif [ "$DOMAIN_FROM_CLI" = true ] || [ "$EMAIL_FROM_CLI" = true ]; then
+    # New domain/email provided via CLI - need to configure
+    NEEDS_SSL_CONFIG=true
+    log_info "New domain/email provided, will configure Nginx/SSL"
+elif [ ! -f "$DEPLOY_CONFIG" ] && [ -n "$DOMAIN" ]; then
+    # First time setup with domain
+    NEEDS_SSL_CONFIG=true
+    log_info "First time setup with domain, will configure Nginx/SSL"
+fi
 
 find_available_port() {
     local port=$1
@@ -323,8 +370,21 @@ log_info "Checking for additional schema updates via Drizzle..."
 docker exec trady sh -c "echo 'y' | npm run db:push 2>/dev/null" || log_warn "Drizzle push skipped (optional)"
 log_info "Database schema initialization complete"
 
-# Configure Nginx if domain is provided
-if [ -n "$DOMAIN" ]; then
+# Save deployment config for future runs
+if [ -n "$DOMAIN" ] || [ -n "$EMAIL" ]; then
+    log_info "Saving deployment config for future runs..."
+    cat > "$DEPLOY_CONFIG" << EOF
+# Trady Deployment Config (auto-generated)
+# To reconfigure SSL, run: ./deploy.sh --reconfigure-ssl
+SAVED_DOMAIN="$DOMAIN"
+SAVED_EMAIL="$EMAIL"
+EOF
+    chmod 600 "$DEPLOY_CONFIG"
+    log_info "Config saved to .deploy-config"
+fi
+
+# Configure Nginx only if needed (first time or --reconfigure-ssl)
+if [ -n "$DOMAIN" ] && [ "$NEEDS_SSL_CONFIG" = true ]; then
     if command -v nginx &> /dev/null; then
         log_info "Configuring Nginx for $DOMAIN..."
         
@@ -384,6 +444,8 @@ EOF
     else
         log_warn "Nginx not installed. Application available on port $APP_PORT"
     fi
+elif [ -n "$DOMAIN" ]; then
+    log_info "Skipping Nginx/SSL config (already configured). Use --reconfigure-ssl to force."
 fi
 
 echo ""
