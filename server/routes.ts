@@ -18,13 +18,13 @@ import { z } from "zod";
 const updateUserSchema = z.object({
   email: z.string().email().optional().nullable(),
   displayName: z.string().max(100).optional().nullable(),
-  role: z.enum(["user", "admin"]).optional(),
+  role: z.enum(["user", "admin", "superadmin"]).optional(),
   isActive: z.boolean().optional(),
 }).strict();
 
 const createInviteSchema = z.object({
   email: z.string().email(),
-  role: z.enum(["user", "admin"]).optional().default("user"),
+  role: z.enum(["user", "admin", "superadmin"]).optional().default("user"),
 });
 
 const DEFAULT_SYMBOL = marketDataService.getSymbol();
@@ -289,7 +289,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: "User not found" });
       }
       
-      // Only superadmin can modify other superadmins
+      // Admin cannot modify superadmin accounts (only superadmin can modify other superadmins)
       if (targetUser.role === "superadmin" && currentUser.role !== "superadmin") {
         return res.status(403).json({ error: "Cannot modify superadmin account" });
       }
@@ -304,9 +304,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Cannot deactivate your own account" });
       }
       
-      // Only superadmin can change roles
-      if (validatedData.role && currentUser.role !== "superadmin") {
-        return res.status(403).json({ error: "Only superadmin can change user roles" });
+      // Admin cannot promote anyone to superadmin (only superadmin can)
+      if (validatedData.role === "superadmin" && currentUser.role !== "superadmin") {
+        return res.status(403).json({ error: "Only superadmin can promote to superadmin role" });
       }
 
       const updated = await storage.updateUser(id, validatedData);
@@ -330,9 +330,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Cannot delete your own account" });
       }
       
-      // Check if trying to delete superadmin
+      // Check if trying to delete superadmin - only superadmin can delete superadmin
       const targetUser = await storage.getUserById(id);
-      if (targetUser?.role === "superadmin") {
+      if (targetUser?.role === "superadmin" && currentUser.role !== "superadmin") {
         return res.status(403).json({ error: "Cannot delete superadmin account" });
       }
 
@@ -372,9 +372,9 @@ export async function registerRoutes(
       }
       const { email, role } = parseResult.data;
       
-      // Only superadmin can invite admins
-      if (role === "admin" && currentUser.role !== "superadmin") {
-        return res.status(403).json({ error: "Only superadmin can invite admins" });
+      // Only superadmin can invite superadmins (admin can invite other admins and users)
+      if (role === "superadmin" && currentUser.role !== "superadmin") {
+        return res.status(403).json({ error: "Only superadmin can invite superadmins" });
       }
 
       const invite = await storage.createInvite(email, role, currentUser.id);

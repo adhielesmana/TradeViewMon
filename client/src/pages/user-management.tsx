@@ -106,7 +106,9 @@ function InviteDialog({ onSuccess }: { onSuccess: () => void }) {
     createInvite.mutate({ email: email.trim(), role });
   };
 
-  const canInviteAdmin = user?.role === "superadmin";
+  // Admin and superadmin can invite admins, only superadmin can invite superadmins
+  const canInviteAdmin = user?.role === "superadmin" || user?.role === "admin";
+  const canInviteSuperadmin = user?.role === "superadmin";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -150,6 +152,9 @@ function InviteDialog({ onSuccess }: { onSuccess: () => void }) {
                   <SelectItem value="user" data-testid="option-role-user">User</SelectItem>
                   {canInviteAdmin && (
                     <SelectItem value="admin" data-testid="option-role-admin">Admin</SelectItem>
+                  )}
+                  {canInviteSuperadmin && (
+                    <SelectItem value="superadmin" data-testid="option-role-superadmin">Superadmin</SelectItem>
                   )}
                 </SelectContent>
               </Select>
@@ -226,9 +231,12 @@ function EditUserDialog({
     });
   };
 
-  const canChangeRole = currentUser?.role === "superadmin" && 
-    currentUser.id !== targetUser.id;
+  // Admin and superadmin can change roles, but admin cannot modify superadmin accounts
   const isSuperadminTarget = targetUser.role === "superadmin";
+  const canChangeRole = (currentUser?.role === "superadmin" || currentUser?.role === "admin") && 
+    currentUser?.id !== targetUser.id && 
+    !(isSuperadminTarget && currentUser?.role !== "superadmin");
+  const canPromoteToSuperadmin = currentUser?.role === "superadmin";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -266,7 +274,7 @@ function EditUserDialog({
                 data-testid="input-edit-email"
               />
             </div>
-            {canChangeRole && !isSuperadminTarget && (
+            {canChangeRole && (
               <div className="flex flex-col gap-2">
                 <label htmlFor="role" className="text-sm font-medium">
                   Role
@@ -278,11 +286,14 @@ function EditUserDialog({
                   <SelectContent>
                     <SelectItem value="user" data-testid="option-edit-role-user">User</SelectItem>
                     <SelectItem value="admin" data-testid="option-edit-role-admin">Admin</SelectItem>
+                    {canPromoteToSuperadmin && (
+                      <SelectItem value="superadmin" data-testid="option-edit-role-superadmin">Superadmin</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
             )}
-            {!isSuperadminTarget && currentUser?.id !== targetUser.id && (
+            {canChangeRole && currentUser?.id !== targetUser.id && (
               <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">
                   <label htmlFor="isActive" className="text-sm font-medium">
@@ -477,6 +488,7 @@ export default function UserManagementPage() {
   });
 
   const isSuperadmin = currentUser?.role === "superadmin";
+  const isAdminOrSuperadmin = currentUser?.role === "superadmin" || currentUser?.role === "admin";
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -650,9 +662,9 @@ export default function UserManagementPage() {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        {isSuperadmin && 
+                        {isAdminOrSuperadmin && 
                           user.id !== currentUser?.id && 
-                          user.role !== "superadmin" && (
+                          (isSuperadmin || user.role !== "superadmin") && (
                           <Button
                             variant="ghost"
                             size="icon"
