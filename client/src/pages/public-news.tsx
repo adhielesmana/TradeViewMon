@@ -387,6 +387,8 @@ export default function PublicNewsPage() {
   const { toast } = useToast();
   const isLoggedIn = !!user;
   const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null);
+  const [urlArticleId, setUrlArticleId] = useState<number | null>(null); // Article from URL (displayed as headline)
+  const [modalArticleId, setModalArticleId] = useState<number | null>(null); // Article for modal (from clicking)
   const [pastArticlesPage, setPastArticlesPage] = useState(1);
   const ARTICLES_PER_PAGE = 6;
   
@@ -400,12 +402,14 @@ export default function PublicNewsPage() {
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
   
   // Parse article ID from URL on page load (for sharing links like ?article=394)
+  // This article will be displayed as the headline, not in a modal
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const articleParam = urlParams.get('article');
     if (articleParam) {
       const articleId = parseInt(articleParam, 10);
       if (!isNaN(articleId) && articleId > 0) {
+        setUrlArticleId(articleId);
         setSelectedArticleId(articleId);
       }
     }
@@ -633,12 +637,24 @@ export default function PublicNewsPage() {
   } : null;
 
   const handleArticleClick = (id: number) => {
+    // Open article in modal when clicking (not from URL)
+    setModalArticleId(id);
     setSelectedArticleId(id);
   };
 
   const handleCloseModal = () => {
+    setModalArticleId(null);
+    // Only clear selectedArticleId if it wasn't set from URL
+    if (!urlArticleId) {
+      setSelectedArticleId(null);
+    }
+  };
+
+  // Function to clear URL article and return to latest news
+  const handleClearUrlArticle = () => {
+    setUrlArticleId(null);
     setSelectedArticleId(null);
-    // Remove article parameter from URL when closing modal
+    // Remove article parameter from URL
     const url = new URL(window.location.href);
     if (url.searchParams.has('article')) {
       url.searchParams.delete('article');
@@ -713,7 +729,129 @@ export default function PublicNewsPage() {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Featured Story - Left Column */}
           <div className="lg:col-span-2">
-            {isLoadingAnalysis ? (
+            {/* Show URL article as headline when present */}
+            {urlArticleId && selectedArticle ? (
+              <article data-testid="featured-article">
+                {/* Back to Latest button */}
+                <div className="mb-4 flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearUrlArticle}
+                    data-testid="button-back-to-latest"
+                    className="gap-2"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Back to Latest News
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Viewing article from {format(new Date(selectedArticle.analyzedAt), "MMMM d, yyyy")}
+                  </span>
+                </div>
+                
+                {/* Featured Image */}
+                <div className="relative mb-4 overflow-hidden rounded-lg">
+                  <img
+                    src={selectedArticle.imageUrl || generateArticleImage({ id: selectedArticle.id, headline: selectedArticle.headline, summary: selectedArticle.summary })}
+                    alt="Market Analysis"
+                    className="aspect-video w-full object-cover"
+                    data-testid="img-featured-article"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-6">
+                    <Badge 
+                      variant={selectedArticle.overallSentiment === "BULLISH" ? "default" : selectedArticle.overallSentiment === "BEARISH" ? "destructive" : "secondary"}
+                      className="mb-3"
+                    >
+                      {selectedArticle.overallSentiment} Market
+                    </Badge>
+                    <h1 className="mb-2 text-2xl font-bold text-white md:text-3xl lg:text-4xl" data-testid="text-headline-featured">
+                      {selectedArticle.headline || `${selectedArticle.overallSentiment} Market Outlook`}
+                    </h1>
+                    <div className="flex items-center gap-4 text-white/80">
+                      <span className="flex items-center gap-1 text-sm" data-testid="text-timestamp">
+                        <Clock className="h-4 w-4" />
+                        {format(new Date(selectedArticle.analyzedAt), "MMMM d, yyyy 'at' HH:mm")}
+                      </span>
+                      <span className="text-sm" data-testid="text-confidence">
+                        Confidence: {selectedArticle.confidence}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Share buttons */}
+                <div className="mb-4 flex items-center gap-2">
+                  <InlineShareButton
+                    headline={selectedArticle.headline || `${selectedArticle.overallSentiment} Market Analysis`}
+                    summary={selectedArticle.summary}
+                    articleId={selectedArticle.id}
+                    imageUrl={selectedArticle.imageUrl || generateArticleImage(selectedArticle)}
+                  />
+                </div>
+
+                {/* Article Summary */}
+                <p className="mb-4 text-lg text-muted-foreground leading-relaxed text-justify" data-testid="text-summary-featured">
+                  {selectedArticle.summary}
+                </p>
+
+                {/* Full Generated Article */}
+                {selectedArticle.generatedArticle && (
+                  <div className="mb-4 space-y-4 text-muted-foreground leading-relaxed text-justify">
+                    {selectedArticle.generatedArticle.split('\n').map((paragraph, i) => (
+                      paragraph.trim() && <p key={i}>{paragraph}</p>
+                    ))}
+                  </div>
+                )}
+
+                {/* Key Factors */}
+                {selectedArticle.keyFactorsParsed.length > 0 && (
+                  <div className="mb-4" data-testid="section-key-factors">
+                    <h3 className="mb-2 font-semibold">Key Market Factors</h3>
+                    <ul className="space-y-1 text-sm text-muted-foreground">
+                      {selectedArticle.keyFactorsParsed.map((factor, i) => (
+                        <li key={i} className="flex items-start gap-2" data-testid={`text-factor-${i}`}>
+                          <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          {factor}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Affected Symbols */}
+                {selectedArticle.affectedSymbolsParsed.length > 0 && (
+                  <div className="flex flex-wrap gap-2" data-testid="section-affected-symbols">
+                    {selectedArticle.affectedSymbolsParsed.map((s) => (
+                      <Badge 
+                        key={s.symbol} 
+                        variant="outline"
+                        data-testid={`badge-symbol-${s.symbol}`}
+                        className={s.impact === "POSITIVE" ? "border-green-500/50 text-green-600 dark:text-green-400" : s.impact === "NEGATIVE" ? "border-red-500/50 text-red-600 dark:text-red-400" : ""}
+                      >
+                        <SentimentIcon sentiment={s.impact === "POSITIVE" ? "BULLISH" : s.impact === "NEGATIVE" ? "BEARISH" : "NEUTRAL"} />
+                        <span className="ml-1">{s.symbol}</span>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                {/* Trading Recommendation */}
+                {selectedArticle.tradingRecommendation && (
+                  <Card className="mt-4">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Target className="h-5 w-5 text-primary" />
+                        Trading Recommendation
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">{selectedArticle.tradingRecommendation}</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </article>
+            ) : isLoadingAnalysis || isLoadingArticle ? (
               <div className="space-y-4">
                 <Skeleton className="h-80 w-full rounded-lg" />
                 <Skeleton className="h-8 w-3/4" />
@@ -1226,7 +1364,7 @@ export default function PublicNewsPage() {
       </Dialog>
 
       {/* Article Modal */}
-      <Dialog open={selectedArticleId !== null} onOpenChange={(open) => !open && handleCloseModal()}>
+      <Dialog open={modalArticleId !== null} onOpenChange={(open) => !open && handleCloseModal()}>
         <DialogContent className="max-w-3xl max-h-[90vh] p-0" data-testid="modal-article">
           <VisuallyHidden>
             <DialogTitle>Article Details</DialogTitle>
