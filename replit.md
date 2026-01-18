@@ -35,9 +35,9 @@ Preferred communication style: Simple, everyday language.
 - **News Service**: RSS feed integration (configurable via Settings, default: Yahoo Finance) with OpenAI analysis to generate market predictions based on news sentiment, key factors, affected symbols, and trading recommendations. Features AI analysis caching (`news_analysis_snapshots` table) for fast page loads with background refresh when cache is stale (10+ minutes). Includes Article History feature with paginated browsing of past predictions and auto-generated 4-paragraph professional market analysis articles stored in `generatedArticle` column. **Automatic image extraction** from RSS feeds using media:content, media:thumbnail, enclosure, and HTML img tags - images are stored per article (`imageUrl` column) and propagated to snapshots for unique featured images per analysis.
 - **Enhanced Hourly AI Analysis**: Runs every hour at minute 0 (plus initial run 30 seconds after startup) to perform deep market analysis:
   - Reads FULL article content from the last 1 hour (not just RSS summaries)
-  - Incorporates last 7 days of stored AI predictions as supplemental context for trend analysis
+  - Incorporates last 14 days of stored AI predictions as supplemental context for trend analysis
   - Stores results with `sourceArticles`, `historicalContext`, and `analysisType` fields for traceability
-  - Keeps last 168 hourly snapshots (7 days of data) for historical analysis
+  - Keeps last 336 hourly snapshots (14 days of data) for historical analysis
 - **Market Data Service**: Multi-source price verification system:
   - BTCUSD: Finnhub (BINANCE:BTCUSDT) primary, Gold-API fallback
   - XAUUSD/XAGUSD: Gold-API primary, Yahoo Finance futures (GC=F, SI=F) verification

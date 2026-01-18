@@ -399,6 +399,18 @@ export default function PublicNewsPage() {
   const [signupPassword, setSignupPassword] = useState("");
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
   
+  // Parse article ID from URL on page load (for sharing links like ?article=394)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const articleParam = urlParams.get('article');
+    if (articleParam) {
+      const articleId = parseInt(articleParam, 10);
+      if (!isNaN(articleId) && articleId > 0) {
+        setSelectedArticleId(articleId);
+      }
+    }
+  }, []);
+  
   // Login mutation
   const loginMutation = useMutation({
     mutationFn: async ({ username, password }: { username: string; password: string }) => {
@@ -626,6 +638,12 @@ export default function PublicNewsPage() {
 
   const handleCloseModal = () => {
     setSelectedArticleId(null);
+    // Remove article parameter from URL when closing modal
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('article')) {
+      url.searchParams.delete('article');
+      window.history.replaceState({}, '', url.pathname + url.search);
+    }
   };
 
   return (

@@ -454,8 +454,8 @@ async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"],
     
     await storage.saveNewsAnalysisSnapshot(snapshot);
     
-    // Clean up old snapshots (keep last 168 - 7 days of hourly data)
-    await storage.deleteOldNewsAnalysisSnapshots(168);
+    // Clean up old snapshots (keep last 336 - 14 days of hourly data)
+    await storage.deleteOldNewsAnalysisSnapshots(336);
     
     console.log("[NewsService] Analysis cached successfully");
   } catch (error) {
@@ -643,9 +643,9 @@ export async function runHourlyAiAnalysis(): Promise<HourlyAnalysisResult> {
     const recentArticles = await storage.getNewsArticlesLastHour();
     console.log(`[NewsService] Found ${recentArticles.length} articles from last hour`);
     
-    // Step 2: Get last 7 days of AI predictions for historical context
-    const historicalPredictions = await storage.getNewsAnalysisSnapshotsLast7Days();
-    console.log(`[NewsService] Found ${historicalPredictions.length} historical predictions from last 7 days`);
+    // Step 2: Get last 14 days of AI predictions for historical context
+    const historicalPredictions = await storage.getNewsAnalysisSnapshotsLast14Days();
+    console.log(`[NewsService] Found ${historicalPredictions.length} historical predictions from last 14 days`);
     
     // Get supported symbols from database
     const monitoredSymbols = await storage.getMonitoredSymbols();
@@ -734,7 +734,7 @@ If articles lack clear trading signals, default to NEUTRAL with appropriate expl
 === RECENT NEWS ARTICLES (Last 1 Hour) ===
 ${articleContext}
 
-=== HISTORICAL AI PREDICTIONS (Last 7 Days) ===
+=== HISTORICAL AI PREDICTIONS (Last 14 Days) ===
 ${historicalContext}
 
 Generate your market prediction now.`
@@ -810,8 +810,8 @@ Generate your market prediction now.`
     
     await storage.saveNewsAnalysisSnapshot(snapshot);
     
-    // Keep last 168 snapshots (7 days of hourly data)
-    await storage.deleteOldNewsAnalysisSnapshots(168);
+    // Keep last 336 snapshots (14 days of hourly data)
+    await storage.deleteOldNewsAnalysisSnapshots(336);
     
     console.log(`[NewsService] Hourly AI analysis completed: ${prediction.overallSentiment} (${prediction.confidence}% confidence)`);
     console.log(`[NewsService] Analyzed ${recentArticles.length} articles with ${historicalPredictions.length} historical predictions`);
@@ -1400,13 +1400,13 @@ export async function fetchAndStoreNews(): Promise<{ stored: number; total: numb
 }
 
 export async function cleanupOldNews(): Promise<number> {
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const fourteenDaysAgo = new Date();
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
   
-  const deleted = await storage.deleteOldNewsArticles(sevenDaysAgo);
+  const deleted = await storage.deleteOldNewsArticles(fourteenDaysAgo);
   
   if (deleted > 0) {
-    console.log(`[NewsService] Cleaned up ${deleted} articles older than 7 days`);
+    console.log(`[NewsService] Cleaned up ${deleted} articles older than 14 days`);
   }
   
   return deleted;

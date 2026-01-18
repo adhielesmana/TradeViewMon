@@ -344,8 +344,8 @@ class Scheduler {
 
     console.log("[Scheduler] Scheduler started - running every 60 seconds for market data and predictions");
     console.log("[Scheduler] Currency rates will update every 12 hours");
-    console.log("[Scheduler] News fetch every 15 minutes with 7-day retention for AI learning");
-    console.log("[Scheduler] Hourly AI analysis with full article content and 7-day historical context");
+    console.log("[Scheduler] News fetch every 15 minutes with 14-day retention for AI learning");
+    console.log("[Scheduler] Hourly AI analysis with full article content and 14-day historical context");
     console.log("[Scheduler] Midnight profitable positions auto-close enabled at 00:00:00 daily");
   }
 
@@ -499,21 +499,21 @@ class Scheduler {
     }
   }
 
-  // News cleanup task: Delete news older than 7 days
+  // News cleanup task: Delete news older than 14 days
   private async runNewsCleanup(): Promise<void> {
     try {
       const { cleanupOldNews } = await import("./news-service");
       const deleted = await cleanupOldNews();
       
       if (deleted > 0) {
-        console.log(`[Scheduler] News cleanup: deleted ${deleted} articles older than 7 days`);
+        console.log(`[Scheduler] News cleanup: deleted ${deleted} articles older than 14 days`);
       }
     } catch (error) {
       console.error("[Scheduler] Error cleaning up old news:", error);
     }
   }
 
-  // Hourly AI analysis: Full article content analysis with 7-day historical context
+  // Hourly AI analysis: Full article content analysis with 14-day historical context
   private async runHourlyAiAnalysis(): Promise<void> {
     try {
       console.log("[Scheduler] Starting hourly AI market analysis...");

@@ -172,7 +172,7 @@ export interface IStorage {
   getLatestNewsAnalysisSnapshot(): Promise<NewsAnalysisSnapshot | null>;
   saveNewsAnalysisSnapshot(snapshot: InsertNewsAnalysisSnapshot): Promise<NewsAnalysisSnapshot>;
   deleteOldNewsAnalysisSnapshots(keepCount?: number): Promise<number>;
-  getNewsAnalysisSnapshotsLast7Days(): Promise<NewsAnalysisSnapshot[]>;
+  getNewsAnalysisSnapshotsLast14Days(): Promise<NewsAnalysisSnapshot[]>;
   getNewsAnalysisSnapshotsPaginated(page: number, pageSize: number): Promise<{ snapshots: NewsAnalysisSnapshot[]; total: number; totalPages: number }>;
   getNewsAnalysisSnapshotById(id: number): Promise<NewsAnalysisSnapshot | null>;
   
@@ -1528,11 +1528,11 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  async getNewsAnalysisSnapshotsLast7Days(): Promise<NewsAnalysisSnapshot[]> {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  async getNewsAnalysisSnapshotsLast14Days(): Promise<NewsAnalysisSnapshot[]> {
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
     return db.select()
       .from(newsAnalysisSnapshots)
-      .where(gte(newsAnalysisSnapshots.analyzedAt, sevenDaysAgo))
+      .where(gte(newsAnalysisSnapshots.analyzedAt, fourteenDaysAgo))
       .orderBy(desc(newsAnalysisSnapshots.analyzedAt));
   }
 
