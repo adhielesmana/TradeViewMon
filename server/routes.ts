@@ -142,12 +142,127 @@ function getDateRange(period: string): { startDate: Date; endDate: Date } {
   return { startDate, endDate };
 }
 
+// Helper to escape HTML for meta tags
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// Check if request is from social media crawler
+function isSocialMediaCrawler(userAgent: string): boolean {
+  const crawlerPatterns = [
+    /facebookexternalhit/i,
+    /Facebot/i,
+    /Twitterbot/i,
+    /LinkedInBot/i,
+    /WhatsApp/i,
+    /TelegramBot/i,
+    /Slackbot/i,
+    /Discordbot/i,
+    /Pinterest/i,
+    /bot/i,
+    /crawler/i,
+    /spider/i,
+  ];
+  return crawlerPatterns.some(pattern => pattern.test(userAgent));
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   await seedSuperadmin();
   await seedTestUsers();
+  
+  // Middleware to serve dynamic Open Graph meta tags for shared articles
+  // This intercepts social media crawlers requesting article URLs
+  app.get("/", async (req, res, next) => {
+    const articleId = req.query.article;
+    const userAgent = req.headers["user-agent"] || "";
+    
+    // Only intercept if this is a social media crawler AND has article param
+    if (!articleId || !isSocialMediaCrawler(userAgent)) {
+      return next();
+    }
+    
+    try {
+      const id = parseInt(articleId as string, 10);
+      if (isNaN(id) || id <= 0) {
+        return next();
+      }
+      
+      const snapshot = await storage.getNewsAnalysisSnapshotById(id);
+      if (!snapshot) {
+        return next();
+      }
+      
+      const headline = snapshot.headline || `${snapshot.overallSentiment} Market Analysis`;
+      const summary = snapshot.summary || "AI-powered market analysis and trading insights";
+      const description = summary.length > 200 ? summary.substring(0, 197) + "..." : summary;
+      
+      // Determine image URL - use stored image or generate placeholder
+      let imageUrl = snapshot.imageUrl || "";
+      if (!imageUrl) {
+        // Use a placeholder image with the headline
+        imageUrl = `https://placehold.co/1200x630/1a1a2e/ffffff?text=${encodeURIComponent(headline.substring(0, 40))}`;
+      }
+      
+      // Build the canonical URL
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers.host || "trading.adhielesmana.com";
+      const canonicalUrl = `${protocol}://${host}/?article=${id}`;
+      
+      // Serve minimal HTML with Open Graph meta tags
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(headline)} | Trady</title>
+  <meta name="description" content="${escapeHtml(description)}">
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
+  <meta property="og:title" content="${escapeHtml(headline)}">
+  <meta property="og:description" content="${escapeHtml(description)}">
+  <meta property="og:image" content="${escapeHtml(imageUrl)}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="Trady - Global Market Trading News">
+  
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="${escapeHtml(canonicalUrl)}">
+  <meta name="twitter:title" content="${escapeHtml(headline)}">
+  <meta name="twitter:description" content="${escapeHtml(description)}">
+  <meta name="twitter:image" content="${escapeHtml(imageUrl)}">
+  
+  <link rel="icon" type="image/png" href="/favicon.png">
+  
+  <!-- Redirect for regular browsers (crawlers ignore JS) -->
+  <script>window.location.href = "${escapeHtml(canonicalUrl)}";</script>
+  <noscript>
+    <meta http-equiv="refresh" content="0; url=${escapeHtml(canonicalUrl)}">
+  </noscript>
+</head>
+<body>
+  <h1>${escapeHtml(headline)}</h1>
+  <p>${escapeHtml(description)}</p>
+  <p><a href="${escapeHtml(canonicalUrl)}">Read the full analysis on Trady</a></p>
+</body>
+</html>`;
+      
+      res.status(200).set({ "Content-Type": "text/html" }).send(html);
+    } catch (error) {
+      console.error("[Routes] Error generating meta tags for article:", error);
+      next();
+    }
+  });
   
   // Register object storage routes for file uploads
   registerObjectStorageRoutes(app);
