@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, Key, CheckCircle, AlertCircle, Info, Loader2, Eye, EyeOff, Bot, Rss, Plus, Pencil, Trash2, TrendingUp, Upload, Image, X } from "lucide-react";
+import { Settings, Key, CheckCircle, AlertCircle, Info, Loader2, Eye, EyeOff, Bot, Rss, Plus, Pencil, Trash2, TrendingUp, Upload, Image, X, RefreshCw } from "lucide-react";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { useUpload } from "@/hooks/use-upload";
 import { LogoCropModal } from "@/components/logo-crop-modal";
@@ -358,6 +358,30 @@ export default function SettingsPage() {
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // State for tracking which symbol is being refreshed
+  const [refreshingSymbolId, setRefreshingSymbolId] = useState<number | null>(null);
+
+  const refreshSymbolMutation = useMutation({
+    mutationFn: async (id: number) => {
+      setRefreshingSymbolId(id);
+      const response = await apiRequest("POST", `/api/settings/symbols/${id}/refresh`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "Success", 
+        description: data.displayName ? `Updated: ${data.displayName}` : "Symbol description refreshed" 
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/symbols"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/market/symbols"] });
+      setRefreshingSymbolId(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      setRefreshingSymbolId(null);
     },
   });
 
@@ -1023,6 +1047,16 @@ export default function SettingsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => refreshSymbolMutation.mutate(symbol.id)} 
+                          disabled={refreshingSymbolId === symbol.id}
+                          title="Refresh description from Yahoo Finance"
+                          data-testid={`button-refresh-symbol-${symbol.id}`}
+                        >
+                          <RefreshCw className={`h-4 w-4 ${refreshingSymbolId === symbol.id ? 'animate-spin' : ''}`} />
+                        </Button>
                         <Button variant="ghost" size="icon" onClick={() => openEditSymbolDialog(symbol)} data-testid={`button-edit-symbol-${symbol.id}`}>
                           <Pencil className="h-4 w-4" />
                         </Button>
