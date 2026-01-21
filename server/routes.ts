@@ -2261,6 +2261,47 @@ export async function registerRoutes(
     }
   });
 
+  // Auto-refresh symbol description from Yahoo Finance
+  app.post("/api/settings/symbols/:id/refresh", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const symbols = await storage.getMonitoredSymbols();
+      const symbol = symbols.find(s => s.id === id);
+      
+      if (!symbol) {
+        return res.status(404).json({ error: "Symbol not found" });
+      }
+      
+      // Detect if Indonesian stock
+      const isIndonesian = symbol.currency === "IDR" || 
+                           symbol.displayName?.includes("(IDX)") ||
+                           symbol.category?.toLowerCase().includes("indonesian");
+      
+      // Fetch company info from Yahoo Finance
+      const companyInfo = await marketDataService.fetchCompanyInfo(symbol.symbol, isIndonesian);
+      
+      if (!companyInfo) {
+        return res.status(404).json({ error: "Could not fetch company info from Yahoo Finance" });
+      }
+      
+      // Update the symbol with new info
+      const updated = await storage.updateMonitoredSymbol(id, {
+        displayName: companyInfo.name,
+        currency: companyInfo.currency,
+        category: isIndonesian ? "Indonesian Stocks" : symbol.category,
+      });
+      
+      res.json({ 
+        success: true, 
+        symbol: updated,
+        message: `Updated to: "${companyInfo.name}" (${companyInfo.currency})`
+      });
+    } catch (error) {
+      console.error("Error refreshing symbol info:", error);
+      res.status(500).json({ error: "Failed to refresh symbol info" });
+    }
+  });
+
   // AI auto-detect symbol info (for user-added symbols)
   app.post("/api/market/symbols/detect", requireAuth, async (req, res) => {
     try {
@@ -2403,18 +2444,19 @@ Return ONLY valid JSON, no markdown or explanation.`
   }
 
   // Add symbol (user-accessible - any logged in user can add)
+  // Supports auto-detection of company description from Yahoo Finance
   app.post("/api/market/symbols", requireAuth, async (req, res) => {
     try {
-      const { symbol, displayName, category, currency } = req.body;
+      const { symbol, displayName, category, currency, autoDetect } = req.body;
       
-      if (!symbol || !displayName) {
-        return res.status(400).json({ error: "Symbol and display name are required" });
+      if (!symbol) {
+        return res.status(400).json({ error: "Symbol is required" });
       }
       
       const trimmedSymbol = symbol.trim().toUpperCase();
-      const trimmedDisplayName = displayName.trim();
-      const trimmedCategory = (category || "stocks").trim().toLowerCase();
-      const trimmedCurrency = (currency || "USD").trim().toUpperCase();
+      let trimmedDisplayName = displayName?.trim() || trimmedSymbol;
+      let trimmedCategory = (category || "stocks").trim().toLowerCase();
+      let trimmedCurrency = (currency || "USD").trim().toUpperCase();
       
       // Check for duplicates
       const existingSymbols = await storage.getMonitoredSymbols();
@@ -2422,7 +2464,24 @@ Return ONLY valid JSON, no markdown or explanation.`
         return res.status(400).json({ error: "Symbol already exists" });
       }
       
-      // Auto-detect Indonesian stocks
+      // Detect if likely Indonesian stock (by symbol pattern or explicit flag)
+      const likelyIndonesian = trimmedDisplayName.includes("(IDX)") || 
+                               trimmedCurrency === "IDR" ||
+                               autoDetect === "indonesian";
+      
+      // Auto-detect company info from Yahoo Finance if no display name provided or autoDetect enabled
+      if (autoDetect !== false && (!displayName || displayName.trim() === trimmedSymbol)) {
+        console.log(`[Symbols] Auto-detecting company info for ${trimmedSymbol}...`);
+        const companyInfo = await marketDataService.fetchCompanyInfo(trimmedSymbol, likelyIndonesian);
+        
+        if (companyInfo) {
+          trimmedDisplayName = companyInfo.name;
+          trimmedCurrency = companyInfo.currency;
+          console.log(`[Symbols] Auto-detected: "${trimmedDisplayName}" (${trimmedCurrency})`);
+        }
+      }
+      
+      // Final Indonesian stock detection after auto-detection
       const isIndonesianStock = trimmedDisplayName.includes("(IDX)") || trimmedCurrency === "IDR";
       
       // Get max priority for ordering
@@ -2441,13 +2500,13 @@ Return ONLY valid JSON, no markdown or explanation.`
       
       // Register with market data service if Indonesian stock
       if (isIndonesianStock) {
-        const { marketDataService } = await import("./market-data-service");
         marketDataService.registerIndonesianStock(trimmedSymbol);
       }
       
       res.json({ 
         success: true, 
         symbol: newSymbol,
+        autoDetected: !!autoDetect || (!displayName || displayName.trim() === trimmedSymbol),
         message: `Symbol ${trimmedSymbol} added successfully`
       });
     } catch (error: any) {

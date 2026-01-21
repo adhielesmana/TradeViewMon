@@ -43,6 +43,8 @@ Preferred communication style: Simple, everyday language.
   - XAUUSD/XAGUSD: Gold-API primary, Yahoo Finance futures (GC=F, SI=F) verification
   - Stocks: Finnhub (GDX, SPY, USO) or Yahoo Finance (.JK suffix for Indonesian)
   - On-demand historical data seeding and simulated data for unsupported symbols (US10Y)
+  - **Auto-detection of company info**: Fetches company names from Yahoo Finance when adding symbols (e.g., PTBA → "PT Bukit Asam Tbk (IDX)")
+- **Test Users**: Demo/test users (testuser, demotrader) are only seeded in development environment, NOT in production
 - **Risk Manager**: Comprehensive risk management service (`server/risk-manager.ts`) enforcing:
   - **Daily Loss Limit**: Maximum 3% of account balance or $500 per day
   - **Consecutive Loss Halt**: Trading pauses after 3 consecutive losing trades

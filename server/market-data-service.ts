@@ -126,6 +126,54 @@ export class MarketDataService {
     return { isConfigured, source: this.keySource, maskedValue };
   }
 
+  // Fetch company info from Yahoo Finance for auto-detection of stock descriptions
+  // Returns company name and currency for the given symbol
+  async fetchCompanyInfo(symbol: string, isIndonesian: boolean = false): Promise<{ name: string; currency: string; exchange: string } | null> {
+    try {
+      const yahooSymbol = isIndonesian ? `${symbol}.JK` : symbol;
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=1d&range=1d`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+      
+      if (!response.ok) {
+        console.log(`[MarketData] Yahoo Finance info fetch failed for ${yahooSymbol}: ${response.status}`);
+        return null;
+      }
+      
+      const data = await response.json();
+      const meta = data?.chart?.result?.[0]?.meta;
+      
+      if (!meta) {
+        console.log(`[MarketData] No meta data from Yahoo for ${yahooSymbol}`);
+        return null;
+      }
+      
+      // Yahoo returns short name and long name
+      let companyName = meta.longName || meta.shortName || symbol;
+      const currency = meta.currency || (isIndonesian ? "IDR" : "USD");
+      const exchange = meta.exchangeName || meta.exchange || (isIndonesian ? "IDX" : "");
+      
+      // Clean up common suffixes for Indonesian stocks
+      if (isIndonesian && companyName) {
+        // Add (IDX) suffix if not already present
+        if (!companyName.includes("(IDX)") && !companyName.includes("IDX")) {
+          companyName = `${companyName} (IDX)`;
+        }
+      }
+      
+      console.log(`[MarketData] ✓ Fetched company info for ${symbol}: "${companyName}" (${currency}, ${exchange})`);
+      
+      return { name: companyName, currency, exchange };
+    } catch (error) {
+      console.error(`[MarketData] Error fetching company info for ${symbol}:`, error);
+      return null;
+    }
+  }
+
   // Dynamically register an Indonesian stock for Yahoo Finance fetching
   // Called when symbols with (IDX) in displayName are created/updated
   registerIndonesianStock(symbol: string): boolean {

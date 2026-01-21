@@ -81,13 +81,19 @@ export async function seedSuperadmin(): Promise<void> {
   }
 }
 
-// Seed dummy test users for demo trading testing
+// Seed dummy test users for demo trading testing (DEVELOPMENT ONLY)
 const TEST_USERS = [
   { username: "testuser", password: "test123", role: "user" },
   { username: "demotrader", password: "demo123", role: "user" },
 ];
 
 export async function seedTestUsers(): Promise<void> {
+  // Only seed test users in development environment
+  if (process.env.NODE_ENV === "production") {
+    console.log("Skipping test user seeding in production environment");
+    return;
+  }
+  
   for (const testUser of TEST_USERS) {
     const existingUser = await findUserByUsername(testUser.username);
     
