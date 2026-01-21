@@ -138,11 +138,12 @@ find_available_port() {
     local max_attempts=20
     local attempt=0
     
-    log_info "Scanning for available port starting from $port..."
+    # Note: All messages go to stderr so they don't pollute the return value
+    echo -e "${BLUE}[INFO]${NC} Scanning for available port starting from $port..." >&2
     
     while [ $attempt -lt $max_attempts ]; do
         if ! is_port_in_use $port; then
-            echo $port
+            echo $port  # Only the port number goes to stdout
             return 0
         fi
         echo -e "${YELLOW}[WARN]${NC} Port $port is in use, trying port $((port + 1))..." >&2
