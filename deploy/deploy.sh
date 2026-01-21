@@ -102,23 +102,55 @@ elif [ ! -f "$DEPLOY_CONFIG" ] && [ -n "$DOMAIN" ]; then
     log_info "First time setup with domain, will configure Nginx/SSL"
 fi
 
+is_port_in_use() {
+    local port=$1
+    
+    # Check system-level port binding (ss or netstat)
+    if ss -tuln 2>/dev/null | grep -qE "(:$port\s|:$port$)"; then
+        return 0  # Port is in use
+    fi
+    
+    # Check Docker container port bindings (handles various formats)
+    # Format examples: 0.0.0.0:5000->5000/tcp, 127.0.0.1:5000->5000, :::5000->5000
+    if docker ps --format '{{.Ports}}' 2>/dev/null | grep -qE "(^|,\s*)([0-9.]+:|:::)?$port->"; then
+        return 0  # Port is in use by Docker
+    fi
+    
+    # Also check docker-compose exposed ports for running services
+    if docker port trady 2>/dev/null | grep -qE ":$port$"; then
+        return 0  # Port is in use by our own container (shouldn't happen after shutdown)
+    fi
+    
+    # Additional check: try to bind to the port briefly
+    if command -v nc &> /dev/null; then
+        if ! nc -z 127.0.0.1 $port 2>/dev/null; then
+            return 1  # Port is available
+        else
+            return 0  # Port is in use
+        fi
+    fi
+    
+    return 1  # Port appears available
+}
+
 find_available_port() {
     local port=$1
-    local max_attempts=10
+    local max_attempts=20
     local attempt=0
     
+    log_info "Scanning for available port starting from $port..."
+    
     while [ $attempt -lt $max_attempts ]; do
-        if ! ss -tuln 2>/dev/null | grep -q ":$port " && \
-           ! docker ps --format '{{.Ports}}' 2>/dev/null | grep -q ":$port->"; then
+        if ! is_port_in_use $port; then
             echo $port
             return 0
         fi
-        echo -e "${YELLOW}[WARN]${NC} Port $port is in use, trying next port..." >&2
+        echo -e "${YELLOW}[WARN]${NC} Port $port is in use, trying port $((port + 1))..." >&2
         port=$((port + 1))
         attempt=$((attempt + 1))
     done
     
-    echo -e "${RED}[ERROR]${NC} Could not find available port after $max_attempts attempts" >&2
+    echo -e "${RED}[ERROR]${NC} Could not find available port after $max_attempts attempts (tried $1-$port)" >&2
     exit 1
 }
 
@@ -165,7 +197,15 @@ docker rm -f trady-db 2>/dev/null || true
 # Clean up any containers with trady in the name (only Trady!)
 docker ps -a --filter "name=trady" --format "{{.ID}}" 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true
 
+# Wait for ports to be released
+log_info "Waiting for ports to be released..."
+sleep 3
+
 log_info "Trady instances stopped (other apps untouched)"
+
+# Show current Docker port usage for debugging
+log_info "Currently used Docker ports:"
+docker ps --format "  {{.Names}}: {{.Ports}}" 2>/dev/null | head -10 || echo "  (none)"
 echo ""
 
 # Git pull to get latest code (unless skipped)
@@ -280,9 +320,60 @@ log_info "Cleaning up old Docker images (to ensure fresh build)..."
 docker rmi -f trady:latest 2>/dev/null || true
 docker builder prune -f 2>/dev/null || true
 
-log_info "Building and starting services (with no cache)..."
+log_info "Building services (with no cache)..."
 docker compose -f deploy/docker-compose.yml build --no-cache
-docker compose -f deploy/docker-compose.yml up -d
+
+# Start containers with port retry logic
+start_containers_with_retry() {
+    local max_retries=5
+    local retry=0
+    
+    while [ $retry -lt $max_retries ]; do
+        log_info "Starting services on port $APP_PORT (attempt $((retry + 1))/$max_retries)..."
+        
+        # Try to start the containers
+        if docker compose -f deploy/docker-compose.yml up -d 2>&1; then
+            # Verify container is actually running
+            sleep 2
+            if docker ps --filter "name=trady" --filter "status=running" --format "{{.Names}}" | grep -q "trady"; then
+                log_info "Containers started successfully on port $APP_PORT"
+                return 0
+            fi
+        fi
+        
+        # Check if failure was due to port conflict
+        if docker logs trady 2>&1 | grep -q "address already in use\|port is already allocated" || \
+           docker compose -f deploy/docker-compose.yml logs 2>&1 | grep -q "Bind for.*failed"; then
+            log_warn "Port $APP_PORT conflict detected, trying next port..."
+            
+            # Stop failed container
+            docker compose -f deploy/docker-compose.yml down 2>/dev/null || true
+            docker rm -f trady 2>/dev/null || true
+            
+            # Increment port and update env
+            APP_PORT=$((APP_PORT + 1))
+            export APP_PORT
+            
+            # Update env file
+            sed -i "s/^APP_PORT=.*/APP_PORT=$APP_PORT/" $ENV_FILE
+            
+            retry=$((retry + 1))
+        else
+            # Non-port related failure
+            log_error "Container failed to start (not port-related). Check logs: docker logs trady"
+            return 1
+        fi
+    done
+    
+    log_error "Could not find available port after $max_retries attempts"
+    return 1
+}
+
+# Start containers with retry
+if ! start_containers_with_retry; then
+    log_error "Failed to start containers. Check docker logs for details."
+    exit 1
+fi
 
 # Wait for services to be healthy
 log_info "Waiting for services to start..."
