@@ -169,9 +169,11 @@ export function SymbolSelector() {
                         currentSymbol.symbol === sym.symbol ? "opacity-100" : "opacity-0"
                       )}
                     />
-                    <div className="flex flex-1 items-center justify-between">
-                      <span className="font-mono font-semibold">{sym.symbol}</span>
-                      <span className="text-xs text-muted-foreground">{sym.name}</span>
+                    <div className="flex flex-1 items-center gap-2 min-w-0">
+                      <span className="font-mono font-semibold shrink-0">{sym.symbol}</span>
+                      <span className="text-xs text-muted-foreground truncate" title={sym.name}>
+                        {sym.name.length > 25 ? sym.name.substring(0, 25) + "..." : sym.name}
+                      </span>
                     </div>
                   </CommandItem>
                 ))}
