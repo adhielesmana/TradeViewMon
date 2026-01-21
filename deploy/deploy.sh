@@ -488,3 +488,78 @@ if [ -z "$FINNHUB_KEY" ] && [ -z "$FINNHUB_API_KEY" ]; then
     log_warn "  1. Settings page in the app (recommended)"
     log_warn "  2. Redeploy with: ./deploy/deploy.sh --finnhub-key YOUR_KEY"
 fi
+
+# ============================================
+# STEP: Setup Docker Cleanup Timer
+# ============================================
+setup_docker_cleanup() {
+    log_info "Setting up automatic Docker cleanup..."
+    
+    CLEANUP_SCRIPT="$SCRIPT_DIR/docker-cleanup.sh"
+    SERVICE_FILE="$SCRIPT_DIR/docker-cleanup.service"
+    TIMER_FILE="$SCRIPT_DIR/docker-cleanup.timer"
+    
+    if [ ! -f "$CLEANUP_SCRIPT" ]; then
+        log_warn "Docker cleanup script not found, skipping auto-cleanup setup"
+        return
+    fi
+    
+    # Make cleanup script executable
+    chmod +x "$CLEANUP_SCRIPT"
+    
+    # Check if we have systemd
+    if command -v systemctl &> /dev/null && [ -d "/etc/systemd/system" ]; then
+        # Install systemd timer
+        if [ -w /etc/systemd/system ] || [ "$(id -u)" = "0" ]; then
+            log_info "Installing systemd timer for Docker cleanup..."
+            
+            # Update service file with correct path
+            sed "s|/opt/trady/deploy/docker-cleanup.sh|$CLEANUP_SCRIPT|g" "$SERVICE_FILE" > /etc/systemd/system/docker-cleanup.service
+            cp "$TIMER_FILE" /etc/systemd/system/docker-cleanup.timer
+            
+            # Enable and start timer
+            systemctl daemon-reload
+            systemctl enable docker-cleanup.timer
+            systemctl start docker-cleanup.timer
+            
+            log_info "Docker cleanup timer installed (runs daily at 3 AM)"
+            log_info "  Check status: systemctl status docker-cleanup.timer"
+            log_info "  View logs:    journalctl -u docker-cleanup.service"
+        else
+            log_warn "Cannot install systemd timer (need root access)"
+            log_warn "Install manually with: sudo $SCRIPT_DIR/install-cleanup-timer.sh"
+        fi
+    else
+        # Fall back to cron
+        log_info "Systemd not available, setting up cron job..."
+        
+        CRON_JOB="0 3 * * * $CLEANUP_SCRIPT"
+        
+        if crontab -l 2>/dev/null | grep -q "docker-cleanup.sh"; then
+            log_info "Docker cleanup cron job already exists"
+        else
+            (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
+            log_info "Docker cleanup cron job installed (runs daily at 3 AM)"
+        fi
+    fi
+}
+
+# Run cleanup timer setup
+setup_docker_cleanup
+
+# ============================================
+# STEP: Timezone Configuration Info
+# ============================================
+log_info ""
+log_info "Timezone Configuration:"
+HOST_TZ=$(cat /etc/timezone 2>/dev/null || timedatectl show --property=Timezone --value 2>/dev/null || echo "UTC")
+log_info "  Host timezone: $HOST_TZ"
+log_info "  Containers sync with host via /etc/localtime mount"
+
+# Add TZ to .env if not present
+if ! grep -q "^TZ=" $ENV_FILE 2>/dev/null; then
+    echo "" >> $ENV_FILE
+    echo "# Timezone (synced with host)" >> $ENV_FILE
+    echo "TZ=$HOST_TZ" >> $ENV_FILE
+    log_info "  Added TZ=$HOST_TZ to .env file"
+fi

@@ -1,0 +1,13 @@
+[Unit]
+Description=Docker Cleanup - Remove unused images older than 7 days
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/trady/deploy/docker-cleanup.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

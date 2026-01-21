@@ -119,3 +119,36 @@ Every auto-trade must pass through 5 mandatory validation gates (in order):
 - **zod**: Runtime schema validation.
 - **class-variance-authority**: Component variant management.
 - **wouter**: Lightweight routing.
+
+## Docker Deployment
+
+### Timezone Synchronization
+All Docker containers (app, database) sync their timezone with the host system:
+- **Host mounts**: `/etc/localtime` and `/etc/timezone` mounted read-only to all containers
+- **Environment variables**: `TZ` set for app container, `TZ` and `PGTZ` set for PostgreSQL
+- **Default timezone**: Asia/Jakarta (configurable via `TZ` in `.env`)
+- **Timezone package**: `tzdata` installed in the app container for proper timezone handling
+
+### Docker Auto-Cleanup
+Automatic cleanup of unused Docker images older than 7 days:
+- **Script**: `deploy/docker-cleanup.sh` - removes dangling images, unused images older than 7 days, and build cache
+- **Systemd timer**: Runs daily at 3 AM with automatic retry
+- **Fallback**: Cron job for systems without systemd
+- **Installation**: Automatically configured during deployment via `deploy.sh`
+- **Manual install**: Run `sudo deploy/install-cleanup-timer.sh` if needed
+- **Logs**: `/var/log/docker-cleanup.log` or `journalctl -u docker-cleanup.service`
+
+### Deployment Commands
+```bash
+# Full deployment
+./deploy/deploy.sh --domain yourdomain.com --email admin@yourdomain.com
+
+# Quick redeploy (uses saved config)
+./deploy/deploy.sh
+
+# Manual Docker cleanup
+./deploy/docker-cleanup.sh
+
+# Check cleanup timer status
+systemctl status docker-cleanup.timer
+```

@@ -15,6 +15,10 @@ services:
       FINNHUB_API_KEY: "${FINNHUB_API_KEY:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       USE_HTTPS: "${USE_HTTPS:-false}"
+      TZ: "${TZ:-Asia/Jakarta}"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     depends_on:
       db:
         condition: service_healthy
@@ -40,8 +44,12 @@ services:
       POSTGRES_USER: "${POSTGRES_USER:-trady}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
       POSTGRES_DB: "${POSTGRES_DB:-trady}"
+      TZ: "${TZ:-Asia/Jakarta}"
+      PGTZ: "${TZ:-Asia/Jakarta}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     networks:
       - trady-network
     healthcheck:
