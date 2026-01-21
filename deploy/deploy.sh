@@ -279,8 +279,10 @@ else
     
     # Update FINNHUB_API_KEY if provided via command line
     if [ -n "$FINNHUB_KEY" ]; then
+        # Escape special characters for sed
+        ESCAPED_KEY=$(printf '%s\n' "$FINNHUB_KEY" | sed 's/[&/\]/\\&/g')
         if grep -q "^FINNHUB_API_KEY=" $ENV_FILE; then
-            sed -i "s/^FINNHUB_API_KEY=.*/FINNHUB_API_KEY=$FINNHUB_KEY/" $ENV_FILE
+            sed -i "s|^FINNHUB_API_KEY=.*|FINNHUB_API_KEY=$ESCAPED_KEY|" $ENV_FILE
         else
             echo "FINNHUB_API_KEY=$FINNHUB_KEY" >> $ENV_FILE
         fi
@@ -289,7 +291,7 @@ else
     
     # Update USE_HTTPS
     if grep -q "^USE_HTTPS=" $ENV_FILE; then
-        sed -i "s/^USE_HTTPS=.*/USE_HTTPS=$USE_HTTPS/" $ENV_FILE
+        sed -i "s|^USE_HTTPS=.*|USE_HTTPS=$USE_HTTPS|" $ENV_FILE
     else
         echo "USE_HTTPS=$USE_HTTPS" >> $ENV_FILE
     fi
@@ -307,7 +309,7 @@ log_info "Application will use port: $APP_PORT"
 
 # Update port in env file
 if grep -q "^APP_PORT=" $ENV_FILE; then
-    sed -i "s/^APP_PORT=.*/APP_PORT=$APP_PORT/" $ENV_FILE
+    sed -i "s|^APP_PORT=.*|APP_PORT=$APP_PORT|" $ENV_FILE
 else
     echo "APP_PORT=$APP_PORT" >> $ENV_FILE
 fi
@@ -355,7 +357,7 @@ start_containers_with_retry() {
             export APP_PORT
             
             # Update env file
-            sed -i "s/^APP_PORT=.*/APP_PORT=$APP_PORT/" $ENV_FILE
+            sed -i "s|^APP_PORT=.*|APP_PORT=$APP_PORT|" $ENV_FILE
             
             retry=$((retry + 1))
         else
