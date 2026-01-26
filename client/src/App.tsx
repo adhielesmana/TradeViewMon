@@ -11,41 +11,54 @@ import { SymbolProvider } from "@/lib/symbol-context";
 import { SymbolSelector } from "@/components/symbol-selector";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import { LogOut, Loader2 } from "lucide-react";
+import { lazy, Suspense } from "react";
 
-import LiveMarket from "@/pages/live-market";
-import Predictions from "@/pages/predictions";
-import AiSuggestions from "@/pages/ai-suggestions";
-import Historical from "@/pages/historical";
-import Backtesting from "@/pages/backtesting";
-import LiveDemo from "@/pages/live-demo";
-import SystemStatus from "@/pages/system-status";
-import UserManagement from "@/pages/user-management";
-import SettingsPage from "@/pages/settings";
-import NewsAnalysisPage from "@/pages/news-analysis";
-import PublicNewsPage from "@/pages/public-news";
-import LoginPage from "@/pages/login";
-import RegisterPage from "@/pages/register";
-import NotFound from "@/pages/not-found";
+// Lazy load pages for faster initial load
+const LiveMarket = lazy(() => import("@/pages/live-market"));
+const Predictions = lazy(() => import("@/pages/predictions"));
+const AiSuggestions = lazy(() => import("@/pages/ai-suggestions"));
+const Historical = lazy(() => import("@/pages/historical"));
+const Backtesting = lazy(() => import("@/pages/backtesting"));
+const LiveDemo = lazy(() => import("@/pages/live-demo"));
+const SystemStatus = lazy(() => import("@/pages/system-status"));
+const UserManagement = lazy(() => import("@/pages/user-management"));
+const SettingsPage = lazy(() => import("@/pages/settings"));
+const NewsAnalysisPage = lazy(() => import("@/pages/news-analysis"));
+const PublicNewsPage = lazy(() => import("@/pages/public-news"));
+const LoginPage = lazy(() => import("@/pages/login"));
+const RegisterPage = lazy(() => import("@/pages/register"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+
+// Loading spinner for lazy components
+function PageLoader() {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
 
 function ProtectedRoutes() {
   const { user } = useAuth();
   const isAdmin = user?.role === "superadmin" || user?.role === "admin";
   
   return (
-    <Switch>
-      <Route path="/dashboard" component={LiveMarket} />
-      <Route path="/predictions" component={Predictions} />
-      <Route path="/ai-suggestions" component={AiSuggestions} />
-      <Route path="/historical" component={Historical} />
-      <Route path="/backtesting" component={Backtesting} />
-      <Route path="/live-demo" component={LiveDemo} />
-      <Route path="/news" component={NewsAnalysisPage} />
-      {isAdmin && <Route path="/status" component={SystemStatus} />}
-      {isAdmin && <Route path="/users" component={UserManagement} />}
-      {isAdmin && <Route path="/settings" component={SettingsPage} />}
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<PageLoader />}>
+      <Switch>
+        <Route path="/dashboard" component={LiveMarket} />
+        <Route path="/predictions" component={Predictions} />
+        <Route path="/ai-suggestions" component={AiSuggestions} />
+        <Route path="/historical" component={Historical} />
+        <Route path="/backtesting" component={Backtesting} />
+        <Route path="/live-demo" component={LiveDemo} />
+        <Route path="/news" component={NewsAnalysisPage} />
+        {isAdmin && <Route path="/status" component={SystemStatus} />}
+        {isAdmin && <Route path="/users" component={UserManagement} />}
+        {isAdmin && <Route path="/settings" component={SettingsPage} />}
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 
@@ -96,7 +109,11 @@ function AuthenticatedApp() {
   
   // Public news page is the landing page (accessible to everyone)
   if (location === "/") {
-    return <PublicNewsPage />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <PublicNewsPage />
+      </Suspense>
+    );
   }
   
   if (!isAuthenticated && !isPublicRoute) {
