@@ -91,7 +91,10 @@ export function registerObjectStorageRoutes(app: Express): void {
     app.get("/objects/:objectPath(*)", async (req, res) => {
       try {
         const objectFile = await objectStorageService.getObjectEntityFile(req.path);
-        await objectStorageService.downloadObject(objectFile, res);
+        // Cache images for 1 day (86400 seconds), other files for 1 hour
+        const isImage = req.path.match(/\.(jpg|jpeg|png|gif|webp|svg|ico)$/i);
+        const cacheTtl = isImage ? 86400 : 3600;
+        await objectStorageService.downloadObject(objectFile, res, cacheTtl);
       } catch (error) {
         console.error("Error serving object:", error);
         if (error instanceof ObjectNotFoundError) {

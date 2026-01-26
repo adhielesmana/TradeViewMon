@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import compression from "compression";
 import pg from "pg";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
@@ -62,6 +63,46 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Enable gzip/brotli compression for all responses
+app.use(compression({
+  level: 6, // Balance between compression ratio and speed
+  threshold: 1024, // Only compress responses larger than 1KB
+  filter: (req, res) => {
+    // Don't compress streaming responses
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    return compression.filter(req, res);
+  }
+}));
+
+// Cache control middleware for API responses
+app.use('/api', (req, res, next) => {
+  // Skip caching for mutations
+  if (req.method !== 'GET') {
+    return next();
+  }
+  
+  // Cache market data and symbols for 30 seconds
+  if (req.path.startsWith('/market/') || req.path === '/market/symbols') {
+    res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+  }
+  // Cache news snapshots for 5 minutes
+  else if (req.path.startsWith('/news/')) {
+    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
+  }
+  // Cache predictions for 1 minute
+  else if (req.path.startsWith('/predictions/')) {
+    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
+  }
+  // Default short cache for other GET requests
+  else {
+    res.setHeader('Cache-Control', 'public, max-age=10, stale-while-revalidate=30');
+  }
+  
+  next();
+});
 
 // In production, check if HTTPS is being used
 const useSecureCookies = isProduction && process.env.USE_HTTPS === "true";
