@@ -132,8 +132,8 @@ All Docker containers (app, database) sync their timezone with the host system:
 - **Timezone package**: `tzdata` installed in the app container for proper timezone handling
 
 ### Docker Auto-Cleanup
-Automatic cleanup of unused Docker images older than 7 days:
-- **Script**: `deploy/docker-cleanup.sh` - removes dangling images, unused images older than 7 days, and build cache
+Automatic cleanup of unused Docker images older than 24 hours (runs daily at 3 AM):
+- **Script**: `deploy/docker-cleanup.sh` - removes dangling images, unused images older than 24 hours, and build cache
 - **Systemd timer**: Runs daily at 3 AM with automatic retry
 - **Fallback**: Cron job for systems without systemd
 - **Installation**: Automatically configured during deployment via `deploy.sh`

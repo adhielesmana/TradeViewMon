@@ -8,7 +8,7 @@
 set -e
 
 LOG_FILE="/var/log/docker-cleanup.log"
-DAYS_OLD=7
+DAYS_OLD=1  # Delete images older than 24 hours
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
