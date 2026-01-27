@@ -46,9 +46,34 @@ log "$BUILD_CACHE"
 # log "Removing unused volumes..."
 # docker volume prune -f >> "$LOG_FILE" 2>&1
 
+# Compress old log files (older than 1 day, not already compressed)
+log "Compressing old log files..."
+find /var/log -name "*.log" -mtime +1 -type f ! -name "*.gz" 2>/dev/null | while read logfile; do
+    if [ -f "$logfile" ] && [ -s "$logfile" ]; then
+        gzip -9 "$logfile" 2>/dev/null && log "Compressed: $logfile"
+    fi
+done
+log "Log compression completed"
+
+# Compress application logs in container if accessible
+log "Compressing application logs..."
+docker exec trady-app find /app/logs -name "*.log" -mtime +1 -type f ! -name "*.gz" -exec gzip -9 {} \; 2>/dev/null || log "No app logs to compress"
+
+# PostgreSQL maintenance - VACUUM and ANALYZE to reclaim space
+log "Running PostgreSQL maintenance (VACUUM ANALYZE)..."
+docker exec trady-db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "VACUUM ANALYZE;" 2>/dev/null && log "Database VACUUM completed" || log "Database VACUUM skipped (container not running or not accessible)"
+
+# Remove old PostgreSQL WAL files if pg_archivecleanup is available
+log "Cleaning old PostgreSQL WAL files..."
+docker exec trady-db pg_archivecleanup /var/lib/postgresql/data/pg_wal 2>/dev/null || log "WAL cleanup skipped"
+
 # Show disk usage after cleanup
 log "Current Docker disk usage:"
 docker system df >> "$LOG_FILE" 2>&1
+
+# Show system disk usage
+log "System disk usage:"
+df -h / >> "$LOG_FILE" 2>&1
 
 log "=== Docker Cleanup Completed ==="
 

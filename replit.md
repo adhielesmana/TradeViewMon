@@ -135,7 +135,9 @@ All Docker containers (app, database) sync their timezone with the host system:
 Automatic cleanup of unused Docker images older than 24 hours (runs daily at 3 AM):
 - **Script**: `deploy/docker-cleanup.sh` - removes dangling images, unused images older than 24 hours, and build cache
 - **Systemd timer**: Runs daily at 3 AM with automatic retry
-- **Fallback**: Cron job for systems without systemd
+- **Log compression**: Automatically gzips log files older than 24 hours (saves 70-90% space)
+- **Database maintenance**: Runs PostgreSQL VACUUM ANALYZE to reclaim disk space and optimize queries
+- **WAL cleanup**: Removes old PostgreSQL write-ahead logs
 - **Installation**: Automatically configured during deployment via `deploy.sh`
 - **Manual install**: Run `sudo deploy/install-cleanup-timer.sh` if needed
 - **Logs**: `/var/log/docker-cleanup.log` or `journalctl -u docker-cleanup.service`
