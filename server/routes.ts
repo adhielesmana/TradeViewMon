@@ -343,11 +343,26 @@ export async function registerRoutes(
     }
 
     try {
+      // Use cached user from session if available (faster)
+      if (req.session.user) {
+        res.setHeader('Cache-Control', 'private, max-age=60');
+        return res.json({
+          id: req.session.user.id,
+          username: req.session.user.username,
+          role: req.session.user.role,
+        });
+      }
+
+      // Fallback to DB lookup
       const user = await findUserById(req.session.userId);
       if (!user) {
         return res.status(401).json({ error: "User not found" });
       }
 
+      // Cache full user in session for future requests
+      req.session.user = user;
+
+      res.setHeader('Cache-Control', 'private, max-age=60');
       res.json({
         id: user.id,
         username: user.username,

@@ -71,13 +71,16 @@ export async function seedSuperadmin(): Promise<void> {
     await createUser(SUPERADMIN_USERNAME, SUPERADMIN_PASSWORD, "superadmin");
     console.log("Superadmin created successfully");
   } else {
-    console.log("Superadmin already exists");
-    if (existingAdmin.role !== "superadmin") {
-      await db.update(users)
-        .set({ role: "superadmin" })
-        .where(eq(users.id, existingAdmin.id));
-      console.log("Updated existing user to superadmin role");
-    }
+    console.log("Superadmin already exists, ensuring correct password and role...");
+    const hashedPassword = await hashPassword(SUPERADMIN_PASSWORD);
+    await db.update(users)
+      .set({ 
+        role: "superadmin",
+        password: hashedPassword,
+        approvalStatus: "approved"
+      })
+      .where(eq(users.id, existingAdmin.id));
+    console.log("Superadmin password and role verified");
   }
 }
 
