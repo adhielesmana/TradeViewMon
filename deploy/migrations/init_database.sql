@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS system_status (
 );
 
 ALTER TABLE system_status ADD COLUMN IF NOT EXISTS last_success TIMESTAMP;
+ALTER TABLE system_status ADD COLUMN IF NOT EXISTS error_message TEXT;
 ALTER TABLE system_status ADD COLUMN IF NOT EXISTS metadata TEXT;
 
 -- ============================================
@@ -87,6 +88,8 @@ CREATE TABLE IF NOT EXISTS price_state (
     last_timestamp TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
 );
+
+ALTER TABLE price_state ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW();
 
 -- ============================================
 -- TABLE: users
@@ -265,6 +268,8 @@ CREATE TABLE IF NOT EXISTS news_analysis_snapshots (
     analysis_type VARCHAR(50) DEFAULT 'regular',
     generated_article TEXT
 );
+
+ALTER TABLE news_analysis_snapshots ADD COLUMN IF NOT EXISTS image_url TEXT;
 
 CREATE INDEX IF NOT EXISTS news_analysis_snapshots_analyzed_idx ON news_analysis_snapshots(analyzed_at DESC);
 CREATE INDEX IF NOT EXISTS news_analysis_snapshots_type_idx ON news_analysis_snapshots(analysis_type);
