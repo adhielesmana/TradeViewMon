@@ -32,6 +32,67 @@ const DEFAULT_SYMBOL = marketDataService.getSymbol();
 // Track symbols that have been seeded to avoid duplicate seeding
 const seededSymbols = new Set<string>();
 
+const DEFAULT_RSS_FEEDS = [
+  {
+    name: "CNBC Indonesia",
+    url: "https://www.cnbcindonesia.com/rss",
+    priority: 100,
+  },
+  {
+    name: "Kontan.co.id",
+    url: "https://www.kontan.co.id/feed",
+    priority: 95,
+  },
+  {
+    name: "Investing.com Indonesia",
+    url: "https://id.investing.com/webmaster-tools/rss",
+    priority: 90,
+  },
+  {
+    name: "ANTARA News (Business & Investment)",
+    url: "https://en.antaranews.com/rss/business-investment.xml",
+    priority: 85,
+  },
+  {
+    name: "Bisnis.com",
+    url: "https://finansial.bisnis.com/rss",
+    priority: 80,
+  },
+  {
+    name: "IDX Official",
+    url: "https://www.idx.co.id/en/news/",
+    priority: 75,
+  },
+  {
+    name: "FXStreet Indonesia",
+    url: "https://www.fxstreet-id.com/rss/news",
+    priority: 70,
+  },
+  {
+    name: "Yahoo Finance",
+    url: "https://finance.yahoo.com/news/rssindex",
+    priority: 65,
+  },
+];
+
+async function seedDefaultRssFeeds() {
+  const existingFeeds = await storage.getRssFeeds();
+  const existingUrls = new Set(existingFeeds.map((feed) => feed.url));
+
+  console.log("[RSS] Seeding default RSS feeds for Indonesian market news...");
+  for (const feed of DEFAULT_RSS_FEEDS) {
+    if (existingUrls.has(feed.url)) {
+      continue;
+    }
+    await storage.createRssFeed({
+      name: feed.name,
+      url: feed.url,
+      isActive: true,
+      priority: feed.priority,
+    });
+  }
+}
+
 // On-demand historical data seeding for symbols without data
 async function ensureHistoricalData(symbol: string): Promise<void> {
   // Skip if already seeded in this session
@@ -177,6 +238,7 @@ export async function registerRoutes(
 ): Promise<Server> {
   await seedSuperadmin();
   await seedTestUsers();
+  await seedDefaultRssFeeds();
   
   // Middleware to serve dynamic Open Graph meta tags for shared articles
   // This intercepts social media crawlers requesting article URLs

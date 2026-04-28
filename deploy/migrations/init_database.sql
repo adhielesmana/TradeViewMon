@@ -226,6 +226,17 @@ CREATE TABLE IF NOT EXISTS rss_feeds (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+INSERT INTO rss_feeds (name, url, is_active, priority) VALUES
+    ('CNBC Indonesia', 'https://www.cnbcindonesia.com/rss', true, 100),
+    ('Kontan.co.id', 'https://www.kontan.co.id/feed', true, 95),
+    ('Investing.com Indonesia', 'https://id.investing.com/webmaster-tools/rss', true, 90),
+    ('ANTARA News (Business & Investment)', 'https://en.antaranews.com/rss/business-investment.xml', true, 85),
+    ('Bisnis.com', 'https://finansial.bisnis.com/rss', true, 80),
+    ('IDX Official', 'https://www.idx.co.id/en/news/', true, 75),
+    ('FXStreet Indonesia', 'https://www.fxstreet-id.com/rss/news', true, 70),
+    ('Yahoo Finance', 'https://finance.yahoo.com/news/rssindex', true, 65)
+ON CONFLICT DO NOTHING;
+
 -- ============================================
 -- TABLE: news_articles (7-day retention for AI learning)
 -- ============================================
