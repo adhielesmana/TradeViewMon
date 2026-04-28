@@ -73,6 +73,9 @@ CREATE TABLE IF NOT EXISTS system_status (
     metadata TEXT
 );
 
+ALTER TABLE system_status ADD COLUMN IF NOT EXISTS last_success TIMESTAMP;
+ALTER TABLE system_status ADD COLUMN IF NOT EXISTS metadata TEXT;
+
 -- ============================================
 -- TABLE: price_state
 -- ============================================
