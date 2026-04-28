@@ -3,7 +3,7 @@
 set -e
 
 APP_NAME="trady"
-DEFAULT_PORT=5000
+DEFAULT_PORT=8111
 DOMAIN=""
 EMAIL=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -88,7 +88,7 @@ show_usage() {
     echo "Options:"
     echo "  -d, --domain DOMAIN     Domain name for the application (enables HTTPS)"
     echo "  -e, --email EMAIL       Email for Let's Encrypt SSL certificate"
-    echo "  -p, --port PORT         Preferred port (default: 5000, auto-adjusted if in use)"
+    echo "  -p, --port PORT         Deprecated; host port is fixed at 8111"
     echo "  -k, --finnhub-key KEY   Finnhub API key (optional)"
     echo "  --no-pull               Skip git pull (use existing code)"
     echo "  --https                 Force HTTPS cookies (use if behind SSL proxy)"
@@ -117,7 +117,7 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -d|--domain) DOMAIN="$2"; DOMAIN_FROM_CLI=true; shift 2 ;;
         -e|--email) EMAIL="$2"; EMAIL_FROM_CLI=true; shift 2 ;;
-        -p|--port) DEFAULT_PORT="$2"; shift 2 ;;
+        -p|--port) log_warn "Custom ports are disabled. Using fixed host port 8111."; shift 2 ;;
         -k|--finnhub-key) FINNHUB_KEY="$2"; shift 2 ;;
         --no-pull) SKIP_PULL=true; shift ;;
         --https) FORCE_HTTPS="true"; shift ;;
@@ -194,28 +194,6 @@ is_port_in_use() {
     fi
     
     return 1  # Port appears available
-}
-
-find_available_port() {
-    local port=$1
-    local max_attempts=20
-    local attempt=0
-    
-    # Note: All messages go to stderr so they don't pollute the return value
-    echo -e "${BLUE}[INFO]${NC} Scanning for available port starting from $port..." >&2
-    
-    while [ $attempt -lt $max_attempts ]; do
-        if ! is_port_in_use $port; then
-            echo $port  # Only the port number goes to stdout
-            return 0
-        fi
-        echo -e "${YELLOW}[WARN]${NC} Port $port is in use, trying port $((port + 1))..." >&2
-        port=$((port + 1))
-        attempt=$((attempt + 1))
-    done
-    
-    echo -e "${RED}[ERROR]${NC} Could not find available port after $max_attempts attempts (tried $1-$port)" >&2
-    exit 1
 }
 
 check_docker() {
@@ -306,8 +284,16 @@ fi
 
 log_info "HTTPS cookies: $USE_HTTPS"
 
-# Auto-generate environment file if it doesn't exist
-ENV_FILE=".env"
+# Use the production env file as the canonical deploy source.
+# Fall back to the legacy .env file only if production env has not been created yet.
+ENV_FILE=".env.production"
+LEGACY_ENV_FILE=".env"
+
+if [ ! -f "$ENV_FILE" ] && [ -f "$LEGACY_ENV_FILE" ]; then
+    log_warn "Found legacy .env file; copying it to .env.production for Compose compatibility."
+    cp "$LEGACY_ENV_FILE" "$ENV_FILE"
+fi
+
 if [ ! -f "$ENV_FILE" ]; then
     log_info "Creating environment configuration..."
     
@@ -339,7 +325,7 @@ EOF
     chmod 600 $ENV_FILE
     log_info "Environment file created with auto-generated credentials"
 else
-    log_info "Using existing environment file"
+    log_info "Using existing environment file: $ENV_FILE"
     
     # Update FINNHUB_API_KEY if provided via command line
     if [ -n "$FINNHUB_KEY" ]; then
@@ -366,10 +352,18 @@ set -a
 source $ENV_FILE
 set +a
 
-# Find available port
-log_info "Checking port availability..."
-APP_PORT=$(find_available_port $DEFAULT_PORT)
-log_info "Application will use port: $APP_PORT"
+COMPOSE_CMD=(docker compose --env-file "$ENV_FILE" -f deploy/docker-compose.yml)
+
+# Use a fixed host port forever.
+APP_PORT=$DEFAULT_PORT
+log_info "Checking fixed port availability..."
+if is_port_in_use "$APP_PORT"; then
+    log_error "Port $APP_PORT is already in use."
+    log_error "Trady now uses a fixed host port and will not auto-switch."
+    log_error "Stop the conflicting service or free port $APP_PORT, then redeploy."
+    exit 1
+fi
+log_info "Application will use fixed port: $APP_PORT"
 
 # Update port in env file
 if grep -q "^APP_PORT=" $ENV_FILE; then
@@ -387,56 +381,34 @@ docker rmi -f trady:latest 2>/dev/null || true
 docker builder prune -f 2>/dev/null || true
 
 log_info "Building services (with no cache)..."
-docker compose -f deploy/docker-compose.yml build --no-cache
+"${COMPOSE_CMD[@]}" build --no-cache
 
-# Start containers with port retry logic
-start_containers_with_retry() {
-    local max_retries=5
-    local retry=0
-    
-    while [ $retry -lt $max_retries ]; do
-        log_info "Starting services on port $APP_PORT (attempt $((retry + 1))/$max_retries)..."
-        
-        # Try to start the containers
-        if docker compose -f deploy/docker-compose.yml up -d 2>&1; then
-            # Verify container is actually running
-            sleep 2
-            if docker ps --filter "name=trady" --filter "status=running" --format "{{.Names}}" | grep -q "trady"; then
-                log_info "Containers started successfully on port $APP_PORT"
-                return 0
-            fi
+# Start containers on the fixed host port
+start_containers() {
+    log_info "Starting services on fixed port $APP_PORT..."
+
+    if "${COMPOSE_CMD[@]}" up -d 2>&1; then
+        sleep 2
+        if docker ps --filter "name=trady" --filter "status=running" --format "{{.Names}}" | grep -q "trady"; then
+            log_info "Containers started successfully on fixed port $APP_PORT"
+            return 0
         fi
-        
-        # Check if failure was due to port conflict
-        if docker logs trady 2>&1 | grep -q "address already in use\|port is already allocated" || \
-           docker compose -f deploy/docker-compose.yml logs 2>&1 | grep -q "Bind for.*failed"; then
-            log_warn "Port $APP_PORT conflict detected, trying next port..."
-            
-            # Stop failed container
-            docker compose -f deploy/docker-compose.yml down 2>/dev/null || true
-            docker rm -f trady 2>/dev/null || true
-            
-            # Increment port and update env
-            APP_PORT=$((APP_PORT + 1))
-            export APP_PORT
-            
-            # Update env file
-            sed -i "s|^APP_PORT=.*|APP_PORT=$APP_PORT|" $ENV_FILE
-            
-            retry=$((retry + 1))
-        else
-            # Non-port related failure
-            log_error "Container failed to start (not port-related). Check logs: docker logs trady"
-            return 1
-        fi
-    done
-    
-    log_error "Could not find available port after $max_retries attempts"
+    fi
+
+    if docker logs trady 2>&1 | grep -q "address already in use\|port is already allocated" || \
+       "${COMPOSE_CMD[@]}" logs 2>&1 | grep -q "Bind for.*failed"; then
+        log_error "Port $APP_PORT is already allocated."
+        log_error "Trady no longer auto-switches ports. Free port $APP_PORT and redeploy."
+        "${COMPOSE_CMD[@]}" down 2>/dev/null || true
+        docker rm -f trady 2>/dev/null || true
+        return 1
+    fi
+
+    log_error "Container failed to start. Check logs: docker logs trady"
     return 1
 }
 
-# Start containers with retry
-if ! start_containers_with_retry; then
+if ! start_containers; then
     log_error "Failed to start containers. Check docker logs for details."
     exit 1
 fi
@@ -507,11 +479,11 @@ if [ -f "deploy/migrations/init_database.sql" ]; then
         docker exec trady-db psql -U postgres -c "\\du" 2>/dev/null || true
         
         log_warn "If you see 'role does not exist' error, try removing the old volume:"
-        log_warn "  docker compose -f deploy/docker-compose.yml down -v"
+        log_warn "  docker compose --env-file .env.production -f deploy/docker-compose.yml down -v"
         log_warn "  ./deploy/deploy.sh"
         log_warn ""
         log_warn "Or if you have an existing database with different credentials,"
-        log_warn "update the .env file with the correct POSTGRES_USER and POSTGRES_DB values."
+        log_warn "update the .env.production file with the correct POSTGRES_USER and POSTGRES_DB values."
     fi
     
     # Cleanup
@@ -540,13 +512,28 @@ EOF
     log_info "Config saved to .deploy-config"
 fi
 
-# Configure Nginx only if needed (first time or --reconfigure-ssl)
-if [ -n "$DOMAIN" ] && [ "$NEEDS_SSL_CONFIG" = true ]; then
-    if command -v nginx &> /dev/null; then
-        log_info "Configuring Nginx for $DOMAIN..."
-        
-        NGINX_CONF="/etc/nginx/sites-available/$APP_NAME"
-        
+# Configure or refresh Nginx whenever a domain is set so the proxy target
+# always matches the fixed APP_PORT used by the deployment.
+configure_nginx() {
+    if ! command -v nginx &> /dev/null; then
+        log_warn "Nginx not installed. Application available on port $APP_PORT"
+        return 0
+    fi
+
+    log_info "Configuring Nginx for $DOMAIN..."
+
+    NGINX_CONF="/etc/nginx/sites-available/$APP_NAME"
+    SSL_CERT_FILE="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+    SSL_KEY_FILE="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+
+    if [ "$USE_HTTPS" = "true" ] && [ -f "$SSL_CERT_FILE" ] && [ -f "$SSL_KEY_FILE" ]; then
+        log_info "Using HTTPS Nginx template for $DOMAIN"
+        sed "s|\${DOMAIN}|$DOMAIN|g" "$SCRIPT_DIR/nginx-ssl.conf.template" > /tmp/trady-nginx.conf
+    else
+        if [ "$USE_HTTPS" = "true" ]; then
+            log_warn "HTTPS requested but certificate files are missing; using temporary HTTP config until certbot runs."
+        fi
+
         cat > /tmp/trady-nginx.conf << EOF
 server {
     listen 80;
@@ -554,7 +541,7 @@ server {
     server_name $DOMAIN;
 
     location / {
-        proxy_pass http://127.0.0.1:$APP_PORT;
+        proxy_pass http://127.0.0.1:8111;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -567,7 +554,7 @@ server {
     }
 
     location /ws {
-        proxy_pass http://127.0.0.1:$APP_PORT;
+        proxy_pass http://127.0.0.1:8111;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -578,31 +565,31 @@ server {
     }
 }
 EOF
-        
-        if [ -w /etc/nginx/sites-available ] || [ "$(id -u)" = "0" ]; then
-            cp /tmp/trady-nginx.conf $NGINX_CONF
-            ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
-            rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-            nginx -t && systemctl reload nginx
-            log_info "Nginx configured successfully"
-            
-            if [ -n "$EMAIL" ] && command -v certbot &> /dev/null; then
-                log_info "Obtaining SSL certificate..."
-                certbot --nginx -d $DOMAIN --non-interactive --agree-tos -m $EMAIL --redirect || {
-                    log_warn "SSL certificate setup failed. You may need to run certbot manually."
-                }
-            fi
-        else
-            log_warn "Cannot write to /etc/nginx. Run with sudo or copy config manually:"
-            log_warn "  sudo cp /tmp/trady-nginx.conf $NGINX_CONF"
-            log_warn "  sudo ln -sf $NGINX_CONF /etc/nginx/sites-enabled/"
-            log_warn "  sudo nginx -t && sudo systemctl reload nginx"
+    fi
+
+    if [ -w /etc/nginx/sites-available ] || [ "$(id -u)" = "0" ]; then
+        cp /tmp/trady-nginx.conf "$NGINX_CONF"
+        ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
+        rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+        nginx -t && systemctl reload nginx
+        log_info "Nginx configured successfully"
+
+        if [ "$NEEDS_SSL_CONFIG" = true ] && [ -n "$EMAIL" ] && command -v certbot &> /dev/null; then
+            log_info "Obtaining SSL certificate..."
+            certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --redirect || {
+                log_warn "SSL certificate setup failed. You may need to run certbot manually."
+            }
         fi
     else
-        log_warn "Nginx not installed. Application available on port $APP_PORT"
+        log_warn "Cannot write to /etc/nginx. Run with sudo or copy config manually:"
+        log_warn "  sudo cp /tmp/trady-nginx.conf $NGINX_CONF"
+        log_warn "  sudo ln -sf $NGINX_CONF /etc/nginx/sites-enabled/"
+        log_warn "  sudo nginx -t && sudo systemctl reload nginx"
     fi
-elif [ -n "$DOMAIN" ]; then
-    log_info "Skipping Nginx/SSL config (already configured). Use --reconfigure-ssl to force."
+}
+
+if [ -n "$DOMAIN" ]; then
+    configure_nginx
 fi
 
 echo ""
@@ -635,8 +622,8 @@ echo ""
 log_info "Useful commands:"
 log_info "  View app logs:    docker logs -f trady"
 log_info "  View db logs:     docker logs -f trady-db"
-log_info "  Restart all:      docker compose -f deploy/docker-compose.yml restart"
-log_info "  Stop all:         docker compose -f deploy/docker-compose.yml down"
+log_info "  Restart all:      docker compose --env-file .env.production -f deploy/docker-compose.yml restart"
+log_info "  Stop all:         docker compose --env-file .env.production -f deploy/docker-compose.yml down"
 log_info "  Redeploy:         ./deploy/deploy.sh"
 echo ""
 
@@ -713,10 +700,10 @@ HOST_TZ=$(cat /etc/timezone 2>/dev/null || timedatectl show --property=Timezone 
 log_info "  Host timezone: $HOST_TZ"
 log_info "  Containers sync with host via /etc/localtime mount"
 
-# Add TZ to .env if not present
+# Add TZ to the production env file if not present
 if ! grep -q "^TZ=" $ENV_FILE 2>/dev/null; then
     echo "" >> $ENV_FILE
     echo "# Timezone (synced with host)" >> $ENV_FILE
     echo "TZ=$HOST_TZ" >> $ENV_FILE
-    log_info "  Added TZ=$HOST_TZ to .env file"
+    log_info "  Added TZ=$HOST_TZ to $ENV_FILE"
 fi

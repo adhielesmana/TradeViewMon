@@ -34,16 +34,14 @@ chmod +x deploy/*.sh
 ./deploy/deploy.sh --domain tradeview.example.com --email admin@example.com
 ```
 
-### With Custom Port
-```bash
-./deploy/deploy.sh --port 3000 --domain tradeview.example.com --email admin@example.com
-```
+### Fixed Host Port
+The deployment always uses host port `8111`, so there is no custom-port flag anymore.
 
 ## What the Script Does
 
 1. **Trady Shutdown**: Stops ONLY existing Trady containers (other apps are not touched)
-2. **Port Detection**: Checks if port 5000 (or specified port) is in use by Docker or other services
-3. **Auto Port Selection**: If the port is busy, automatically finds the next available port
+2. **Port Detection**: Checks if fixed host port `8111` is in use by Docker or other services
+3. **Fixed Port**: If the port is busy, deployment stops instead of shifting to another port
 4. **Nginx Check**: Detects if Nginx is installed
 5. **Docker Check**: Detects if Docker is installed
 6. **SSL Setup**: Uses Certbot to obtain and configure Let's Encrypt SSL certificates
@@ -57,7 +55,7 @@ When you run `./deploy/deploy.sh`, it **ONLY** stops Trady:
 - **Does NOT kill other applications** on any ports
 - **Does NOT stop unrelated Docker containers**
 
-If port 5000 is in use by another app, Trady will automatically use the next available port (5001, 5002, etc.).
+If port `8111` is in use by another app, Trady will stop and ask you to free that port first.
 
 ## Environment Variables
 
@@ -70,6 +68,8 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 SESSION_SECRET=your-secure-secret-key
 FINNHUB_API_KEY=your-finnhub-api-key
 ```
+
+The container still listens on `PORT=5000`; the published host port and Nginx upstream are fixed at `8111`.
 
 ### API Keys Required
 
@@ -119,9 +119,9 @@ For a complete setup with PostgreSQL:
 ```bash
 cd deploy
 
-cp .env.example .env.production
+./setup-env.sh
 
-docker-compose up -d
+docker compose --env-file .env.production -f docker-compose.yml up -d
 ```
 
 ## Management Commands
@@ -135,7 +135,7 @@ docker stop trady
 
 docker start trady
 
-docker pull <image> && docker-compose up -d
+docker pull <image> && docker compose --env-file .env.production -f deploy/docker-compose.yml up -d
 ```
 
 ## SSL Certificate Renewal
@@ -170,23 +170,23 @@ This usually happens when you have a stale PostgreSQL data volume from a previou
 
 **Solution 1: Reset the database volume (if you don't have important data)**
 ```bash
-docker compose -f deploy/docker-compose.yml down -v
+docker compose --env-file .env.production -f deploy/docker-compose.yml down -v
 ./deploy/deploy.sh
 ```
 
 **Solution 2: Use your existing credentials**
-Edit the `.env` file and update `POSTGRES_USER` and `POSTGRES_DB` to match your existing database credentials, then redeploy:
+Edit the `.env.production` file and update `POSTGRES_USER` and `POSTGRES_DB` to match your existing database credentials, then redeploy:
 ```bash
-nano .env
+nano .env.production
 # Update POSTGRES_USER and POSTGRES_DB to match existing credentials
 ./deploy/deploy.sh
 ```
 
 ### Port Already in Use
-The script automatically detects and avoids port conflicts. Check current usage:
+The script checks the fixed host port `8111`. Check current usage:
 ```bash
-ss -tuln | grep :5000
-docker ps --format '{{.Ports}}' | grep 5000
+ss -tuln | grep :8111
+docker ps --format '{{.Ports}}' | grep 8111
 ```
 
 ### Docker Container Not Starting
