@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Add approval columns to existing users table
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) NOT NULL DEFAULT 'pending';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_by VARCHAR;
