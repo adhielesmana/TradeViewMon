@@ -6,6 +6,9 @@ async function runMigrations() {
     
     try {
         console.log('[Migration] Starting database migrations...');
+
+        // Required for gen_random_uuid() defaults used by some tables
+        await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
         
         // Check which tables exist
         const tablesResult = await pool.query(`
@@ -82,6 +85,21 @@ async function runMigrations() {
                     username VARCHAR(50) NOT NULL UNIQUE,
                     password VARCHAR(255) NOT NULL,
                     role VARCHAR(20) NOT NULL DEFAULT 'user',
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                )
+            `);
+        }
+
+        if (!existingTables.includes('user_invites')) {
+            tablesToCreate.push(`
+                CREATE TABLE user_invites (
+                    id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+                    email TEXT NOT NULL,
+                    token TEXT NOT NULL UNIQUE,
+                    role VARCHAR(20) NOT NULL DEFAULT 'user',
+                    invited_by_id VARCHAR REFERENCES users(id),
+                    expires_at TIMESTAMP NOT NULL,
+                    accepted_at TIMESTAMP,
                     created_at TIMESTAMP NOT NULL DEFAULT NOW()
                 )
             `);
