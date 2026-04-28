@@ -2,7 +2,7 @@ import {
   marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState, aiSuggestions,
   mlModelRegistry, mlModelAudits,
   demoAccounts, demoPositions, demoTransactions, appSettings, currencyRates, autoTradeSettings,
-  rssFeeds, monitoredSymbols, newsArticles, newsAnalysisSnapshots, symbolCategories,
+  rssFeeds, monitoredSymbols, newsArticles, newsAnalysisSnapshots, articleImageCache, symbolCategories,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
@@ -25,7 +25,8 @@ import {
   type MonitoredSymbol, type InsertMonitoredSymbol,
   type SymbolCategory, type InsertSymbolCategory,
   type NewsArticle, type InsertNewsArticle,
-  type NewsAnalysisSnapshot, type InsertNewsAnalysisSnapshot
+  type NewsAnalysisSnapshot, type InsertNewsAnalysisSnapshot,
+  type ArticleImageCache, type InsertArticleImageCache
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, gte, lte, lt, gt, and, or, sql, inArray, isNull } from "drizzle-orm";
@@ -196,6 +197,13 @@ export interface IStorage {
   getNewsSnapshotsWithoutImages(limit: number): Promise<NewsAnalysisSnapshot[]>;
   updateSnapshotImageUrl(id: number, imageUrl: string): Promise<void>;
   getAllNewsSnapshots(): Promise<NewsAnalysisSnapshot[]>;
+
+  // Article image cache
+  getArticleImageCacheByKey(cacheKey: string): Promise<ArticleImageCache | null>;
+  upsertArticleImageCache(image: InsertArticleImageCache): Promise<ArticleImageCache>;
+  markArticleImageCacheUsed(cacheKey: string, expiresAt: Date): Promise<ArticleImageCache | null>;
+  getExpiredArticleImageCache(olderThan: Date, limit?: number): Promise<ArticleImageCache[]>;
+  deleteArticleImageCache(id: number): Promise<boolean>;
   
   // All open positions for scheduled tasks
   getAllOpenProfitablePositions(): Promise<DemoPosition[]>;
@@ -1691,6 +1699,68 @@ export class DatabaseStorage implements IStorage {
     return db.select()
       .from(newsAnalysisSnapshots)
       .orderBy(desc(newsAnalysisSnapshots.analyzedAt));
+  }
+
+  async getArticleImageCacheByKey(cacheKey: string): Promise<ArticleImageCache | null> {
+    const [result] = await db.select()
+      .from(articleImageCache)
+      .where(eq(articleImageCache.cacheKey, cacheKey))
+      .limit(1);
+    return result || null;
+  }
+
+  async upsertArticleImageCache(image: InsertArticleImageCache): Promise<ArticleImageCache> {
+    const [result] = await db.insert(articleImageCache)
+      .values(image)
+      .onConflictDoUpdate({
+        target: articleImageCache.cacheKey,
+        set: {
+          topicSignature: image.topicSignature,
+          headline: image.headline,
+          summary: image.summary,
+          keywords: image.keywords,
+          sourceType: image.sourceType,
+          sourceUrl: image.sourceUrl,
+          imageUrl: image.imageUrl,
+          storagePath: image.storagePath,
+          relevanceScore: image.relevanceScore,
+          expiresAt: image.expiresAt,
+          usageCount: sql`${articleImageCache.usageCount} + 1`,
+          lastUsedAt: image.lastUsedAt,
+          updatedAt: sql`now()`,
+        },
+      })
+      .returning();
+
+    return result;
+  }
+
+  async markArticleImageCacheUsed(cacheKey: string, expiresAt: Date): Promise<ArticleImageCache | null> {
+    const [result] = await db.update(articleImageCache)
+      .set({
+        usageCount: sql`${articleImageCache.usageCount} + 1`,
+        lastUsedAt: new Date(),
+        expiresAt,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(articleImageCache.cacheKey, cacheKey))
+      .returning();
+    return result || null;
+  }
+
+  async getExpiredArticleImageCache(olderThan: Date, limit: number = 100): Promise<ArticleImageCache[]> {
+    return db.select()
+      .from(articleImageCache)
+      .where(lt(articleImageCache.expiresAt, olderThan))
+      .orderBy(desc(articleImageCache.lastUsedAt))
+      .limit(limit);
+  }
+
+  async deleteArticleImageCache(id: number): Promise<boolean> {
+    const result = await db.delete(articleImageCache)
+      .where(eq(articleImageCache.id, id))
+      .returning();
+    return result.length > 0;
   }
 }
 

@@ -206,16 +206,16 @@ app.use((req, res, next) => {
     async () => {
       log(`serving on port ${port}`);
       
-      // Run AI-powered image regeneration if Pexels API key is configured
-      if (process.env.PEXELS_API_KEY) {
-        try {
-          const { regenerateAllSnapshotImages } = await import("./news-service");
-          log("Starting AI-powered image regeneration with Pexels...");
-          const result = await regenerateAllSnapshotImages(true); // forceAll to update all images
-          log(`Regenerated ${result.updated}/${result.total} article images with AI + Pexels`);
-        } catch (error) {
-          console.error("[Startup] Image regeneration failed:", error);
+      // Clean up expired article image cache on startup so the 180-day retention policy
+      // is enforced even before the daily scheduler runs.
+      try {
+        const { cleanupExpiredArticleImages } = await import("./article-image-service");
+        const cleaned = await cleanupExpiredArticleImages();
+        if (cleaned > 0) {
+          log(`Cleaned up ${cleaned} expired cached article images`);
         }
+      } catch (error) {
+        console.error("[Startup] Article image cleanup failed:", error);
       }
     },
   );

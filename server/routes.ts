@@ -237,6 +237,20 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#039;");
 }
 
+function toAbsoluteUrl(req: Request, url: string): string {
+  if (!url) {
+    return url;
+  }
+
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
+    return url;
+  }
+
+  const protocol = req.headers["x-forwarded-proto"] || "https";
+  const host = req.headers.host || "trading.adhielesmana.com";
+  return `${protocol}://${host}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
 // Check if request is from social media crawler
 function isSocialMediaCrawler(userAgent: string): boolean {
   const crawlerPatterns = [
@@ -296,6 +310,7 @@ export async function registerRoutes(
         // Use a placeholder image with the headline
         imageUrl = `https://placehold.co/1200x630/1a1a2e/ffffff?text=${encodeURIComponent(headline.substring(0, 40))}`;
       }
+      imageUrl = toAbsoluteUrl(req, imageUrl);
       
       // Build the canonical URL
       const protocol = req.headers["x-forwarded-proto"] || "https";
@@ -1395,7 +1410,7 @@ export async function registerRoutes(
         goldApi: { configured: true, description: "Gold-API (free, no key required)" },
         finnhub: { configured: !!process.env.FINNHUB_API_KEY, description: "Real-time stock data" },
         openai: { configured: openaiConfigured, description: "AI analysis" },
-        pexels: { configured: !!process.env.PEXELS_API_KEY, description: "Stock images for articles" },
+        pexels: { configured: true, description: "Stored article images with AI fallback" },
       };
 
       // Database check

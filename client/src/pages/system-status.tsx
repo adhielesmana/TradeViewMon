@@ -395,14 +395,14 @@ export default function SystemStatusPage() {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-                <Image className="h-5 w-5 text-muted-foreground" />
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium">Pexels</span>
-                  <span className="text-xs text-muted-foreground">{diagnostics.apis.pexels.description}</span>
-                  {diagnostics.apis.pexels.configured ? (
-                    <Badge variant="outline" className="mt-1 w-fit text-profit border-profit/50">
-                      <CheckCircle className="mr-1 h-3 w-3" />Configured
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                  <Image className="h-5 w-5 text-muted-foreground" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">Article Images</span>
+                    <span className="text-xs text-muted-foreground">{diagnostics.apis.pexels.description}</span>
+                    {diagnostics.apis.pexels.configured ? (
+                      <Badge variant="outline" className="mt-1 w-fit text-profit border-profit/50">
+                        <CheckCircle className="mr-1 h-3 w-3" />Configured
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="mt-1 w-fit text-yellow-600 border-yellow-500/50">

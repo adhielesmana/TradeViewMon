@@ -383,6 +383,32 @@ CREATE TABLE IF NOT EXISTS news_analysis_snapshots (
 
 ALTER TABLE news_analysis_snapshots ADD COLUMN IF NOT EXISTS image_url TEXT;
 
+-- ============================================
+-- TABLE: article_image_cache (normalized reusable article images)
+-- ============================================
+CREATE TABLE IF NOT EXISTS article_image_cache (
+    id SERIAL PRIMARY KEY,
+    cache_key VARCHAR(128) NOT NULL UNIQUE,
+    topic_signature TEXT NOT NULL,
+    headline TEXT,
+    summary TEXT,
+    keywords TEXT,
+    source_type VARCHAR(20) NOT NULL,
+    source_url TEXT,
+    image_url TEXT NOT NULL,
+    storage_path TEXT,
+    relevance_score REAL NOT NULL DEFAULT 99.99,
+    usage_count INTEGER NOT NULL DEFAULT 1,
+    last_used_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS article_image_cache_key_idx ON article_image_cache(cache_key);
+CREATE INDEX IF NOT EXISTS article_image_cache_expires_idx ON article_image_cache(expires_at);
+CREATE INDEX IF NOT EXISTS article_image_cache_last_used_idx ON article_image_cache(last_used_at);
+
 CREATE INDEX IF NOT EXISTS news_analysis_snapshots_analyzed_idx ON news_analysis_snapshots(analyzed_at DESC);
 CREATE INDEX IF NOT EXISTS news_analysis_snapshots_type_idx ON news_analysis_snapshots(analysis_type);
 

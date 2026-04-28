@@ -647,6 +647,34 @@ export const insertNewsAnalysisSnapshotSchema = createInsertSchema(newsAnalysisS
 export type NewsAnalysisSnapshot = typeof newsAnalysisSnapshots.$inferSelect;
 export type InsertNewsAnalysisSnapshot = z.infer<typeof insertNewsAnalysisSnapshotSchema>;
 
+// Article Image Cache - stores normalized, reusable article images for 180 days
+export const articleImageCache = pgTable("article_image_cache", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  cacheKey: varchar("cache_key", { length: 128 }).notNull().unique(),
+  topicSignature: text("topic_signature").notNull(),
+  headline: text("headline"),
+  summary: text("summary"),
+  keywords: text("keywords"),
+  sourceType: varchar("source_type", { length: 20 }).notNull(), // 'rss', 'openai', 'cache', 'fallback'
+  sourceUrl: text("source_url"),
+  imageUrl: text("image_url").notNull(), // Stored internal URL (/objects/... or /uploads/...)
+  storagePath: text("storage_path"), // Internal storage path used to persist the image
+  relevanceScore: real("relevance_score").notNull().default(99.99),
+  usageCount: integer("usage_count").notNull().default(1),
+  lastUsedAt: timestamp("last_used_at").notNull().default(sql`now()`),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("article_image_cache_key_idx").on(table.cacheKey),
+  index("article_image_cache_expires_idx").on(table.expiresAt),
+  index("article_image_cache_last_used_idx").on(table.lastUsedAt),
+]);
+
+export const insertArticleImageCacheSchema = createInsertSchema(articleImageCache);
+export type ArticleImageCache = typeof articleImageCache.$inferSelect;
+export type InsertArticleImageCache = z.infer<typeof insertArticleImageCacheSchema>;
+
 // Currency Rates - cached exchange rates from EUR base
 export const currencyRates = pgTable("currency_rates", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),

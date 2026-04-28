@@ -519,10 +519,15 @@ class Scheduler {
   private async runNewsCleanup(): Promise<void> {
     try {
       const { cleanupOldNews } = await import("./news-service");
+      const { cleanupExpiredArticleImages } = await import("./article-image-service");
       const deleted = await cleanupOldNews();
+      const deletedImages = await cleanupExpiredArticleImages();
       
       if (deleted > 0) {
         console.log(`[Scheduler] News cleanup: deleted ${deleted} articles older than 14 days`);
+      }
+      if (deletedImages > 0) {
+        console.log(`[Scheduler] Article image cleanup: deleted ${deletedImages} expired cached images`);
       }
     } catch (error) {
       console.error("[Scheduler] Error cleaning up old news:", error);

@@ -348,30 +348,10 @@ const KEYWORD_MAPPINGS: Record<string, string> = {
   bank: "banking,finance",
 };
 
-// Generate unique image URL based on article content using Unsplash
+// Deterministic fallback used only when the server has no stored article image yet.
 function generateArticleImage(article: { id?: number; headline?: string; summary?: string; overallSentiment?: string }): string {
-  const text = (article.headline || article.summary || "market").toLowerCase();
-  
-  // Extract keywords from headline for relevant image search
-  const keywords: string[] = [];
-  for (const [keyword, searchTerms] of Object.entries(KEYWORD_MAPPINGS)) {
-    if (text.includes(keyword)) {
-      keywords.push(searchTerms.split(",")[0]);
-      if (keywords.length >= 2) break;
-    }
-  }
-  
-  // Default to finance keywords if none found
-  if (keywords.length === 0) {
-    keywords.push("finance", "stock-market");
-  }
-  
-  // Use article ID or hash of headline for unique image per article
-  const stableId = article.id || Math.abs(text.split("").reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0));
-  
-  // Use Unsplash Source API for relevant stock images based on keywords
-  const keywordQuery = keywords.join(",");
-  return `https://source.unsplash.com/800x450/?${encodeURIComponent(keywordQuery)}&sig=${stableId}`;
+  const text = (article.headline || article.summary || "Market Analysis").slice(0, 60);
+  return `https://placehold.co/1200x630/1a1a2e/ffffff?text=${encodeURIComponent(text)}`;
 }
 
 interface PaginatedNewsHistory {

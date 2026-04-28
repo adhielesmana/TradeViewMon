@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import crypto from "crypto";
 import { storage } from "./storage";
 import { decrypt } from "./encryption";
+import { resolveRelevantImage } from "./article-image-service";
 import type { InsertNewsArticle, NewsArticle, InsertNewsAnalysisSnapshot, NewsAnalysisSnapshot } from "@shared/schema";
 
 const parser = new Parser({
@@ -429,12 +430,10 @@ async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"],
   
   try {
     const generatedArticle = generateArticleText(prediction, newsCount, "regular");
-    
-    // Generate stock image using stable ID based on headline hash
-    // This ensures deterministic image URLs for CDN caching
-    const headlineForImage = prediction.headline || prediction.summary.slice(0, 50);
-    const stableId = Math.abs(hashCode(headlineForImage));
-    const stockImageUrl = generateStockImageUrl(headlineForImage, stableId);
+    const imageResolution = await resolveRelevantImage({
+      headline: prediction.headline || prediction.summary.slice(0, 50),
+      summary: prediction.summary,
+    });
     
     const snapshot: InsertNewsAnalysisSnapshot = {
       overallSentiment: prediction.overallSentiment,
@@ -449,7 +448,7 @@ async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"],
       analyzedAt: new Date(),
       analysisType: "regular",
       generatedArticle: generatedArticle,
-      imageUrl: stockImageUrl,
+      imageUrl: imageResolution.imageUrl,
     };
     
     await storage.saveNewsAnalysisSnapshot(snapshot);
@@ -777,13 +776,13 @@ Generate your market prediction now.`
     // Generate article text for history display
     const generatedArticle = generateArticleText(prediction, recentArticles.length, "hourly");
     
-    // Pick featured image from source articles (first article with image)
-    // Fallback to stock image if no RSS image available
+    // Pick the most relevant stored image from the source articles if available.
     const rssImageUrl = recentArticles.find(a => a.imageUrl)?.imageUrl;
-    const headlineForImage = prediction.headline || prediction.summary.slice(0, 50);
-    // Use stable hash-based ID for deterministic image URLs (better for CDN caching)
-    const stableId = Math.abs(hashCode(headlineForImage));
-    const featuredImageUrl = rssImageUrl || generateStockImageUrl(headlineForImage, stableId);
+    const imageResolution = await resolveRelevantImage({
+      headline: prediction.headline || prediction.summary.slice(0, 50),
+      summary: prediction.summary,
+      sourceImageUrl: rssImageUrl,
+    });
     
     // Save enhanced analysis to database with source tracking
     const snapshot: InsertNewsAnalysisSnapshot = {
@@ -805,7 +804,7 @@ Generate your market prediction now.`
       }),
       analysisType: "hourly",
       generatedArticle: generatedArticle,
-      imageUrl: featuredImageUrl,
+      imageUrl: imageResolution.imageUrl,
     };
     
     await storage.saveNewsAnalysisSnapshot(snapshot);
@@ -1153,30 +1152,12 @@ Return ONLY the image search query (3-6 words), nothing else. Be specific and vi
 
 // Get AI-powered relevant image for an article
 export async function getAIRelevantImage(headline: string, summary: string, articleId: number): Promise<string> {
-  // Step 1: Use AI to extract specific image keywords
-  const aiKeywords = await extractImageKeywordsWithAI(headline, summary);
-  console.log(`[NewsService] AI keywords for article ${articleId}: "${aiKeywords}"`);
-
-  // Step 2: Try Pexels API with AI keywords (primary source)
-  const pexelsImage = await searchPexelsImage(aiKeywords);
-  if (pexelsImage) {
-    console.log(`[NewsService] Found Pexels image for: "${aiKeywords}"`);
-    return pexelsImage;
-  }
-
-  // Step 3: Try simplified keywords if original query failed
-  const simplifiedKeywords = aiKeywords.split(" ").slice(0, 2).join(" ");
-  if (simplifiedKeywords !== aiKeywords) {
-    const simplifiedImage = await searchPexelsImage(simplifiedKeywords);
-    if (simplifiedImage) {
-      console.log(`[NewsService] Found Pexels image with simplified query: "${simplifiedKeywords}"`);
-      return simplifiedImage;
-    }
-  }
-
-  // Step 4: Use curated fallback images based on topic detection
-  console.log(`[NewsService] Using curated fallback for: "${aiKeywords}"`);
-  return getFallbackImage(aiKeywords + " " + headline, articleId);
+  const imageResolution = await resolveRelevantImage({
+    headline,
+    summary,
+  });
+  console.log(`[NewsService] Resolved image for article ${articleId}: ${imageResolution.sourceType} (${imageResolution.relevanceScore}%)`);
+  return imageResolution.imageUrl;
 }
 
 // Simple string hash function for stable image IDs
@@ -1224,29 +1205,36 @@ function generateStockImageUrl(headline: string, articleId: number): string {
   return `https://loremflickr.com/800/450/${encodeURIComponent(keywordQuery)}/all?lock=${articleId}`;
 }
 
-// Backfill images for articles that don't have them
+// Backfill images for articles that need normalization or are still using external URLs
 export async function backfillArticleImages(): Promise<{ updated: number; total: number }> {
-  console.log("[NewsService] Starting image backfill for articles without images...");
+  console.log("[NewsService] Starting article image normalization...");
   
   try {
-    // Get articles without images (limit to recent ones to avoid too many updates)
-    const articlesWithoutImages = await storage.getNewsArticlesWithoutImages(50);
-    
-    if (articlesWithoutImages.length === 0) {
+    const recentArticles = await storage.getNewsArticles(50);
+    const articlesToNormalize = recentArticles;
+
+    if (articlesToNormalize.length === 0) {
       console.log("[NewsService] No articles need image backfill");
       return { updated: 0, total: 0 };
     }
     
     let updated = 0;
     
-    for (const article of articlesWithoutImages) {
-      const imageUrl = generateStockImageUrl(article.title, article.id);
-      await storage.updateArticleImageUrl(article.id, imageUrl);
-      updated++;
+    for (const article of articlesToNormalize) {
+      const imageResolution = await resolveRelevantImage({
+        headline: article.title,
+        summary: article.content || "",
+        sourceImageUrl: article.imageUrl || null,
+      });
+
+      if (article.imageUrl !== imageResolution.imageUrl) {
+        await storage.updateArticleImageUrl(article.id, imageResolution.imageUrl);
+        updated++;
+      }
     }
     
-    console.log(`[NewsService] Backfilled images for ${updated}/${articlesWithoutImages.length} articles`);
-    return { updated, total: articlesWithoutImages.length };
+    console.log(`[NewsService] Backfilled images for ${updated}/${articlesToNormalize.length} articles`);
+    return { updated, total: articlesToNormalize.length };
     
   } catch (error: any) {
     console.error("[NewsService] Image backfill failed:", error.message);
@@ -1254,29 +1242,37 @@ export async function backfillArticleImages(): Promise<{ updated: number; total:
   }
 }
 
-// Backfill images for snapshots that don't have them
+// Backfill images for snapshots that don't have them or still point to external URLs
 export async function backfillSnapshotImages(): Promise<{ updated: number; total: number }> {
-  console.log("[NewsService] Starting image backfill for snapshots without images...");
+  console.log("[NewsService] Starting snapshot image normalization...");
   
   try {
-    const snapshotsWithoutImages = await storage.getNewsSnapshotsWithoutImages(50);
-    
-    if (snapshotsWithoutImages.length === 0) {
+    const snapshots = await storage.getAllNewsSnapshots();
+    const snapshotsToNormalize = snapshots;
+
+    if (snapshotsToNormalize.length === 0) {
       console.log("[NewsService] No snapshots need image backfill");
       return { updated: 0, total: 0 };
     }
     
     let updated = 0;
     
-    for (const snapshot of snapshotsWithoutImages) {
+    for (const snapshot of snapshotsToNormalize) {
       const headline = snapshot.headline || snapshot.summary.slice(0, 50);
-      const imageUrl = generateStockImageUrl(headline, snapshot.id);
-      await storage.updateSnapshotImageUrl(snapshot.id, imageUrl);
-      updated++;
+      const imageResolution = await resolveRelevantImage({
+        headline,
+        summary: snapshot.summary,
+        sourceImageUrl: snapshot.imageUrl || null,
+      });
+
+      if (snapshot.imageUrl !== imageResolution.imageUrl) {
+        await storage.updateSnapshotImageUrl(snapshot.id, imageResolution.imageUrl);
+        updated++;
+      }
     }
     
-    console.log(`[NewsService] Backfilled images for ${updated}/${snapshotsWithoutImages.length} snapshots`);
-    return { updated, total: snapshotsWithoutImages.length };
+    console.log(`[NewsService] Backfilled images for ${updated}/${snapshotsToNormalize.length} snapshots`);
+    return { updated, total: snapshotsToNormalize.length };
     
   } catch (error: any) {
     console.error("[NewsService] Snapshot image backfill failed:", error.message);
@@ -1300,21 +1296,20 @@ export async function regenerateAllSnapshotImages(forceAll: boolean = false): Pr
     let updated = 0;
     
     for (const snapshot of allSnapshots) {
-      // Skip if already has a Pexels image (unless forceAll is true)
-      if (!forceAll && snapshot.imageUrl?.includes("images.pexels.com")) {
-        continue;
-      }
-      
       const headline = snapshot.headline || "market analysis";
       const summary = snapshot.summary || "";
       
-      // Use AI-powered image generation
-      const newImageUrl = await getAIRelevantImage(headline, summary, snapshot.id);
+      const imageResolution = await resolveRelevantImage({
+        headline,
+        summary,
+        sourceImageUrl: snapshot.imageUrl || null,
+        forceRefresh: forceAll,
+      });
       
-      await storage.updateSnapshotImageUrl(snapshot.id, newImageUrl);
+      await storage.updateSnapshotImageUrl(snapshot.id, imageResolution.imageUrl);
       updated++;
       
-      // Rate limit to avoid API throttling (Pexels: 200 req/hour)
+      // Rate limit to avoid AI/image-service bursts
       if (updated % 10 === 0) {
         console.log(`[NewsService] Regenerated ${updated}/${allSnapshots.length} images...`);
         await new Promise(resolve => setTimeout(resolve, 500)); // 0.5 sec delay every 10 images
