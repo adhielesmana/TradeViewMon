@@ -19,6 +19,65 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+SUDO=""
+if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+elif command -v sudo &> /dev/null; then
+    SUDO="sudo"
+fi
+
+require_sudo() {
+    if [ -z "$SUDO" ]; then
+        log_error "This deployment needs root access to install host dependencies and manage Nginx."
+        log_error "Run as root or install sudo on the server."
+        exit 1
+    fi
+}
+
+install_host_dependencies() {
+    local missing_packages=()
+
+    if ! command -v docker &> /dev/null; then
+        missing_packages+=("docker.io" "docker-compose-plugin")
+    fi
+
+    if ! command -v nginx &> /dev/null; then
+        missing_packages+=("nginx")
+    fi
+
+    if ! command -v certbot &> /dev/null; then
+        missing_packages+=("certbot" "python3-certbot-nginx")
+    fi
+
+    if [ ${#missing_packages[@]} -eq 0 ]; then
+        log_info "Host dependencies already installed"
+        return 0
+    fi
+
+    if ! command -v apt-get &> /dev/null; then
+        log_error "Missing host dependencies: ${missing_packages[*]}"
+        log_error "Automatic installation currently supports Debian/Ubuntu systems with apt-get."
+        exit 1
+    fi
+
+    require_sudo
+
+    log_info "Installing missing host dependencies: ${missing_packages[*]}"
+    $SUDO apt-get update
+    DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y "${missing_packages[@]}"
+
+    if command -v systemctl &> /dev/null; then
+        log_info "Starting and enabling host services..."
+        $SUDO systemctl enable --now docker 2>/dev/null || $SUDO systemctl start docker
+        $SUDO systemctl enable --now nginx 2>/dev/null || $SUDO systemctl start nginx
+    fi
+
+    if ! command -v docker &> /dev/null || ! docker info &> /dev/null; then
+        log_warn "Docker CLI was installed, but the daemon is not responding yet."
+        log_warn "If needed, start Docker manually with: sudo systemctl start docker"
+    fi
+}
+
 show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
@@ -174,10 +233,10 @@ echo ""
 cd "$PROJECT_DIR"
 log_info "Working directory: $(pwd)"
 
-# Check Docker first
+# Install missing host dependencies when possible, then verify Docker.
+install_host_dependencies
 if ! check_docker; then
-    log_error "Please install Docker and ensure the Docker daemon is running"
-    log_info "Install Docker: curl -fsSL https://get.docker.com | sh"
+    log_error "Docker is still not available or not running after dependency setup"
     exit 1
 fi
 
