@@ -42,7 +42,7 @@ install_host_dependencies() {
     local missing_packages=()
 
     if ! command -v docker &> /dev/null; then
-        missing_packages+=("docker.io" "docker-compose-plugin")
+        missing_packages+=("docker.io" "docker-compose-v2")
     fi
 
     if ! command -v nginx &> /dev/null; then
