@@ -27,6 +27,10 @@ elif command -v sudo &> /dev/null; then
 fi
 
 require_sudo() {
+    if [ "$(id -u)" -eq 0 ]; then
+        return 0
+    fi
+
     if [ -z "$SUDO" ]; then
         log_error "This deployment needs root access to install host dependencies and manage Nginx."
         log_error "Run as root or install sudo on the server."
