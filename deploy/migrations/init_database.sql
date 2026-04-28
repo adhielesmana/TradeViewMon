@@ -222,7 +222,7 @@ CREATE TABLE IF NOT EXISTS user_invites (
     email TEXT NOT NULL,
     token TEXT NOT NULL UNIQUE,
     role VARCHAR(20) NOT NULL DEFAULT 'user',
-    invited_by_id VARCHAR REFERENCES users(id),
+    invited_by_id INTEGER REFERENCES users(id),
     expires_at TIMESTAMP NOT NULL,
     accepted_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
