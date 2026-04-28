@@ -4,6 +4,7 @@ import { PredictionChart } from "@/components/prediction-chart";
 import { PredictionTable } from "@/components/prediction-table";
 import { AccuracyDisplay } from "@/components/accuracy-display";
 import { MultiFactorAnalysis } from "@/components/multi-factor-analysis";
+import { EnsembleSummaryCard } from "@/components/ensemble-summary-card";
 import { StatCard } from "@/components/stat-card";
 import { ExportDropdown } from "@/components/export-dropdown";
 import { TimeframeSelector } from "@/components/timeframe-selector";
@@ -120,6 +121,12 @@ export default function Predictions() {
           />
         </div>
       </div>
+
+      <EnsembleSummaryCard
+        symbol={symbol}
+        timeframe={timeframeParam || "1min"}
+        symbolInfo={currentSymbol}
+      />
 
       <MultiFactorAnalysis symbol={symbol} />
 

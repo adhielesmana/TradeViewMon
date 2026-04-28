@@ -3,10 +3,12 @@ import { storage } from "./storage";
 import { predictionEngine } from "./prediction-engine";
 import { marketDataService } from "./market-data-service";
 import { wsService } from "./websocket";
-import { generateAiSuggestion, toInsertSuggestion, evaluateSuggestion } from "./ai-suggestion-engine";
+import { evaluateSuggestion } from "./ai-suggestion-engine";
 import { analyzeWithAI } from "./ai-trading-analyzer";
 import { generateUnifiedSignal } from "./unified-signal-generator";
 import { riskManager } from "./risk-manager";
+import { ensembleOrchestrator } from "./ensemble-orchestrator";
+import { buildEnsembleBenchmark } from "./backtesting";
 
 // Market hours detection
 // Forex/Precious metals market: Sunday 5 PM EST to Friday 5 PM EST
@@ -288,6 +290,7 @@ class Scheduler {
   private midnightTask: ReturnType<typeof cron.schedule> | null = null;
   private newsTask: ReturnType<typeof cron.schedule> | null = null;
   private hourlyAiTask: ReturnType<typeof cron.schedule> | null = null;
+  private benchmarkTask: ReturnType<typeof cron.schedule> | null = null;
   private intervalMs: number = 60000;
   private predictionCycleCount: number = 0;
 
@@ -334,6 +337,11 @@ class Scheduler {
       await this.runHourlyAiAnalysis();
     });
 
+    // Nightly ensemble benchmark and checkpoint promotion
+    this.benchmarkTask = cron.schedule("0 0 2 * * *", async () => {
+      await this.runNightlyEnsembleBenchmark();
+    });
+
     // Initial news fetch on startup
     this.runNewsFetch().catch(err => console.error("[Scheduler] Initial news fetch failed:", err));
     
@@ -342,10 +350,13 @@ class Scheduler {
       this.runHourlyAiAnalysis().catch(err => console.error("[Scheduler] Initial hourly AI analysis failed:", err));
     }, 30000); // 30 second delay
 
+    this.runModelHealthRefresh().catch(err => console.error("[Scheduler] Initial ML health refresh failed:", err));
+
     console.log("[Scheduler] Scheduler started - running every 60 seconds for market data and predictions");
     console.log("[Scheduler] Currency rates will update every 12 hours");
     console.log("[Scheduler] News fetch every 15 minutes with 14-day retention for AI learning");
     console.log("[Scheduler] Hourly AI analysis with full article content and 14-day historical context");
+    console.log("[Scheduler] Nightly ML ensemble benchmark scheduled for 02:00");
     console.log("[Scheduler] Midnight profitable positions auto-close enabled at 00:00:00 daily");
   }
 
@@ -378,6 +389,11 @@ class Scheduler {
     if (this.hourlyAiTask) {
       this.hourlyAiTask.stop();
       this.hourlyAiTask = null;
+    }
+
+    if (this.benchmarkTask) {
+      this.benchmarkTask.stop();
+      this.benchmarkTask = null;
     }
 
     this.isRunning = false;
@@ -668,6 +684,7 @@ class Scheduler {
 
   private async runPredictionCycle(): Promise<void> {
     const allSymbols = marketDataService.getSupportedSymbols();
+    const symbolProfiles = new Map((await storage.getMonitoredSymbols()).map((symbol) => [symbol.symbol, symbol] as const));
 
     try {
       for (const symbol of allSymbols) {
@@ -684,6 +701,12 @@ class Scheduler {
           predictedPrice: number;
           predictedDirection: string;
           confidence: number;
+          trustScore?: number;
+          consensusScore?: number;
+          forecastLower?: number;
+          forecastUpper?: number;
+          modelType?: string;
+          abstainReason?: string | null;
         }> = [];
 
         for (const timeframe of TIMEFRAMES) {
@@ -696,7 +719,18 @@ class Scheduler {
             continue;
           }
           
-          const prediction = predictionEngine.predict(aggregatedData as any, timeframe.stepsAhead);
+          const analysis = await ensembleOrchestrator.analyzeCandles({
+            symbol,
+            candles: aggregatedData as any,
+            timeframe: timeframe.name,
+            stepsAhead: timeframe.stepsAhead,
+            minutesAhead: timeframe.minutes,
+            source: "prediction",
+            symbolProfile: symbolProfiles.get(symbol) ?? null,
+            persist: true,
+          });
+
+          const summary = analysis.summary;
           
           const targetTime = new Date(now.getTime() + timeframe.minutes * 60000);
           targetTime.setSeconds(0, 0);
@@ -705,18 +739,30 @@ class Scheduler {
             symbol,
             predictionTimestamp: now,
             targetTimestamp: targetTime,
-            predictedPrice: prediction.predictedPrice,
-            predictedDirection: prediction.predictedDirection,
-            modelType: prediction.modelType,
-            confidence: prediction.confidence,
+            predictedPrice: summary.predictedPrice,
+            predictedDirection: summary.direction,
+            modelType: summary.modelType,
+            confidence: summary.confidence,
+            trustScore: summary.trustScore,
+            consensusScore: summary.consensusScore,
+            forecastLower: summary.forecastLower,
+            forecastUpper: summary.forecastUpper,
+            ensembleBreakdown: JSON.stringify(summary.modelContributions),
+            ensembleAuditId: analysis.auditId ?? null,
             timeframe: timeframe.name,
           });
 
           newPredictions.push({
             timeframe: timeframe.name,
-            predictedPrice: prediction.predictedPrice,
-            predictedDirection: prediction.predictedDirection,
-            confidence: prediction.confidence,
+            predictedPrice: summary.predictedPrice,
+            predictedDirection: summary.direction,
+            confidence: summary.confidence,
+            trustScore: summary.trustScore,
+            consensusScore: summary.consensusScore,
+            forecastLower: summary.forecastLower,
+            forecastUpper: summary.forecastUpper,
+            modelType: summary.modelType,
+            abstainReason: summary.abstainReason,
           });
         }
 
@@ -728,8 +774,11 @@ class Scheduler {
       }
       
       await this.updatePredictionEngineStatus("healthy");
+      await this.runModelHealthRefresh();
     } catch (error) {
       console.error("[Scheduler] Error in prediction cycle:", error);
+      await this.updatePredictionEngineStatus("error");
+      await this.runModelHealthRefresh();
     }
   }
 
@@ -831,15 +880,140 @@ class Scheduler {
         lastCheck: new Date(),
         lastSuccess: status === "healthy" ? new Date() : null,
         errorMessage: null,
-        metadata: JSON.stringify({ model: "ensemble_ma_lr" }),
+        metadata: JSON.stringify({ model: "local_stock_ensemble_v1" }),
       });
     } catch (error) {
       console.error("[Scheduler] Error updating prediction engine status:", error);
     }
   }
 
+  private async runModelHealthRefresh(): Promise<void> {
+    try {
+      await ensembleOrchestrator.refreshModelStatus();
+    } catch (error) {
+      console.error("[Scheduler] Error refreshing ML model status:", error);
+    }
+  }
+
+  private async runNightlyEnsembleBenchmark(): Promise<void> {
+    try {
+      console.log("[Scheduler] Running nightly ensemble benchmark...");
+      const monitoredSymbols = await storage.getMonitoredSymbols();
+      const stockSymbols = monitoredSymbols.filter((symbol) => {
+        const category = (symbol.category || "").toLowerCase();
+        const currency = (symbol.currency || "").toUpperCase();
+        return category.includes("stock") || category.includes("equity") || category.includes("shares") || currency === "IDR" || symbol.symbol.endsWith(".JK");
+      });
+
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const summaries: Array<{
+        symbol: string;
+        benchmark: Awaited<ReturnType<typeof buildEnsembleBenchmark>>;
+      }> = [];
+
+      for (const symbol of stockSymbols) {
+        try {
+          const candles = await storage.getMarketDataByTimeRange(symbol.symbol, startDate, endDate);
+          if (candles.length < 40) {
+            continue;
+          }
+
+          const benchmark = await buildEnsembleBenchmark(
+            {
+              symbol: symbol.symbol,
+              startDate,
+              endDate,
+              timeframe: "1min",
+              lookbackPeriod: 20,
+            },
+            candles,
+            20,
+            1,
+          );
+          summaries.push({ symbol: symbol.symbol, benchmark });
+        } catch (error) {
+          console.error(`[Scheduler] Benchmark failed for ${symbol.symbol}:`, error);
+        }
+      }
+
+      if (summaries.length === 0) {
+        await storage.upsertSystemStatus({
+          component: "ml_ensemble",
+          status: "degraded",
+          lastCheck: new Date(),
+          lastSuccess: null,
+          errorMessage: "No stock symbols were available for nightly benchmarking",
+          metadata: JSON.stringify({ summaries: 0 }),
+        });
+        return;
+      }
+
+      const ensembleResults = summaries
+        .map((item) => item.benchmark.comparisons.find((comparison) => comparison.modelKey === "local_stock_ensemble_v1"))
+        .filter((item): item is NonNullable<typeof item> => Boolean(item));
+      const baselineResults = summaries
+        .map((item) => item.benchmark.comparisons.find((comparison) => comparison.modelKey === "baseline_ma_lr"))
+        .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+      const averageEnsembleAccuracy = ensembleResults.length > 0
+        ? ensembleResults.reduce((sum, item) => sum + item.directionAccuracy, 0) / ensembleResults.length
+        : 0;
+      const averageBaselineAccuracy = baselineResults.length > 0
+        ? baselineResults.reduce((sum, item) => sum + item.directionAccuracy, 0) / baselineResults.length
+        : 0;
+      const averageEnsembleDrawdown = ensembleResults.length > 0
+        ? ensembleResults.reduce((sum, item) => sum + (item.maxDrawdown ?? 0), 0) / ensembleResults.length
+        : 0;
+      const averageBaselineDrawdown = baselineResults.length > 0
+        ? baselineResults.reduce((sum, item) => sum + (item.maxDrawdown ?? 0), 0) / baselineResults.length
+        : 0;
+
+      const summary = {
+        symbols: summaries.length,
+        averageEnsembleAccuracy: Math.round(averageEnsembleAccuracy * 100) / 100,
+        averageBaselineAccuracy: Math.round(averageBaselineAccuracy * 100) / 100,
+        averageEnsembleDrawdown: Math.round(averageEnsembleDrawdown * 100) / 100,
+        averageBaselineDrawdown: Math.round(averageBaselineDrawdown * 100) / 100,
+      };
+
+      const checkpoint = `stock-ensemble-${new Date().toISOString().slice(0, 10)}`;
+      const improved = averageEnsembleAccuracy >= averageBaselineAccuracy + 1 && averageEnsembleDrawdown <= averageBaselineDrawdown + 5;
+      if (improved) {
+        await ensembleOrchestrator.promoteCheckpointIfImproved("cohort", checkpoint, summary);
+      }
+
+      await storage.upsertSystemStatus({
+        component: "ml_ensemble",
+        status: improved ? "healthy" : "degraded",
+        lastCheck: new Date(),
+        lastSuccess: improved ? new Date() : null,
+        errorMessage: null,
+        metadata: JSON.stringify({
+          ...summary,
+          improved,
+          activeCheckpoint: improved ? checkpoint : undefined,
+        }),
+      });
+
+      console.log(`[Scheduler] Nightly benchmark complete - ensemble ${averageEnsembleAccuracy.toFixed(2)} vs baseline ${averageBaselineAccuracy.toFixed(2)}`);
+      await this.runModelHealthRefresh();
+    } catch (error) {
+      console.error("[Scheduler] Error in nightly ensemble benchmark:", error);
+      await storage.upsertSystemStatus({
+        component: "ml_ensemble",
+        status: "error",
+        lastCheck: new Date(),
+        lastSuccess: null,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        metadata: JSON.stringify({ error: true }),
+      });
+    }
+  }
+
   private async runAiSuggestionCycle(): Promise<void> {
     const allSymbols = marketDataService.getSupportedSymbols();
+    const symbolProfiles = new Map((await storage.getMonitoredSymbols()).map((symbol) => [symbol.symbol, symbol] as const));
     let successCount = 0;
     let lastDecision = "";
     let lastConfidence = 0;
@@ -853,12 +1027,20 @@ class Scheduler {
           continue;
         }
         
-        const suggestion = generateAiSuggestion(recentData, symbol);
-        const insertData = toInsertSuggestion(suggestion, symbol);
+        const insertData = await ensembleOrchestrator.buildSuggestionRecord({
+          symbol,
+          candles: recentData,
+          timeframe: "1min",
+          stepsAhead: 1,
+          source: "suggestion",
+          symbolProfile: symbolProfiles.get(symbol) ?? null,
+          persist: true,
+        });
         
         const savedSuggestion = await storage.insertAiSuggestion(insertData);
+        const tradePlan = insertData.tradePlan ? JSON.parse(insertData.tradePlan) : null;
         
-        console.log(`[Scheduler] AI Suggestion: ${suggestion.decision} for ${symbol} (confidence: ${suggestion.confidence}%)`);
+        console.log(`[Scheduler] AI Suggestion: ${insertData.decision} for ${symbol} (confidence: ${insertData.confidence}%)`);
 
         wsService.broadcast({
           type: "suggestion_update",
@@ -866,29 +1048,36 @@ class Scheduler {
           timestamp: new Date().toISOString(),
           data: {
             id: savedSuggestion.id,
-            decision: suggestion.decision,
-            confidence: suggestion.confidence,
-            buyTarget: suggestion.buyTarget,
-            sellTarget: suggestion.sellTarget,
-            currentPrice: suggestion.currentPrice,
-            reasoning: suggestion.reasoning,
-            tradePlan: suggestion.tradePlan,
-            entryPrice: suggestion.tradePlan?.entryPrice,
-            stopLoss: suggestion.tradePlan?.stopLoss,
-            takeProfit1: suggestion.tradePlan?.takeProfit1,
-            takeProfit2: suggestion.tradePlan?.takeProfit2,
-            takeProfit3: suggestion.tradePlan?.takeProfit3,
-            riskRewardRatio: suggestion.tradePlan?.riskRewardRatio,
-            supportLevel: suggestion.tradePlan?.supportLevel,
-            resistanceLevel: suggestion.tradePlan?.resistanceLevel,
-            signalType: suggestion.tradePlan?.signalType,
-            analysis: suggestion.tradePlan?.analysis,
+            decision: insertData.decision,
+            confidence: insertData.confidence,
+            trustScore: insertData.trustScore,
+            consensusScore: insertData.consensusScore,
+            buyTarget: insertData.buyTarget,
+            sellTarget: insertData.sellTarget,
+            forecastLower: insertData.forecastLower,
+            forecastUpper: insertData.forecastUpper,
+            currentPrice: insertData.currentPrice,
+            reasoning: insertData.reasoning,
+            indicators: insertData.indicators,
+            ensembleBreakdown: insertData.ensembleBreakdown,
+            ensembleAuditId: insertData.ensembleAuditId,
+            tradePlan,
+            entryPrice: tradePlan?.entryPrice,
+            stopLoss: tradePlan?.stopLoss,
+            takeProfit1: tradePlan?.takeProfit1,
+            takeProfit2: tradePlan?.takeProfit2,
+            takeProfit3: tradePlan?.takeProfit3,
+            riskRewardRatio: tradePlan?.riskRewardRatio,
+            supportLevel: tradePlan?.supportLevel,
+            resistanceLevel: tradePlan?.resistanceLevel,
+            signalType: tradePlan?.signalType,
+            analysis: tradePlan?.analysis,
           },
         });
 
         successCount++;
-        lastDecision = suggestion.decision;
-        lastConfidence = suggestion.confidence;
+        lastDecision = insertData.decision;
+        lastConfidence = insertData.confidence;
       }
       
       // Process auto-trades based on AI suggestions
@@ -914,6 +1103,7 @@ class Scheduler {
           }),
         });
       }
+      await this.runModelHealthRefresh();
     } catch (error) {
       console.error("[Scheduler] Error in AI suggestion cycle:", error);
       await storage.upsertSystemStatus({
@@ -924,6 +1114,7 @@ class Scheduler {
         errorMessage: String(error),
         metadata: null,
       });
+      await this.runModelHealthRefresh();
     }
   }
 

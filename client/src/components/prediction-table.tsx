@@ -83,6 +83,8 @@ export function PredictionTable({
                 <TableHead className="text-xs font-semibold text-right">Predicted</TableHead>
                 <TableHead className="text-xs font-semibold text-right">Actual</TableHead>
                 <TableHead className="text-xs font-semibold text-right">Diff %</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Trust</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Consensus</TableHead>
                 <TableHead className="text-xs font-semibold text-center">Result</TableHead>
               </TableRow>
             </TableHeader>
@@ -123,6 +125,18 @@ export function PredictionTable({
                   )}>
                     {prediction.percentageDifference !== undefined 
                       ? `${prediction.percentageDifference >= 0 ? '+' : ''}${prediction.percentageDifference.toFixed(2)}%`
+                      : <span className="text-muted-foreground">--</span>
+                    }
+                  </TableCell>
+                  <TableCell className="py-2 text-right font-mono text-sm">
+                    {prediction.trustScore !== undefined && prediction.trustScore !== null
+                      ? `${prediction.trustScore.toFixed(1)}%`
+                      : <span className="text-muted-foreground">--</span>
+                    }
+                  </TableCell>
+                  <TableCell className="py-2 text-right font-mono text-sm">
+                    {prediction.consensusScore !== undefined && prediction.consensusScore !== null
+                      ? `${prediction.consensusScore.toFixed(1)}%`
                       : <span className="text-muted-foreground">--</span>
                     }
                   </TableCell>

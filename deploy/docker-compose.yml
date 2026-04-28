@@ -1,4 +1,33 @@
 services:
+  ml-sidecar:
+    build:
+      context: ..
+      dockerfile: deploy/ml-sidecar.Dockerfile
+    container_name: trady-ml-sidecar
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${ML_SIDECAR_PORT:-8001}:8001"
+    environment:
+      ML_SIDECAR_PORT: "8001"
+      ML_ACTIVE_CHECKPOINT: "${ML_ACTIVE_CHECKPOINT:-stock-ensemble-v1}"
+      TZ: "${TZ:-Asia/Jakarta}"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    networks:
+      - trady-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   app:
     build:
       context: ..
@@ -14,12 +43,15 @@ services:
       SESSION_SECRET: "${SESSION_SECRET}"
       FINNHUB_API_KEY: "${FINNHUB_API_KEY:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      ML_SIDECAR_URL: "http://ml-sidecar:8001"
       USE_HTTPS: "${USE_HTTPS:-false}"
       TZ: "${TZ:-Asia/Jakarta}"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     depends_on:
+      ml-sidecar:
+        condition: service_healthy
       db:
         condition: service_healthy
     networks:

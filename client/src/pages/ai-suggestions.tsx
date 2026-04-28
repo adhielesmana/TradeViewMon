@@ -17,7 +17,9 @@ import {
   Zap,
   RefreshCw,
   CandlestickChart as CandlestickIcon,
-  AlertTriangle
+  AlertTriangle,
+  ShieldCheck,
+  Activity,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useSymbol, formatPrice, getCurrencySymbol } from "@/lib/symbol-context";
@@ -25,6 +27,7 @@ import { useWebSocket, type WSMessage } from "@/hooks/use-websocket";
 import { queryClient } from "@/lib/queryClient";
 import type { AiSuggestionAccuracyStats, MarketData } from "@shared/schema";
 import { CandlestickChart, type TimeframeOption } from "@/components/candlestick-chart";
+import { EnsembleSummaryCard } from "@/components/ensemble-summary-card";
 
 interface CandlestickPattern {
   name: string;
@@ -80,9 +83,15 @@ interface AiSuggestion {
   confidence: number;
   buyTarget: number | null;
   sellTarget: number | null;
+  trustScore?: number | null;
+  consensusScore?: number | null;
+  forecastLower?: number | null;
+  forecastUpper?: number | null;
   currentPrice: number;
   reasoning: SuggestionReason[];
   indicators: TechnicalIndicators;
+  ensembleBreakdown?: string | null;
+  ensembleAuditId?: number | null;
   isEvaluated: boolean;
   evaluatedAt: string | null;
   actualPrice: number | null;
@@ -310,6 +319,12 @@ export default function AiSuggestions() {
         </Card>
       </div>
 
+      <EnsembleSummaryCard
+        symbol={symbol}
+        timeframe="1min"
+        symbolInfo={currentSymbol}
+      />
+
       {latestSuggestion && (
         <Card className={`border-2 ${getDecisionBgColor(latestSuggestion.decision)}`}>
           <CardHeader>
@@ -323,6 +338,26 @@ export default function AiSuggestions() {
                   <span className="ml-3 text-lg text-muted-foreground">
                     {latestSuggestion.confidence}% confidence
                   </span>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {latestSuggestion.trustScore !== undefined && latestSuggestion.trustScore !== null && (
+                      <Badge variant="outline" className="gap-1">
+                        <ShieldCheck className="h-3 w-3" />
+                        Trust {latestSuggestion.trustScore.toFixed(1)}%
+                      </Badge>
+                    )}
+                    {latestSuggestion.consensusScore !== undefined && latestSuggestion.consensusScore !== null && (
+                      <Badge variant="outline" className="gap-1">
+                        <BarChart3 className="h-3 w-3" />
+                        Consensus {latestSuggestion.consensusScore.toFixed(1)}%
+                      </Badge>
+                    )}
+                    {latestSuggestion.forecastLower !== undefined && latestSuggestion.forecastUpper !== undefined && latestSuggestion.forecastLower !== null && latestSuggestion.forecastUpper !== null && (
+                      <Badge variant="secondary" className="gap-1">
+                        <Activity className="h-3 w-3" />
+                        Band {formatPrice(latestSuggestion.forecastLower, currentSymbol)} - {formatPrice(latestSuggestion.forecastUpper, currentSymbol)}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="text-right text-sm text-muted-foreground">

@@ -1,10 +1,13 @@
 import { 
   marketData, predictions, accuracyResults, systemStatus, users, userInvites, priceState, aiSuggestions,
+  mlModelRegistry, mlModelAudits,
   demoAccounts, demoPositions, demoTransactions, appSettings, currencyRates, autoTradeSettings,
   rssFeeds, monitoredSymbols, newsArticles, newsAnalysisSnapshots, symbolCategories,
   type MarketData, type InsertMarketData,
   type Prediction, type InsertPrediction,
   type AccuracyResult, type InsertAccuracyResult,
+  type MlModelRegistryEntry, type InsertMlModelRegistryEntry,
+  type MlModelAudit, type InsertMlModelAudit,
   type SystemStatus, type InsertSystemStatus,
   type MarketStats, type AccuracyStats, type PredictionWithResult,
   type User, type SafeUser, type InsertUser, type UpdateUser,
@@ -44,6 +47,14 @@ export interface IStorage {
   // Accuracy Results
   getAccuracyStats(symbol: string, timeframe?: string): Promise<AccuracyStats>;
   insertAccuracyResult(result: InsertAccuracyResult): Promise<AccuracyResult>;
+
+  // ML Ensemble Registry and Audits
+  getMlModelRegistry(): Promise<MlModelRegistryEntry[]>;
+  getMlModelByKey(modelKey: string): Promise<MlModelRegistryEntry | null>;
+  upsertMlModelRegistry(model: InsertMlModelRegistryEntry): Promise<MlModelRegistryEntry>;
+  updateMlModelRegistry(modelKey: string, updates: Partial<InsertMlModelRegistryEntry>): Promise<MlModelRegistryEntry | null>;
+  getRecentMlModelAudits(symbol?: string, limit?: number): Promise<MlModelAudit[]>;
+  insertMlModelAudit(audit: InsertMlModelAudit): Promise<MlModelAudit>;
 
   // System Status
   getSystemStatus(): Promise<SystemStatus[]>;
@@ -366,6 +377,66 @@ export class DatabaseStorage implements IStorage {
     return inserted;
   }
 
+  async getMlModelRegistry(): Promise<MlModelRegistryEntry[]> {
+    return db.select().from(mlModelRegistry).orderBy(mlModelRegistry.modelKey);
+  }
+
+  async getMlModelByKey(modelKey: string): Promise<MlModelRegistryEntry | null> {
+    const [result] = await db.select()
+      .from(mlModelRegistry)
+      .where(eq(mlModelRegistry.modelKey, modelKey))
+      .limit(1);
+    return result || null;
+  }
+
+  async upsertMlModelRegistry(model: InsertMlModelRegistryEntry): Promise<MlModelRegistryEntry> {
+    const [result] = await db.insert(mlModelRegistry)
+      .values(model)
+      .onConflictDoUpdate({
+        target: mlModelRegistry.modelKey,
+        set: {
+          displayName: model.displayName,
+          role: model.role,
+          marketScope: model.marketScope,
+          isEnabled: model.isEnabled,
+          weight: model.weight,
+          status: model.status,
+          version: model.version,
+          checkpoint: model.checkpoint,
+          lastTrainedAt: model.lastTrainedAt,
+          lastBenchmarkedAt: model.lastBenchmarkedAt,
+          metadata: model.metadata,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async updateMlModelRegistry(modelKey: string, updates: Partial<InsertMlModelRegistryEntry>): Promise<MlModelRegistryEntry | null> {
+    const [result] = await db.update(mlModelRegistry)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(mlModelRegistry.modelKey, modelKey))
+      .returning();
+    return result || null;
+  }
+
+  async getRecentMlModelAudits(symbol?: string, limit: number = 50): Promise<MlModelAudit[]> {
+    const query = db.select().from(mlModelAudits);
+    const results = symbol
+      ? await query.where(eq(mlModelAudits.symbol, symbol)).orderBy(desc(mlModelAudits.generatedAt)).limit(limit)
+      : await query.orderBy(desc(mlModelAudits.generatedAt)).limit(limit);
+    return results;
+  }
+
+  async insertMlModelAudit(audit: InsertMlModelAudit): Promise<MlModelAudit> {
+    const [inserted] = await db.insert(mlModelAudits).values(audit).returning();
+    return inserted;
+  }
+
   async getSystemStatus(): Promise<SystemStatus[]> {
     return db.select().from(systemStatus).orderBy(systemStatus.component);
   }
@@ -522,6 +593,9 @@ export class DatabaseStorage implements IStorage {
         displayName: users.displayName,
         role: users.role,
         isActive: users.isActive,
+        approvalStatus: users.approvalStatus,
+        approvedAt: users.approvedAt,
+        approvedBy: users.approvedBy,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
         lastLogin: users.lastLogin,
@@ -1161,30 +1235,45 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertCurrencyRate(rate: InsertCurrencyRate): Promise<CurrencyRate> {
+    const baseCurrency = rate.baseCurrency ?? "USD";
+    const targetCurrency = rate.targetCurrency;
+    const rateValue = rate.rate;
+    const source = rate.source ?? "frankfurter";
+    const fetchedAt = rate.fetchedAt;
+    const updatedAt = rate.updatedAt ?? new Date();
+    const normalizedRate: InsertCurrencyRate = {
+      baseCurrency,
+      targetCurrency,
+      rate: rateValue,
+      source,
+      fetchedAt,
+      updatedAt,
+    };
+
     const existing = await db.select()
       .from(currencyRates)
       .where(and(
-        eq(currencyRates.baseCurrency, rate.baseCurrency),
-        eq(currencyRates.targetCurrency, rate.targetCurrency)
+        eq(currencyRates.baseCurrency, baseCurrency),
+        eq(currencyRates.targetCurrency, targetCurrency)
       ))
       .limit(1);
 
     if (existing.length > 0) {
       const [updated] = await db.update(currencyRates)
         .set({
-          rate: rate.rate,
-          fetchedAt: rate.fetchedAt,
+          rate: rateValue,
+          fetchedAt,
           updatedAt: new Date(),
         })
         .where(and(
-          eq(currencyRates.baseCurrency, rate.baseCurrency),
-          eq(currencyRates.targetCurrency, rate.targetCurrency)
+          eq(currencyRates.baseCurrency, baseCurrency),
+          eq(currencyRates.targetCurrency, targetCurrency)
         ))
         .returning();
       return updated;
     } else {
       const [created] = await db.insert(currencyRates)
-        .values(rate)
+        .values(normalizedRate)
         .returning();
       return created;
     }

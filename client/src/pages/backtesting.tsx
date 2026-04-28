@@ -12,6 +12,8 @@ import { Play, TrendingUp, TrendingDown, Target, Percent, Activity, BarChart2, C
 import { useSymbol, formatPrice, getCurrencySymbol } from "@/lib/symbol-context";
 import { apiRequest } from "@/lib/queryClient";
 import { format, subDays, subMonths } from "date-fns";
+import { EnsembleSummaryCard } from "@/components/ensemble-summary-card";
+import type { EnsembleBacktestComparison } from "@shared/schema";
 
 interface BacktestTrade {
   timestamp: string;
@@ -57,6 +59,15 @@ interface BacktestResult {
   equityCurve: { timestamp: string; equity: number }[];
   runTime: number;
   totalTradesInBacktest: number;
+  ensembleComparison?: EnsembleBacktestComparison[];
+  benchmarkSummary?: {
+    sampleSize: number;
+    totalWindows: number;
+    baselineDirectionAccuracy: number;
+    ensembleDirectionAccuracy: number;
+    improvement: number;
+    bestModelKey: string | null;
+  };
 }
 
 function MetricCard({ 
@@ -158,6 +169,12 @@ export default function Backtesting() {
           </p>
         </div>
       </div>
+
+      <EnsembleSummaryCard
+        symbol={symbol}
+        timeframe={timeframe}
+        symbolInfo={currentSymbol}
+      />
 
       <Card>
         <CardHeader>
@@ -321,6 +338,65 @@ export default function Backtesting() {
               testId="text-win-streak"
             />
           </div>
+
+          {result.ensembleComparison && result.ensembleComparison.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Ensemble Benchmark</CardTitle>
+                <CardDescription>
+                  Walk-forward comparison of the baseline, each model head, and the combined ensemble.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {result.benchmarkSummary && (
+                  <div className="flex flex-wrap gap-2 text-sm">
+                    <Badge variant="outline">Sampled windows: {result.benchmarkSummary.sampleSize}</Badge>
+                    <Badge variant="outline">Total windows: {result.benchmarkSummary.totalWindows}</Badge>
+                    <Badge variant="outline">Baseline: {result.benchmarkSummary.baselineDirectionAccuracy.toFixed(1)}%</Badge>
+                    <Badge variant="outline">Ensemble: {result.benchmarkSummary.ensembleDirectionAccuracy.toFixed(1)}%</Badge>
+                    <Badge variant={result.benchmarkSummary.improvement >= 0 ? "default" : "destructive"}>
+                      Delta: {result.benchmarkSummary.improvement >= 0 ? "+" : ""}
+                      {result.benchmarkSummary.improvement.toFixed(1)}%
+                    </Badge>
+                    {result.benchmarkSummary.bestModelKey && (
+                      <Badge variant="secondary">Best: {result.benchmarkSummary.bestModelKey}</Badge>
+                    )}
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="py-2 text-left font-medium">Model</th>
+                        <th className="py-2 text-right font-medium">Direction</th>
+                        <th className="py-2 text-right font-medium">Error</th>
+                        <th className="py-2 text-right font-medium">Confidence</th>
+                        <th className="py-2 text-right font-medium">Drawdown</th>
+                        <th className="py-2 text-right font-medium">Sharpe</th>
+                        <th className="py-2 text-right font-medium">Trades</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.ensembleComparison.map((row) => (
+                        <tr
+                          key={row.modelKey}
+                          className={`border-b border-border/50 ${result.benchmarkSummary?.bestModelKey === row.modelKey ? "bg-primary/5" : ""}`}
+                        >
+                          <td className="py-2 font-medium">{row.displayName}</td>
+                          <td className="py-2 text-right font-mono">{row.directionAccuracy.toFixed(1)}%</td>
+                          <td className="py-2 text-right font-mono">{row.averageError.toFixed(2)}%</td>
+                          <td className="py-2 text-right font-mono">{row.confidence.toFixed(1)}%</td>
+                          <td className="py-2 text-right font-mono">{(row.maxDrawdown ?? 0).toFixed(2)}%</td>
+                          <td className="py-2 text-right font-mono">{(row.sharpeRatio ?? 0).toFixed(2)}</td>
+                          <td className="py-2 text-right font-mono">{row.trades}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

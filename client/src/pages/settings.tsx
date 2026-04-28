@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { Settings, Key, CheckCircle, AlertCircle, Info, Loader2, Eye, EyeOff, Bo
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { useUpload } from "@/hooks/use-upload";
 import { LogoCropModal } from "@/components/logo-crop-modal";
+import type { EnsembleSettings, MlModelRegistryEntry } from "@shared/schema";
 
 interface ApiKeyStatus {
   isConfigured: boolean;
@@ -57,15 +58,53 @@ interface SymbolCategory {
   isActive: boolean;
 }
 
+interface EnsembleAdminData {
+  settings: EnsembleSettings;
+  modelRegistry: MlModelRegistryEntry[];
+  modelHealth: Array<{
+    modelKey: string;
+    displayName: string;
+    status: string;
+    version?: string | null;
+    checkpoint?: string | null;
+    lastTrainedAt?: string | null;
+    weight?: number;
+    role?: string;
+  }>;
+  healthSummary: Record<string, number>;
+  recentAudits?: Array<{
+    id: number;
+    symbol: string;
+    predictionType: string;
+    generatedAt: string;
+    trustScore: number;
+    consensusScore: number;
+    ensembleDecision: string;
+    checkpoint: string | null;
+  }>;
+}
+
 export default function SettingsPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const isSuperadmin = user?.role === "superadmin";
+  const canManageEnsemble = user?.role === "superadmin" || user?.role === "admin";
   
   const [finnhubKey, setFinnhubKey] = useState("");
   const [showFinnhubKey, setShowFinnhubKey] = useState(false);
   const [openaiKey, setOpenaiKey] = useState("");
   const [showOpenaiKey, setShowOpenaiKey] = useState(false);
+  const [ensembleSettingsDraft, setEnsembleSettingsDraft] = useState<EnsembleSettings>({
+    trustThreshold: 68,
+    consensusThreshold: 60,
+    retrainCadenceHours: 24,
+    activeCheckpoint: "stock-ensemble-v1",
+    minCandles: 30,
+    stockOnly: true,
+    technicalWeight: 0.1,
+    abstainOnDisagreement: true,
+  });
+  const [modelDrafts, setModelDrafts] = useState<Record<string, { isEnabled: boolean; weight: number; status: string; checkpoint: string; version: string }>>({});
 
   // RSS Feed Dialog State
   const [feedDialogOpen, setFeedDialogOpen] = useState(false);
@@ -131,6 +170,34 @@ export default function SettingsPage() {
     enabled: isSuperadmin,
     retry: false,
   });
+
+  const { data: ensembleAdmin, isLoading: ensembleLoading } = useQuery<EnsembleAdminData>({
+    queryKey: ["/api/ensemble/settings"],
+    enabled: canManageEnsemble,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (ensembleAdmin?.settings) {
+      setEnsembleSettingsDraft(ensembleAdmin.settings);
+    }
+  }, [ensembleAdmin?.settings]);
+
+  useEffect(() => {
+    if (!ensembleAdmin?.modelRegistry) return;
+
+    const nextDrafts: Record<string, { isEnabled: boolean; weight: number; status: string; checkpoint: string; version: string }> = {};
+    for (const model of ensembleAdmin.modelRegistry) {
+      nextDrafts[model.modelKey] = {
+        isEnabled: model.isEnabled,
+        weight: model.weight,
+        status: model.status,
+        checkpoint: model.checkpoint || "",
+        version: model.version || "",
+      };
+    }
+    setModelDrafts(nextDrafts);
+  }, [ensembleAdmin?.modelRegistry]);
 
   // Logo mutations
   const saveLogoMutation = useMutation({
@@ -265,6 +332,38 @@ export default function SettingsPage() {
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message || "Failed to remove API key", variant: "destructive" });
+    },
+  });
+
+  const saveEnsembleSettingsMutation = useMutation({
+    mutationFn: async (payload: EnsembleSettings) => {
+      const response = await apiRequest("POST", "/api/ensemble/settings", payload);
+      return response.json() as Promise<{ success: boolean; settings: EnsembleSettings }>;
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Ensemble settings saved" });
+      queryClient.invalidateQueries({ queryKey: ["/api/ensemble/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/system/diagnostics"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/system/status"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to save ensemble settings", variant: "destructive" });
+    },
+  });
+
+  const updateModelMutation = useMutation({
+    mutationFn: async ({ modelKey, ...payload }: { modelKey: string; isEnabled?: boolean; weight?: number; status?: string; checkpoint?: string; version?: string }) => {
+      const response = await apiRequest("PUT", `/api/ensemble/models/${modelKey}`, payload);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Model updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/ensemble/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/system/diagnostics"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/system/status"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to update model", variant: "destructive" });
     },
   });
 
@@ -529,6 +628,37 @@ export default function SettingsPage() {
     }
   };
 
+  const updateEnsembleSetting = <K extends keyof EnsembleSettings>(key: K, value: EnsembleSettings[K]) => {
+    setEnsembleSettingsDraft((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
+  const updateModelDraft = (modelKey: string, field: "isEnabled" | "weight" | "status" | "checkpoint" | "version", value: string | number | boolean) => {
+    setModelDrafts((current) => ({
+      ...current,
+      [modelKey]: {
+        ...(current[modelKey] || { isEnabled: true, weight: 0.1, status: "healthy", checkpoint: "", version: "" }),
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleSaveModel = (modelKey: string) => {
+    const draft = modelDrafts[modelKey];
+    if (!draft) return;
+
+    updateModelMutation.mutate({
+      modelKey,
+      isEnabled: draft.isEnabled,
+      weight: draft.weight,
+      status: draft.status,
+      checkpoint: draft.checkpoint || undefined,
+      version: draft.version || undefined,
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -661,6 +791,286 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {canManageEnsemble && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <CardTitle>ML Ensemble Intelligence</CardTitle>
+                <CardDescription>
+                  Tune trust thresholds, active checkpoint, and per-model weights for the local stock ensemble.
+                </CardDescription>
+              </div>
+              {ensembleAdmin && (
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline">Healthy {ensembleAdmin.healthSummary.healthy || 0}</Badge>
+                  <Badge variant="outline">Degraded {ensembleAdmin.healthSummary.degraded || 0}</Badge>
+                  <Badge variant="outline">Offline {ensembleAdmin.healthSummary.offline || 0}</Badge>
+                  <Badge variant="outline">Training {ensembleAdmin.healthSummary.training || 0}</Badge>
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {ensembleLoading && !ensembleAdmin ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="ensemble-trust-threshold">Trust Threshold</Label>
+                    <Input
+                      id="ensemble-trust-threshold"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      value={ensembleSettingsDraft.trustThreshold}
+                      onChange={(e) => updateEnsembleSetting("trustThreshold", Number(e.target.value) || 0)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ensemble-consensus-threshold">Consensus Threshold</Label>
+                    <Input
+                      id="ensemble-consensus-threshold"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.1}
+                      value={ensembleSettingsDraft.consensusThreshold}
+                      onChange={(e) => updateEnsembleSetting("consensusThreshold", Number(e.target.value) || 0)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ensemble-retrain-cadence">Retrain Cadence (hours)</Label>
+                    <Input
+                      id="ensemble-retrain-cadence"
+                      type="number"
+                      min={1}
+                      max={168}
+                      step={1}
+                      value={ensembleSettingsDraft.retrainCadenceHours}
+                      onChange={(e) => updateEnsembleSetting("retrainCadenceHours", Number(e.target.value) || 1)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ensemble-checkpoint">Active Checkpoint</Label>
+                    <Input
+                      id="ensemble-checkpoint"
+                      value={ensembleSettingsDraft.activeCheckpoint}
+                      onChange={(e) => updateEnsembleSetting("activeCheckpoint", e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="ensemble-min-candles">Minimum Candles</Label>
+                    <Input
+                      id="ensemble-min-candles"
+                      type="number"
+                      min={10}
+                      max={5000}
+                      value={ensembleSettingsDraft.minCandles}
+                      onChange={(e) => updateEnsembleSetting("minCandles", Number(e.target.value) || 10)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ensemble-technical-weight">Technical Weight</Label>
+                    <Input
+                      id="ensemble-technical-weight"
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={ensembleSettingsDraft.technicalWeight}
+                      onChange={(e) => updateEnsembleSetting("technicalWeight", Number(e.target.value) || 0)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <div>
+                      <div className="text-sm font-medium">Stock Only</div>
+                      <div className="text-xs text-muted-foreground">Use full ensemble only for stock-like symbols</div>
+                    </div>
+                    <Switch
+                      checked={ensembleSettingsDraft.stockOnly}
+                      onCheckedChange={(checked) => updateEnsembleSetting("stockOnly", checked)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <div>
+                      <div className="text-sm font-medium">Abstain on Disagreement</div>
+                      <div className="text-xs text-muted-foreground">Return HOLD when the heads do not agree</div>
+                    </div>
+                    <Switch
+                      checked={ensembleSettingsDraft.abstainOnDisagreement}
+                      onCheckedChange={(checked) => updateEnsembleSetting("abstainOnDisagreement", checked)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => saveEnsembleSettingsMutation.mutate(ensembleSettingsDraft)}
+                    disabled={saveEnsembleSettingsMutation.isPending}
+                    data-testid="button-save-ensemble-settings"
+                  >
+                    {saveEnsembleSettingsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Save Ensemble Settings
+                  </Button>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Model Registry</h3>
+                    <p className="text-xs text-muted-foreground">Enable or tune each local model head.</p>
+                  </div>
+                  {ensembleAdmin?.modelRegistry?.length ? (
+                    <div className="overflow-x-auto rounded-lg border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Model</TableHead>
+                            <TableHead className="w-24">Enabled</TableHead>
+                            <TableHead className="w-28">Weight</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Checkpoint</TableHead>
+                            <TableHead>Version</TableHead>
+                            <TableHead className="w-24">Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {ensembleAdmin.modelRegistry.map((model) => {
+                            const draft = modelDrafts[model.modelKey] || {
+                              isEnabled: model.isEnabled,
+                              weight: model.weight,
+                              status: model.status,
+                              checkpoint: model.checkpoint || "",
+                              version: model.version || "",
+                            };
+                            return (
+                              <TableRow key={model.modelKey} data-testid={`row-model-${model.modelKey}`}>
+                                <TableCell>
+                                  <div className="space-y-1">
+                                    <div className="font-medium">{model.displayName}</div>
+                                    <div className="text-xs text-muted-foreground">{model.role} · {model.marketScope}</div>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Switch
+                                    checked={draft.isEnabled}
+                                    onCheckedChange={(checked) => updateModelDraft(model.modelKey, "isEnabled", checked)}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    value={draft.weight}
+                                    onChange={(e) => updateModelDraft(model.modelKey, "weight", Number(e.target.value) || 0)}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Select
+                                    value={draft.status}
+                                    onValueChange={(value) => updateModelDraft(model.modelKey, "status", value)}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="healthy">healthy</SelectItem>
+                                      <SelectItem value="degraded">degraded</SelectItem>
+                                      <SelectItem value="offline">offline</SelectItem>
+                                      <SelectItem value="training">training</SelectItem>
+                                      <SelectItem value="unknown">unknown</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    value={draft.checkpoint}
+                                    onChange={(e) => updateModelDraft(model.modelKey, "checkpoint", e.target.value)}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    value={draft.version}
+                                    onChange={(e) => updateModelDraft(model.modelKey, "version", e.target.value)}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleSaveModel(model.modelKey)}
+                                    disabled={updateModelMutation.isPending}
+                                    data-testid={`button-save-model-${model.modelKey}`}
+                                  >
+                                    {updateModelMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <Alert>
+                      <Info className="h-4 w-4" />
+                      <AlertDescription>No ensemble models are registered yet.</AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+
+                {ensembleAdmin?.recentAudits?.length ? (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <div>
+                        <h3 className="text-sm font-semibold">Recent Ensemble Audits</h3>
+                        <p className="text-xs text-muted-foreground">Latest runs recorded by the local audit log.</p>
+                      </div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Time</TableHead>
+                            <TableHead>Symbol</TableHead>
+                            <TableHead>Decision</TableHead>
+                            <TableHead>Trust</TableHead>
+                            <TableHead>Consensus</TableHead>
+                            <TableHead>Checkpoint</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {ensembleAdmin.recentAudits.map((audit) => (
+                            <TableRow key={audit.id}>
+                              <TableCell className="font-mono text-xs">{new Date(audit.generatedAt).toLocaleString()}</TableCell>
+                              <TableCell className="font-medium">{audit.symbol}</TableCell>
+                              <TableCell>{audit.ensembleDecision}</TableCell>
+                              <TableCell>{audit.trustScore.toFixed(1)}%</TableCell>
+                              <TableCell>{audit.consensusScore.toFixed(1)}%</TableCell>
+                              <TableCell className="font-mono text-xs">{audit.checkpoint || "-"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                ) : null}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Logo Settings */}
       {isSuperadmin && (

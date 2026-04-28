@@ -35,11 +35,23 @@ CREATE TABLE IF NOT EXISTS predictions (
     predicted_direction VARCHAR(10) NOT NULL,
     model_type VARCHAR(50) NOT NULL DEFAULT 'moving_average',
     confidence REAL,
+    trust_score REAL,
+    consensus_score REAL,
+    forecast_lower REAL,
+    forecast_upper REAL,
+    ensemble_breakdown TEXT,
+    ensemble_audit_id INTEGER,
     timeframe VARCHAR(10) NOT NULL DEFAULT '1min'
 );
 
 CREATE INDEX IF NOT EXISTS predictions_symbol_target_idx ON predictions(symbol, target_timestamp);
 CREATE INDEX IF NOT EXISTS predictions_timeframe_idx ON predictions(timeframe);
+ALTER TABLE predictions ADD COLUMN IF NOT EXISTS trust_score REAL;
+ALTER TABLE predictions ADD COLUMN IF NOT EXISTS consensus_score REAL;
+ALTER TABLE predictions ADD COLUMN IF NOT EXISTS forecast_lower REAL;
+ALTER TABLE predictions ADD COLUMN IF NOT EXISTS forecast_upper REAL;
+ALTER TABLE predictions ADD COLUMN IF NOT EXISTS ensemble_breakdown TEXT;
+ALTER TABLE predictions ADD COLUMN IF NOT EXISTS ensemble_audit_id INTEGER;
 
 -- ============================================
 -- TABLE: accuracy_results
@@ -59,6 +71,83 @@ CREATE TABLE IF NOT EXISTS accuracy_results (
 
 CREATE INDEX IF NOT EXISTS accuracy_results_symbol_idx ON accuracy_results(symbol);
 CREATE INDEX IF NOT EXISTS accuracy_results_timestamp_idx ON accuracy_results("timestamp");
+
+-- ============================================
+-- TABLE: ml_model_registry
+-- ============================================
+CREATE TABLE IF NOT EXISTS ml_model_registry (
+    id SERIAL PRIMARY KEY,
+    model_key VARCHAR(50) NOT NULL UNIQUE,
+    display_name VARCHAR(100) NOT NULL,
+    role VARCHAR(30) NOT NULL,
+    market_scope VARCHAR(30) NOT NULL DEFAULT 'stocks',
+    is_enabled BOOLEAN NOT NULL DEFAULT true,
+    weight REAL NOT NULL DEFAULT 1,
+    status VARCHAR(20) NOT NULL DEFAULT 'unknown',
+    version VARCHAR(50),
+    checkpoint VARCHAR(200),
+    last_trained_at TIMESTAMP,
+    last_benchmarked_at TIMESTAMP,
+    metadata TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ml_model_registry_key_idx ON ml_model_registry(model_key);
+CREATE INDEX IF NOT EXISTS ml_model_registry_status_idx ON ml_model_registry(status);
+
+INSERT INTO ml_model_registry (model_key, display_name, role, market_scope, is_enabled, weight, status, version, checkpoint, metadata)
+VALUES
+    ('chronos', 'Chronos Forecast', 'forecast', 'stocks', true, 0.25, 'healthy', 'chronos-tiny', 'stock-ensemble-v1', '{"description":"Price forecasting head"}'),
+    ('kronos', 'Kronos Candlestick', 'candlestick', 'stocks', true, 0.20, 'healthy', 'kronos-kline', 'stock-ensemble-v1', '{"description":"Candlestick/regime head"}'),
+    ('stockai', 'StockAI Specialist', 'specialist', 'stocks', true, 0.30, 'healthy', 'stockai-v1', 'stock-ensemble-v1', '{"description":"Stock-specific specialist head"}'),
+    ('finrl', 'FinRL Policy', 'policy', 'stocks', true, 0.15, 'healthy', 'finrl-policy', 'stock-ensemble-v1', '{"description":"Policy/risk scoring head"}'),
+    ('technical', 'Technical Guard', 'guard', 'stocks', true, 0.10, 'healthy', 'technical-guard-v1', 'stock-ensemble-v1', '{"description":"Existing technical analysis guard"}')
+ON CONFLICT (model_key) DO NOTHING;
+
+ALTER TABLE ml_model_registry ADD COLUMN IF NOT EXISTS market_scope VARCHAR(30) NOT NULL DEFAULT 'stocks';
+ALTER TABLE ml_model_registry ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE ml_model_registry ADD COLUMN IF NOT EXISTS weight REAL NOT NULL DEFAULT 1;
+ALTER TABLE ml_model_registry ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'unknown';
+ALTER TABLE ml_model_registry ADD COLUMN IF NOT EXISTS version VARCHAR(50);
+ALTER TABLE ml_model_registry ADD COLUMN IF NOT EXISTS checkpoint VARCHAR(200);
+ALTER TABLE ml_model_registry ADD COLUMN IF NOT EXISTS last_trained_at TIMESTAMP;
+ALTER TABLE ml_model_registry ADD COLUMN IF NOT EXISTS last_benchmarked_at TIMESTAMP;
+ALTER TABLE ml_model_registry ADD COLUMN IF NOT EXISTS metadata TEXT;
+ALTER TABLE ml_model_registry ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW();
+ALTER TABLE ml_model_registry ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW();
+
+-- ============================================
+-- TABLE: ml_model_audits
+-- ============================================
+CREATE TABLE IF NOT EXISTS ml_model_audits (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,
+    timeframe VARCHAR(10) NOT NULL DEFAULT '1min',
+    market_scope VARCHAR(30) NOT NULL DEFAULT 'stocks',
+    prediction_type VARCHAR(20) NOT NULL DEFAULT 'prediction',
+    generated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    current_price REAL NOT NULL,
+    predicted_price REAL NOT NULL,
+    predicted_direction VARCHAR(10) NOT NULL,
+    confidence REAL NOT NULL,
+    trust_score REAL NOT NULL,
+    consensus_score REAL NOT NULL,
+    forecast_lower REAL,
+    forecast_upper REAL,
+    checkpoint VARCHAR(200),
+    model_breakdown TEXT NOT NULL,
+    feature_snapshot TEXT,
+    abstain_reason TEXT,
+    baseline_decision VARCHAR(10),
+    ensemble_decision VARCHAR(10) NOT NULL,
+    metadata TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ml_model_audits_symbol_idx ON ml_model_audits(symbol);
+CREATE INDEX IF NOT EXISTS ml_model_audits_generated_idx ON ml_model_audits(generated_at);
+CREATE INDEX IF NOT EXISTS ml_model_audits_type_idx ON ml_model_audits(prediction_type);
 
 -- ============================================
 -- TABLE: system_status
@@ -148,11 +237,17 @@ CREATE TABLE IF NOT EXISTS ai_suggestions (
     generated_at TIMESTAMP NOT NULL,
     decision VARCHAR(10) NOT NULL,
     confidence REAL NOT NULL,
+    trust_score REAL,
+    consensus_score REAL,
     buy_target REAL,
     sell_target REAL,
+    forecast_lower REAL,
+    forecast_upper REAL,
     current_price REAL NOT NULL,
     reasoning TEXT,
     indicators TEXT,
+    ensemble_breakdown TEXT,
+    ensemble_audit_id INTEGER,
     is_evaluated BOOLEAN NOT NULL DEFAULT false,
     evaluated_at TIMESTAMP,
     actual_price REAL,
@@ -174,6 +269,12 @@ CREATE TABLE IF NOT EXISTS ai_suggestions (
 CREATE INDEX IF NOT EXISTS ai_suggestions_symbol_idx ON ai_suggestions(symbol);
 CREATE INDEX IF NOT EXISTS ai_suggestions_generated_at_idx ON ai_suggestions(generated_at);
 CREATE INDEX IF NOT EXISTS ai_suggestions_symbol_generated_idx ON ai_suggestions(symbol, generated_at);
+ALTER TABLE ai_suggestions ADD COLUMN IF NOT EXISTS trust_score REAL;
+ALTER TABLE ai_suggestions ADD COLUMN IF NOT EXISTS consensus_score REAL;
+ALTER TABLE ai_suggestions ADD COLUMN IF NOT EXISTS forecast_lower REAL;
+ALTER TABLE ai_suggestions ADD COLUMN IF NOT EXISTS forecast_upper REAL;
+ALTER TABLE ai_suggestions ADD COLUMN IF NOT EXISTS ensemble_breakdown TEXT;
+ALTER TABLE ai_suggestions ADD COLUMN IF NOT EXISTS ensemble_audit_id INTEGER;
 
 -- ============================================
 -- TABLE: symbol_categories

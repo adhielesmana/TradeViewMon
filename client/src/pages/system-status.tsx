@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
 import { SystemStatusCard } from "@/components/system-status-card";
 import { StatCard } from "@/components/stat-card";
 import { 
@@ -62,6 +63,31 @@ interface Diagnostics {
   };
   priceUpdates: PriceUpdate[];
   environment: string;
+  mlEnsemble?: {
+    status: string;
+    lastCheck: string | null;
+    lastSuccess: string | null;
+    errorMessage: string | null;
+    metadata: Record<string, unknown> | null;
+    settings: {
+      trustThreshold: number;
+      consensusThreshold: number;
+      retrainCadenceHours: number;
+      activeCheckpoint: string;
+      minCandles: number;
+      stockOnly: boolean;
+      technicalWeight: number;
+      abstainOnDisagreement: boolean;
+    };
+    modelCount: number;
+    healthSummary: {
+      healthy: number;
+      degraded: number;
+      offline: number;
+      training: number;
+      unknown?: number;
+    };
+  };
 }
 
 interface SystemStats {
@@ -120,6 +146,8 @@ export default function SystemStatusPage() {
         return RefreshCw;
       case "prediction_engine":
         return Cpu;
+      case "ml_ensemble":
+        return Brain;
       default:
         return Server;
     }
@@ -186,6 +214,57 @@ export default function SystemStatusPage() {
           </div>
         )}
       </div>
+
+      {diagnostics?.mlEnsemble && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Brain className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-lg font-medium">ML Ensemble</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <div className="text-sm text-muted-foreground">Status</div>
+                <div className={`text-lg font-medium ${diagnostics.mlEnsemble.status === "healthy" ? "text-profit" : diagnostics.mlEnsemble.status === "error" ? "text-loss" : "text-yellow-500"}`}>
+                  {diagnostics.mlEnsemble.status}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Checkpoint</div>
+                <div className="font-mono text-sm">{diagnostics.mlEnsemble.settings.activeCheckpoint}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Trust / Consensus</div>
+                <div className="font-mono text-sm">
+                  {diagnostics.mlEnsemble.settings.trustThreshold}% / {diagnostics.mlEnsemble.settings.consensusThreshold}%
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Models</div>
+                <div className="font-mono text-sm">{diagnostics.mlEnsemble.modelCount} active</div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2 text-sm">
+              <Badge variant="outline">Healthy {diagnostics.mlEnsemble.healthSummary.healthy}</Badge>
+              <Badge variant="outline">Degraded {diagnostics.mlEnsemble.healthSummary.degraded}</Badge>
+              <Badge variant="outline">Offline {diagnostics.mlEnsemble.healthSummary.offline}</Badge>
+              <Badge variant="outline">Training {diagnostics.mlEnsemble.healthSummary.training}</Badge>
+              <Badge variant="outline">Stock-only {diagnostics.mlEnsemble.settings.stockOnly ? "Yes" : "No"}</Badge>
+              <Badge variant="outline">Retrain {diagnostics.mlEnsemble.settings.retrainCadenceHours}h</Badge>
+            </div>
+
+            {diagnostics.mlEnsemble.errorMessage && (
+              <Alert className="mt-4 border-loss/30 bg-loss/10">
+                <AlertTriangle className="h-4 w-4" />
+                <div className="text-sm text-loss">{diagnostics.mlEnsemble.errorMessage}</div>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-2">

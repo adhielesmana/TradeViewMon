@@ -13,6 +13,7 @@ import { generateUnifiedSignal, convertToLegacyIndicatorSignal, convertToMultiFa
 import { encrypt, decrypt, maskApiKey } from "./encryption";
 import { getNewsAndAnalysisCached, forceRefreshNewsAnalysis, getRssFeedUrl, setRssFeedUrl, getNewsStats, getStoredNewsSince, regenerateAllSnapshotImages } from "./news-service";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { ensembleOrchestrator } from "./ensemble-orchestrator";
 import { z } from "zod";
 
 const updateUserSchema = z.object({
@@ -26,6 +27,29 @@ const createInviteSchema = z.object({
   email: z.string().email(),
   role: z.enum(["user", "admin", "superadmin"]).optional().default("user"),
 });
+
+const ensembleSettingsSchema = z.object({
+  trustThreshold: z.number().min(0).max(100).optional(),
+  consensusThreshold: z.number().min(0).max(100).optional(),
+  retrainCadenceHours: z.number().min(1).max(168).optional(),
+  activeCheckpoint: z.string().min(1).max(200).optional(),
+  minCandles: z.number().min(10).max(5000).optional(),
+  stockOnly: z.boolean().optional(),
+  technicalWeight: z.number().min(0).max(1).optional(),
+  abstainOnDisagreement: z.boolean().optional(),
+}).strict();
+
+const modelRegistryUpdateSchema = z.object({
+  displayName: z.string().max(100).optional(),
+  role: z.string().max(30).optional(),
+  marketScope: z.string().max(30).optional(),
+  isEnabled: z.boolean().optional(),
+  weight: z.number().min(0).max(1).optional(),
+  status: z.enum(["healthy", "degraded", "offline", "training", "unknown"]).optional(),
+  version: z.string().max(50).nullable().optional(),
+  checkpoint: z.string().max(200).nullable().optional(),
+  metadata: z.any().optional(),
+}).strict();
 
 const DEFAULT_SYMBOL = marketDataService.getSymbol();
 
@@ -1151,6 +1175,116 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/ensemble/summary", async (req, res) => {
+    try {
+      const symbol = (req.query.symbol as string) || DEFAULT_SYMBOL;
+      const timeframe = (req.query.timeframe as string) || "1min";
+      const stepsAhead = parseInt(req.query.stepsAhead as string) || 1;
+      const limit = timeframe === "5min" ? 400 : 240;
+      await ensureHistoricalData(symbol);
+      const candles = await storage.getRecentMarketData(symbol, limit);
+      const profile = (await storage.getMonitoredSymbols()).find((item) => item.symbol === symbol) || null;
+
+      const result = await ensembleOrchestrator.analyzeCandles({
+        symbol,
+        candles,
+        timeframe,
+        stepsAhead,
+        minutesAhead: timeframe === "5min" ? 5 : 1,
+        source: "manual",
+        symbolProfile: profile,
+        persist: false,
+      });
+
+      res.json({
+        ...result.summary,
+        auditId: result.auditId ?? null,
+      });
+    } catch (error) {
+      console.error("Error fetching ensemble summary:", error);
+      res.status(500).json({ error: "Failed to fetch ensemble summary" });
+    }
+  });
+
+  app.get("/api/ensemble/settings", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const [settings, modelRegistry, modelHealth, recentAudits] = await Promise.all([
+        ensembleOrchestrator.getSettings(),
+        ensembleOrchestrator.getModelRegistry(),
+        ensembleOrchestrator.getModelHealth(),
+        storage.getRecentMlModelAudits(undefined, 20),
+      ]);
+
+      const healthSummary = modelHealth.reduce((acc, item) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      }, { healthy: 0, degraded: 0, offline: 0, training: 0 } as Record<string, number>);
+
+      res.json({
+        settings,
+        modelRegistry,
+        modelHealth,
+        healthSummary,
+        recentAudits,
+      });
+    } catch (error) {
+      console.error("Error fetching ensemble settings:", error);
+      res.status(500).json({ error: "Failed to fetch ensemble settings" });
+    }
+  });
+
+  app.post("/api/ensemble/settings", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const updates = ensembleSettingsSchema.parse(req.body || {});
+      const settings = await ensembleOrchestrator.saveSettings(updates);
+      await ensembleOrchestrator.refreshModelStatus();
+      res.json({ success: true, settings });
+    } catch (error) {
+      console.error("Error updating ensemble settings:", error);
+      const message = error instanceof Error ? error.message : "Failed to update ensemble settings";
+      res.status(400).json({ error: message });
+    }
+  });
+
+  app.put("/api/ensemble/models/:modelKey", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const { modelKey } = req.params;
+      const updates = modelRegistryUpdateSchema.parse(req.body || {});
+      const normalized = {
+        ...updates,
+        metadata: updates.metadata === undefined
+          ? undefined
+          : typeof updates.metadata === "string"
+            ? updates.metadata
+            : JSON.stringify(updates.metadata),
+      };
+
+      const model = await storage.updateMlModelRegistry(modelKey, normalized);
+      if (!model) {
+        return res.status(404).json({ error: "Model not found" });
+      }
+
+      await ensembleOrchestrator.refreshModelStatus();
+      res.json({ success: true, model });
+    } catch (error) {
+      console.error("Error updating model registry:", error);
+      const message = error instanceof Error ? error.message : "Failed to update model";
+      res.status(400).json({ error: message });
+    }
+  });
+
+  app.get("/api/ensemble/audits", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+    try {
+      const symbol = req.query.symbol as string | undefined;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const audits = await storage.getRecentMlModelAudits(symbol, limit);
+      res.json(audits);
+    } catch (error) {
+      console.error("Error fetching ensemble audits:", error);
+      res.status(500).json({ error: "Failed to fetch ensemble audits" });
+    }
+  });
+
   // AI Suggestions endpoints
   app.get("/api/suggestions/latest", async (req, res) => {
     try {
@@ -1284,6 +1418,16 @@ export async function registerRoutes(
 
       // Get system stats
       const stats = await storage.getSystemStats();
+      const [ensembleSettings, ensembleModels, systemStatus] = await Promise.all([
+        ensembleOrchestrator.getSettings(),
+        ensembleOrchestrator.getModelRegistry(),
+        storage.getSystemStatus(),
+      ]);
+      const mlEnsembleStatus = systemStatus.find((entry) => entry.component === "ml_ensemble") || null;
+      const ensembleHealthSummary = ensembleModels.reduce((acc, entry) => {
+        acc[entry.status] = (acc[entry.status] || 0) + 1;
+        return acc;
+      }, { healthy: 0, degraded: 0, offline: 0, training: 0, unknown: 0 } as Record<string, number>);
 
       res.json({
         timestamp: new Date().toISOString(),
@@ -1297,6 +1441,24 @@ export async function registerRoutes(
         apis: apiStatus,
         priceUpdates,
         environment: process.env.NODE_ENV || "development",
+        mlEnsemble: {
+          status: mlEnsembleStatus?.status || "degraded",
+          lastCheck: mlEnsembleStatus?.lastCheck ? new Date(mlEnsembleStatus.lastCheck).toISOString() : null,
+          lastSuccess: mlEnsembleStatus?.lastSuccess ? new Date(mlEnsembleStatus.lastSuccess).toISOString() : null,
+          errorMessage: mlEnsembleStatus?.errorMessage || null,
+          metadata: mlEnsembleStatus?.metadata
+            ? (() => {
+                try {
+                  return JSON.parse(mlEnsembleStatus.metadata || "{}");
+                } catch {
+                  return { raw: mlEnsembleStatus.metadata };
+                }
+              })()
+            : null,
+          settings: ensembleSettings,
+          modelCount: ensembleModels.length,
+          healthSummary: ensembleHealthSummary,
+        },
       });
     } catch (error) {
       console.error("Error fetching diagnostics:", error);
@@ -1343,8 +1505,10 @@ export async function registerRoutes(
       if (format === "csv") {
         const fields = [
           "id", "symbol", "predictionTimestamp", "targetTimestamp", 
-          "predictedPrice", "predictedDirection", "modelType", "confidence", "timeframe",
-          "actualPrice", "isMatch", "percentageDifference"
+          "predictedPrice", "predictedDirection", "modelType", "confidence",
+          "trustScore", "consensusScore", "forecastLower", "forecastUpper",
+          "ensembleAuditId", "timeframe",
+          "actualPrice", "isMatch", "percentageDifference", "ensembleBreakdown"
         ];
         const csv = convertToCSV(predictions, fields);
         res.setHeader("Content-Type", "text/csv");

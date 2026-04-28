@@ -30,6 +30,12 @@ export const predictions = pgTable("predictions", {
   predictedDirection: varchar("predicted_direction", { length: 10 }).notNull(), // 'UP', 'DOWN', 'NEUTRAL'
   modelType: varchar("model_type", { length: 50 }).notNull().default("moving_average"),
   confidence: real("confidence"),
+  trustScore: real("trust_score"),
+  consensusScore: real("consensus_score"),
+  forecastLower: real("forecast_lower"),
+  forecastUpper: real("forecast_upper"),
+  ensembleBreakdown: text("ensemble_breakdown"),
+  ensembleAuditId: integer("ensemble_audit_id"),
   timeframe: varchar("timeframe", { length: 10 }).notNull().default("1min"), // '1min', '5min', '15min'
 }, (table) => [
   index("predictions_symbol_target_idx").on(table.symbol, table.targetTimestamp),
@@ -51,6 +57,58 @@ export const accuracyResults = pgTable("accuracy_results", {
 }, (table) => [
   index("accuracy_results_symbol_idx").on(table.symbol),
   index("accuracy_results_timestamp_idx").on(table.timestamp),
+]);
+
+// ML Model Registry - tracks local ensemble models, versions, and status
+export const mlModelRegistry = pgTable("ml_model_registry", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  modelKey: varchar("model_key", { length: 50 }).notNull().unique(),
+  displayName: varchar("display_name", { length: 100 }).notNull(),
+  role: varchar("role", { length: 30 }).notNull(),
+  marketScope: varchar("market_scope", { length: 30 }).notNull().default("stocks"),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  weight: real("weight").notNull().default(1),
+  status: varchar("status", { length: 20 }).notNull().default("unknown"),
+  version: varchar("version", { length: 50 }),
+  checkpoint: varchar("checkpoint", { length: 200 }),
+  lastTrainedAt: timestamp("last_trained_at"),
+  lastBenchmarkedAt: timestamp("last_benchmarked_at"),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("ml_model_registry_key_idx").on(table.modelKey),
+  index("ml_model_registry_status_idx").on(table.status),
+]);
+
+// ML Model Audits - one record per ensemble run for explainability and rollback
+export const mlModelAudits = pgTable("ml_model_audits", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  timeframe: varchar("timeframe", { length: 10 }).notNull().default("1min"),
+  marketScope: varchar("market_scope", { length: 30 }).notNull().default("stocks"),
+  predictionType: varchar("prediction_type", { length: 20 }).notNull().default("prediction"),
+  generatedAt: timestamp("generated_at").notNull().default(sql`now()`),
+  currentPrice: real("current_price").notNull(),
+  predictedPrice: real("predicted_price").notNull(),
+  predictedDirection: varchar("predicted_direction", { length: 10 }).notNull(),
+  confidence: real("confidence").notNull(),
+  trustScore: real("trust_score").notNull(),
+  consensusScore: real("consensus_score").notNull(),
+  forecastLower: real("forecast_lower"),
+  forecastUpper: real("forecast_upper"),
+  checkpoint: varchar("checkpoint", { length: 200 }),
+  modelBreakdown: text("model_breakdown").notNull(),
+  featureSnapshot: text("feature_snapshot"),
+  abstainReason: text("abstain_reason"),
+  baselineDecision: varchar("baseline_decision", { length: 10 }),
+  ensembleDecision: varchar("ensemble_decision", { length: 10 }).notNull(),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("ml_model_audits_symbol_idx").on(table.symbol),
+  index("ml_model_audits_generated_idx").on(table.generatedAt),
+  index("ml_model_audits_type_idx").on(table.predictionType),
 ]);
 
 // System Status - tracks API health, scheduler status, etc.
@@ -90,11 +148,13 @@ export const accuracyResultsRelations = relations(accuracyResults, ({ one }) => 
 }));
 
 // Insert schemas
-export const insertMarketDataSchema = createInsertSchema(marketData).omit({ id: true });
-export const insertPredictionSchema = createInsertSchema(predictions).omit({ id: true });
-export const insertAccuracyResultSchema = createInsertSchema(accuracyResults).omit({ id: true });
-export const insertSystemStatusSchema = createInsertSchema(systemStatus).omit({ id: true });
-export const insertPriceStateSchema = createInsertSchema(priceState).omit({ id: true });
+export const insertMarketDataSchema = createInsertSchema(marketData);
+export const insertPredictionSchema = createInsertSchema(predictions);
+export const insertAccuracyResultSchema = createInsertSchema(accuracyResults);
+export const insertMlModelRegistrySchema = createInsertSchema(mlModelRegistry);
+export const insertMlModelAuditSchema = createInsertSchema(mlModelAudits);
+export const insertSystemStatusSchema = createInsertSchema(systemStatus);
+export const insertPriceStateSchema = createInsertSchema(priceState);
 
 // Types
 export type MarketData = typeof marketData.$inferSelect;
@@ -105,6 +165,12 @@ export type InsertPrediction = z.infer<typeof insertPredictionSchema>;
 
 export type AccuracyResult = typeof accuracyResults.$inferSelect;
 export type InsertAccuracyResult = z.infer<typeof insertAccuracyResultSchema>;
+
+export type MlModelRegistryEntry = typeof mlModelRegistry.$inferSelect;
+export type InsertMlModelRegistryEntry = z.infer<typeof insertMlModelRegistrySchema>;
+
+export type MlModelAudit = typeof mlModelAudits.$inferSelect;
+export type InsertMlModelAudit = z.infer<typeof insertMlModelAuditSchema>;
 
 export type SystemStatus = typeof systemStatus.$inferSelect;
 export type InsertSystemStatus = z.infer<typeof insertSystemStatusSchema>;
@@ -135,6 +201,94 @@ export type PredictionWithResult = Prediction & {
   actualPrice?: number;
   isMatch?: boolean;
   percentageDifference?: number;
+  trustScore?: number | null;
+  consensusScore?: number | null;
+  forecastLower?: number | null;
+  forecastUpper?: number | null;
+  ensembleBreakdown?: string | null;
+  ensembleAuditId?: number | null;
+};
+
+export type EnsembleDirection = "UP" | "DOWN" | "NEUTRAL";
+
+export type EnsembleModelContribution = {
+  modelKey: string;
+  displayName: string;
+  role: string;
+  direction: EnsembleDirection;
+  confidence: number;
+  weight: number;
+  weightedScore: number;
+  forecastPrice: number;
+  forecastLower: number;
+  forecastUpper: number;
+  rationale: string;
+  status: "healthy" | "degraded" | "offline" | "training";
+  isTechnical?: boolean;
+};
+
+export type EnsembleModelHealth = {
+  modelKey: string;
+  displayName: string;
+  status: "healthy" | "degraded" | "offline" | "training";
+  version?: string | null;
+  checkpoint?: string | null;
+  lastTrainedAt?: string | null;
+  weight?: number;
+  role?: string;
+};
+
+export type EnsembleSettings = {
+  trustThreshold: number;
+  consensusThreshold: number;
+  retrainCadenceHours: number;
+  activeCheckpoint: string;
+  minCandles: number;
+  stockOnly: boolean;
+  technicalWeight: number;
+  abstainOnDisagreement: boolean;
+};
+
+export type EnsembleSummary = {
+  symbol: string;
+  marketScope: string;
+  isStockFocused: boolean;
+  decision: "BUY" | "SELL" | "HOLD";
+  direction: EnsembleDirection;
+  confidence: number;
+  trustScore: number;
+  consensusScore: number;
+  predictedPrice: number;
+  forecastLower: number;
+  forecastUpper: number;
+  currentPrice: number;
+  modelType: string;
+  checkpoint: string | null;
+  generatedAt: string;
+  fallbackUsed: boolean;
+  abstainReason?: string | null;
+  technicalSignal?: {
+    signal: "BUY" | "SELL" | "HOLD";
+    strength: number;
+    reasons: string[];
+  };
+  modelContributions: EnsembleModelContribution[];
+  modelHealth: EnsembleModelHealth[];
+};
+
+export type EnsembleBacktestComparison = {
+  modelKey: string;
+  displayName: string;
+  directionAccuracy: number;
+  averageError: number;
+  confidence: number;
+  trades: number;
+  winRate: number;
+  maxDrawdown?: number;
+  sharpeRatio?: number;
+  calibrationGap?: number;
+  sampledWindows?: number;
+  totalWindows?: number;
 };
 
 // Users - authentication with roles
@@ -201,11 +355,17 @@ export const aiSuggestions = pgTable("ai_suggestions", {
   generatedAt: timestamp("generated_at").notNull(),
   decision: varchar("decision", { length: 10 }).notNull(), // 'BUY', 'SELL', 'HOLD'
   confidence: real("confidence").notNull(), // 0-100
+  trustScore: real("trust_score"),
+  consensusScore: real("consensus_score"),
   buyTarget: real("buy_target"), // Target price for buy (legacy)
   sellTarget: real("sell_target"), // Target price for sell (legacy)
+  forecastLower: real("forecast_lower"),
+  forecastUpper: real("forecast_upper"),
   currentPrice: real("current_price").notNull(),
   reasoning: text("reasoning"), // JSON string with analysis breakdown
   indicators: text("indicators"), // JSON string with indicator values used
+  ensembleBreakdown: text("ensemble_breakdown"),
+  ensembleAuditId: integer("ensemble_audit_id"),
   isEvaluated: boolean("is_evaluated").notNull().default(false),
   evaluatedAt: timestamp("evaluated_at"),
   actualPrice: real("actual_price"), // Price when evaluated
@@ -229,7 +389,7 @@ export const aiSuggestions = pgTable("ai_suggestions", {
   index("ai_suggestions_symbol_generated_idx").on(table.symbol, table.generatedAt),
 ]);
 
-export const insertAiSuggestionSchema = createInsertSchema(aiSuggestions).omit({ id: true });
+export const insertAiSuggestionSchema = createInsertSchema(aiSuggestions);
 export type AiSuggestion = typeof aiSuggestions.$inferSelect;
 export type InsertAiSuggestion = z.infer<typeof insertAiSuggestionSchema>;
 
@@ -254,7 +414,7 @@ export const symbolCategories = pgTable("symbol_categories", {
   isActive: boolean("is_active").notNull().default(true),
 });
 
-export const insertSymbolCategorySchema = createInsertSchema(symbolCategories).omit({ id: true });
+export const insertSymbolCategorySchema = createInsertSchema(symbolCategories);
 export type SymbolCategory = typeof symbolCategories.$inferSelect;
 export type InsertSymbolCategory = z.infer<typeof insertSymbolCategorySchema>;
 
@@ -269,7 +429,7 @@ export const monitoredSymbols = pgTable("monitored_symbols", {
   priority: integer("priority").notNull().default(0), // Higher = more important
 });
 
-export const insertMonitoredSymbolSchema = createInsertSchema(monitoredSymbols).omit({ id: true });
+export const insertMonitoredSymbolSchema = createInsertSchema(monitoredSymbols);
 export type MonitoredSymbol = typeof monitoredSymbols.$inferSelect;
 export type InsertMonitoredSymbol = z.infer<typeof insertMonitoredSymbolSchema>;
 
@@ -373,9 +533,9 @@ export const demoTransactionsRelations = relations(demoTransactions, ({ one }) =
 }));
 
 // Insert schemas for demo trading
-export const insertDemoAccountSchema = createInsertSchema(demoAccounts).omit({ id: true });
-export const insertDemoPositionSchema = createInsertSchema(demoPositions).omit({ id: true });
-export const insertDemoTransactionSchema = createInsertSchema(demoTransactions).omit({ id: true });
+export const insertDemoAccountSchema = createInsertSchema(demoAccounts);
+export const insertDemoPositionSchema = createInsertSchema(demoPositions);
+export const insertDemoTransactionSchema = createInsertSchema(demoTransactions);
 
 // Types for demo trading
 export type DemoAccount = typeof demoAccounts.$inferSelect;
@@ -409,7 +569,7 @@ export const appSettings = pgTable("app_settings", {
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
 
-export const insertAppSettingSchema = createInsertSchema(appSettings).omit({ id: true });
+export const insertAppSettingSchema = createInsertSchema(appSettings);
 export type AppSetting = typeof appSettings.$inferSelect;
 export type InsertAppSetting = z.infer<typeof insertAppSettingSchema>;
 
@@ -424,7 +584,7 @@ export const rssFeeds = pgTable("rss_feeds", {
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
 
-export const insertRssFeedSchema = createInsertSchema(rssFeeds).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertRssFeedSchema = createInsertSchema(rssFeeds).omit({ createdAt: true, updatedAt: true });
 export const updateRssFeedSchema = createInsertSchema(rssFeeds).pick({
   name: true,
   url: true,
@@ -457,7 +617,7 @@ export const newsArticles = pgTable("news_articles", {
   index("news_articles_published_idx").on(table.publishedAt),
 ]);
 
-export const insertNewsArticleSchema = createInsertSchema(newsArticles).omit({ id: true });
+export const insertNewsArticleSchema = createInsertSchema(newsArticles);
 export type NewsArticle = typeof newsArticles.$inferSelect;
 export type InsertNewsArticle = z.infer<typeof insertNewsArticleSchema>;
 
@@ -483,7 +643,7 @@ export const newsAnalysisSnapshots = pgTable("news_analysis_snapshots", {
   imageUrl: text("image_url"), // Featured image URL from source articles
 });
 
-export const insertNewsAnalysisSnapshotSchema = createInsertSchema(newsAnalysisSnapshots).omit({ id: true });
+export const insertNewsAnalysisSnapshotSchema = createInsertSchema(newsAnalysisSnapshots);
 export type NewsAnalysisSnapshot = typeof newsAnalysisSnapshots.$inferSelect;
 export type InsertNewsAnalysisSnapshot = z.infer<typeof insertNewsAnalysisSnapshotSchema>;
 
@@ -500,7 +660,7 @@ export const currencyRates = pgTable("currency_rates", {
   index("currency_rates_base_target_idx").on(table.baseCurrency, table.targetCurrency),
 ]);
 
-export const insertCurrencyRateSchema = createInsertSchema(currencyRates).omit({ id: true });
+export const insertCurrencyRateSchema = createInsertSchema(currencyRates);
 export type CurrencyRate = typeof currencyRates.$inferSelect;
 export type InsertCurrencyRate = z.infer<typeof insertCurrencyRateSchema>;
 
@@ -551,7 +711,7 @@ export const autoTradeSettingsRelations = relations(autoTradeSettings, ({ one })
   }),
 }));
 
-export const insertAutoTradeSettingSchema = createInsertSchema(autoTradeSettings).omit({ id: true });
+export const insertAutoTradeSettingSchema = createInsertSchema(autoTradeSettings);
 export const updateAutoTradeSettingSchema = createInsertSchema(autoTradeSettings).pick({
   isEnabled: true,
   tradeUnits: true,

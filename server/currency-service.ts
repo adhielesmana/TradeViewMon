@@ -73,16 +73,14 @@ class CurrencyService {
       const rates = await this.fetchRatesFromAPI();
       const now = new Date();
       
-      for (const [currency, rate] of rates.entries()) {
-        await storage.upsertCurrencyRate({
-          baseCurrency: "USD",
-          targetCurrency: currency,
-          rate,
-          source: "frankfurter",
-          fetchedAt: now,
-          updatedAt: now,
-        });
-      }
+      await Promise.all(Array.from(rates.entries()).map(([currency, rate]) => storage.upsertCurrencyRate({
+        baseCurrency: "USD",
+        targetCurrency: currency,
+        rate,
+        source: "frankfurter",
+        fetchedAt: now,
+        updatedAt: now,
+      })));
       
       console.log(`[Currency] Updated ${rates.size} currency rates in database`);
     } catch (error) {
