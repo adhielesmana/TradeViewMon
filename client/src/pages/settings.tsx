@@ -28,8 +28,10 @@ interface ApiKeyStatus {
 }
 
 interface OllamaStatus {
+  provider?: string;
   url: string;
   model: string;
+  apiKey?: string | null;
   connected: boolean;
   availableModels: string[];
 }
@@ -99,8 +101,10 @@ export default function SettingsPage() {
   
   const [finnhubKey, setFinnhubKey] = useState("");
   const [showFinnhubKey, setShowFinnhubKey] = useState(false);
+  const [aiProvider, setAiProvider] = useState("ollama");
   const [ollamaUrl, setOllamaUrl] = useState("");
   const [ollamaModel, setOllamaModel] = useState("");
+  const [aiApiKey, setAiApiKey] = useState("");
   const [ensembleSettingsDraft, setEnsembleSettingsDraft] = useState<EnsembleSettings>({
     trustThreshold: 68,
     consensusThreshold: 60,
@@ -738,73 +742,109 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Ollama (Local AI) Card */}
+        {/* AI Provider Card */}
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
               <Bot className="h-5 w-5 text-blue-500" />
-              <CardTitle>Ollama (Local AI)</CardTitle>
+              <CardTitle>AI Provider</CardTitle>
             </div>
             <CardDescription>
-              Local AI for trading analysis and news sentiment. No API costs. Requires Ollama running on your server.
+              AI for trading analysis and news sentiment. Choose Ollama (local, free) or a cloud provider (Groq free tier, DeepSeek, etc).
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Status:</span>
               {settings?.ollama?.connected ? (
-                <Badge variant="default" className="gap-1 bg-green-600"><CheckCircle className="h-3 w-3" />Connected</Badge>
+                <Badge variant="default" className="gap-1 bg-green-600"><CheckCircle className="h-3 w-3" />Connected ({settings?.ollama?.provider || "ollama"})</Badge>
               ) : (
                 <Badge variant="secondary" className="gap-1"><AlertCircle className="h-3 w-3" />Not Connected</Badge>
               )}
             </div>
             <Separator />
             <div className="space-y-2">
-              <Label htmlFor="ollama-url">Ollama URL</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="ollama-url"
-                  type="text"
-                  placeholder={settings?.ollama?.url || "http://localhost:11434"}
-                  value={ollamaUrl}
-                  onChange={(e) => setOllamaUrl(e.target.value)}
-                  data-testid="input-ollama-url"
-                />
-              </div>
+              <Label htmlFor="ai-provider">Provider</Label>
+              <select
+                id="ai-provider"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={aiProvider || settings?.ollama?.provider || "ollama"}
+                onChange={(e) => setAiProvider(e.target.value)}
+              >
+                <option value="ollama">Ollama (Local - needs fast CPU with AVX)</option>
+                <option value="groq">Groq (Cloud - free tier, very fast)</option>
+                <option value="openai-compat">OpenAI-Compatible (DeepSeek, Together, etc)</option>
+              </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ollama-model">Model</Label>
-              <div className="flex gap-2">
-                <select
-                  id="ollama-model"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-                  value={ollamaModel || settings?.ollama?.model || ""}
-                  onChange={(e) => setOllamaModel(e.target.value)}
-                  data-testid="select-ollama-model"
-                >
-                  {settings?.ollama?.availableModels && settings.ollama.availableModels.length > 0 ? (
-                    settings.ollama.availableModels.map((m: string) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="qwen2.5:3b">qwen2.5:3b (recommended)</option>
-                      <option value="qwen2.5:7b">qwen2.5:7b (more capable, needs 8GB+ RAM)</option>
-                      <option value="phi3.5:latest">phi3.5:latest (lighter)</option>
-                      <option value="llama3.1:8b">llama3.1:8b</option>
-                      <option value="mistral:7b">mistral:7b</option>
-                    </>
-                  )}
-                </select>
+              <Label htmlFor="ollama-url">API URL</Label>
+              <Input
+                id="ollama-url"
+                type="text"
+                placeholder={
+                  (aiProvider || settings?.ollama?.provider) === "groq"
+                    ? "https://api.groq.com/openai/v1"
+                    : (aiProvider || settings?.ollama?.provider) === "openai-compat"
+                    ? "https://api.deepseek.com/v1"
+                    : settings?.ollama?.url || "http://localhost:11434"
+                }
+                value={ollamaUrl}
+                onChange={(e) => setOllamaUrl(e.target.value)}
+              />
+            </div>
+            {(aiProvider || settings?.ollama?.provider) !== "ollama" && (
+              <div className="space-y-2">
+                <Label htmlFor="ai-api-key">API Key</Label>
+                <Input
+                  id="ai-api-key"
+                  type="password"
+                  placeholder={settings?.ollama?.apiKey || "Enter API key"}
+                  value={aiApiKey}
+                  onChange={(e) => setAiApiKey(e.target.value)}
+                />
               </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="ollama-model">Model</Label>
+              <select
+                id="ollama-model"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={ollamaModel || settings?.ollama?.model || ""}
+                onChange={(e) => setOllamaModel(e.target.value)}
+              >
+                {settings?.ollama?.availableModels && settings.ollama.availableModels.length > 0 ? (
+                  settings.ollama.availableModels.map((m: string) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))
+                ) : (aiProvider || settings?.ollama?.provider) === "groq" ? (
+                  <>
+                    <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (fast, free)</option>
+                    <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (smart, free)</option>
+                    <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (balanced)</option>
+                  </>
+                ) : (aiProvider || settings?.ollama?.provider) === "openai-compat" ? (
+                  <>
+                    <option value="deepseek-chat">deepseek-chat (very cheap)</option>
+                    <option value="gpt-4o-mini">gpt-4o-mini</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="qwen2.5:3b">qwen2.5:3b</option>
+                    <option value="qwen2.5:7b">qwen2.5:7b</option>
+                    <option value="phi3.5:latest">phi3.5:latest</option>
+                  </>
+                )}
+              </select>
             </div>
             <div className="flex gap-2">
               <Button
                 onClick={() => saveOllamaSettingsMutation.mutate({
+                  provider: aiProvider || undefined,
                   url: ollamaUrl || undefined,
                   model: ollamaModel || undefined,
+                  apiKey: aiApiKey || undefined,
                 })}
-                disabled={(!ollamaUrl.trim() && !ollamaModel) || saveOllamaSettingsMutation.isPending}
+                disabled={saveOllamaSettingsMutation.isPending}
                 data-testid="button-save-ollama"
               >
                 {saveOllamaSettingsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}

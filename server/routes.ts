@@ -1918,10 +1918,11 @@ export async function registerRoutes(
       // Get Finnhub API key status from service
       const finnhubKeyStatus = marketDataService.getFinnhubKeyStatus();
       
-      // Get Ollama status
-      const ollamaConfig = await getOllamaConfig();
-      const ollamaConnected = await isOllamaAvailable();
-      const ollamaModels = ollamaConnected ? await listModels() : [];
+      // Get AI status (Ollama or cloud provider)
+      const { getAiConfig, isAiAvailable } = await import("./local-ai-client");
+      const aiConfig = await getAiConfig();
+      const aiConnected = await isAiAvailable();
+      const aiModels = aiConnected ? await listModels() : [];
 
       // Get RSS feed URL
       const rssFeedUrl = await getRssFeedUrl();
@@ -1929,10 +1930,12 @@ export async function registerRoutes(
       res.json({
         finnhubApiKey: finnhubKeyStatus,
         ollama: {
-          url: ollamaConfig.url,
-          model: ollamaConfig.model,
-          connected: ollamaConnected,
-          availableModels: ollamaModels,
+          provider: aiConfig.provider,
+          url: aiConfig.url,
+          model: aiConfig.model,
+          apiKey: aiConfig.apiKey ? "***" + aiConfig.apiKey.slice(-4) : null,
+          connected: aiConnected,
+          availableModels: aiModels,
         },
         rssFeedUrl: rssFeedUrl
       });
@@ -1972,23 +1975,32 @@ export async function registerRoutes(
 
   app.post("/api/settings/ollama", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
-      const { url, model } = req.body;
+      const { url, model, provider, apiKey } = req.body;
 
+      if (provider !== undefined) {
+        await storage.setSetting("AI_PROVIDER", String(provider).trim() || "ollama");
+      }
       if (url !== undefined) {
         const trimmedUrl = String(url).trim().replace(/\/+$/, "");
+        await storage.setSetting("AI_API_URL", trimmedUrl || null);
+        // Also set legacy key for backward compat
         await storage.setSetting("OLLAMA_URL", trimmedUrl || null);
       }
       if (model !== undefined) {
+        await storage.setSetting("AI_MODEL", String(model).trim() || null);
         await storage.setSetting("OLLAMA_MODEL", String(model).trim() || null);
+      }
+      if (apiKey !== undefined) {
+        await storage.setSetting("AI_API_KEY", String(apiKey).trim() || null);
       }
 
       res.json({
         success: true,
-        message: "Ollama settings saved successfully."
+        message: "AI settings saved successfully."
       });
     } catch (error) {
-      console.error("Error saving Ollama settings:", error);
-      res.status(500).json({ error: "Failed to save Ollama settings" });
+      console.error("Error saving AI settings:", error);
+      res.status(500).json({ error: "Failed to save AI settings" });
     }
   });
 

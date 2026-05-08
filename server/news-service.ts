@@ -210,19 +210,16 @@ export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis[
     return getDefaultPrediction();
   }
 
-  const newsContext = news
-    .map((item, i) => `${i + 1}. [${item.pubDate}] ${item.title}\n   ${item.content.slice(0, 200)}...`)
-    .join("\n\n");
+  // Compact: titles only, limit to 15 articles
+  const topNews = news.slice(0, 15);
+  const newsContext = topNews.map((item, i) => `${i + 1}. ${item.title}`).join("\n");
 
-  // Get supported symbols from database instead of hardcoding
   const monitoredSymbols = await storage.getMonitoredSymbols();
   const supportedSymbols = monitoredSymbols
     .filter(s => s.isActive)
     .map(s => s.symbol);
-  
-  // Fallback if no symbols configured
+
   if (supportedSymbols.length === 0) {
-    console.log("[NewsService] No symbols in database, using defaults");
     supportedSymbols.push("XAUUSD", "XAGUSD", "BTCUSD");
   }
 
@@ -231,37 +228,18 @@ export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis[
       messages: [
         {
           role: "system",
-          content: `You are a professional financial analyst specializing in market analysis.
-Analyze the provided news headlines and content to generate market predictions.
-Focus on how these news items might affect the following trading instruments: ${supportedSymbols.join(", ")}.
-
-Respond in JSON format with this exact structure:
-{
-  "headline": "A natural news-style headline (like a real newspaper) highlighting the key market story from the articles - NOT 'Market Outlook' or 'AI Analysis' style",
-  "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
-  "confidence": 0-100,
-  "summary": "Brief 2-3 sentence market outlook based on the news",
-  "keyFactors": ["Factor 1", "Factor 2", "Factor 3"],
-  "affectedSymbols": [
-    {"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Brief reason"}
-  ],
-  "tradingRecommendation": "Brief actionable recommendation",
-  "riskLevel": "LOW" | "MEDIUM" | "HIGH"
-}
-
-IMPORTANT: The "headline" must read like a real news headline from Reuters, Bloomberg, or WSJ. Examples:
-- "Gold Surges as Fed Signals Rate Pause"
-- "Asian Markets Rally on Strong China Data"
-- "Oil Prices Slip Amid OPEC Supply Concerns"
-Do NOT use generic titles like "Market Outlook" or "Trading Analysis".`,
+          content: `You are a financial news analyst. Analyze headlines and output JSON.
+Instruments: ${supportedSymbols.join(", ")}
+Reply with ONLY this JSON:
+{"headline":"Reuters-style headline","overallSentiment":"BULLISH|BEARISH|NEUTRAL","confidence":0-100,"summary":"2-3 sentence outlook","keyFactors":["factor1","factor2","factor3"],"affectedSymbols":[{"symbol":"SYM","impact":"POSITIVE|NEGATIVE|NEUTRAL","reason":"why"}],"tradingRecommendation":"actionable advice","riskLevel":"LOW|MEDIUM|HIGH"}`,
         },
         {
           role: "user",
-          content: `Analyze these recent financial news items and provide market predictions:\n\n${newsContext}`,
+          content: `Analyze:\n${newsContext}`,
         },
       ],
       temperature: 0.3,
-      maxTokens: 1000,
+      maxTokens: 500,
       jsonMode: true,
     });
 
@@ -639,89 +617,41 @@ export async function runHourlyAiAnalysis(): Promise<HourlyAnalysisResult> {
       supportedSymbols.push("XAUUSD", "XAGUSD", "BTCUSD");
     }
     
-    // Build full article context (complete content, not just summaries)
-    const articleContext = recentArticles.length > 0 
-      ? recentArticles.map((article, i) => {
-          const publishedTime = article.publishedAt 
-            ? new Date(article.publishedAt).toISOString()
-            : new Date(article.fetchedAt).toISOString();
-          return `ARTICLE ${i + 1}:
-Title: ${article.title}
-Source: ${article.source || "Unknown"}
-Published: ${publishedTime}
-Full Content:
-${article.content || "No content available"}
----`;
-        }).join("\n\n")
-      : "No new articles in the last hour.";
-    
-    // Build historical prediction context
+    // Build compact article context — titles + source only, limit to 25 most recent
+    const topArticles = recentArticles.slice(0, 25);
+    const articleContext = topArticles.length > 0
+      ? topArticles.map((a, i) => `${i + 1}. [${a.source || "?"}] ${a.title}`).join("\n")
+      : "No new articles.";
+
+    // Build compact historical context — last 5 predictions only
     const historicalContext = historicalPredictions.length > 0
-      ? historicalPredictions.slice(0, 10).map((pred, i) => {
-          const analyzedTime = new Date(pred.analyzedAt).toISOString();
-          return `PREDICTION ${i + 1} (${analyzedTime}):
-- Sentiment: ${pred.overallSentiment}
-- Confidence: ${pred.confidence}%
-- Summary: ${pred.summary}
-- Risk Level: ${pred.riskLevel}
-- Recommendation: ${pred.tradingRecommendation}`;
-        }).join("\n\n")
-      : "No historical predictions available.";
+      ? historicalPredictions.slice(0, 5).map(p =>
+          `${p.overallSentiment} ${p.confidence}%: ${p.headline || p.summary.slice(0, 60)}`
+        ).join("\n")
+      : "None.";
     
     const response = await chatCompletion({
       messages: [
         {
           role: "system",
-          content: `You are an expert financial analyst performing a comprehensive HOURLY market analysis.
-
-Your task is to analyze recent news articles in depth and combine this with historical AI predictions to generate an accurate market outlook.
-
-ANALYSIS APPROACH:
-1. READ AND ANALYZE each article thoroughly - extract key financial implications, market sentiment drivers, and trading signals
-2. CORRELATE with historical predictions - identify trends, patterns, and whether recent predictions were accurate
-3. SYNTHESIZE a comprehensive market prediction
-
-Focus on these trading instruments: ${supportedSymbols.join(", ")}
-
-Respond in JSON format with this exact structure:
-{
-  "headline": "A natural news-style headline highlighting the key market story - like Reuters, Bloomberg, or WSJ",
-  "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
-  "confidence": 0-100,
-  "summary": "Detailed 3-5 sentence market outlook based on FULL article analysis and historical context",
-  "keyFactors": ["Factor 1 with specific detail from articles", "Factor 2", "Factor 3", "Factor 4"],
-  "affectedSymbols": [
-    {"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Specific reason from article analysis"}
-  ],
-  "tradingRecommendation": "Detailed actionable recommendation with risk context",
-  "riskLevel": "LOW" | "MEDIUM" | "HIGH",
-  "historicalTrendNote": "Brief note on how current analysis aligns with or differs from recent 7-day predictions"
-}
-
-IMPORTANT: The "headline" must read like a real news headline from Reuters, Bloomberg, or WSJ. Examples:
-- "Gold Surges as Fed Signals Rate Pause"
-- "Asian Markets Rally on Strong China Data"
-- "Oil Prices Slip Amid OPEC Supply Concerns"
-Do NOT use generic titles like "Market Outlook" or "Trading Analysis".
-
-BE CONSERVATIVE with confidence scores - markets are uncertain.
-If articles lack clear trading signals, default to NEUTRAL with appropriate explanation.`
+          content: `You are a financial news analyst. Analyze headlines and output JSON.
+Instruments: ${supportedSymbols.join(", ")}
+Reply with ONLY this JSON:
+{"headline":"Reuters-style headline","overallSentiment":"BULLISH|BEARISH|NEUTRAL","confidence":0-100,"summary":"2-3 sentence outlook","keyFactors":["factor1","factor2","factor3"],"affectedSymbols":[{"symbol":"SYM","impact":"POSITIVE|NEGATIVE|NEUTRAL","reason":"why"}],"tradingRecommendation":"actionable advice","riskLevel":"LOW|MEDIUM|HIGH"}`
         },
         {
           role: "user",
-          content: `Perform comprehensive hourly analysis based on:
-
-=== RECENT NEWS ARTICLES (Last 1 Hour) ===
+          content: `NEWS (${topArticles.length} articles):
 ${articleContext}
 
-=== HISTORICAL AI PREDICTIONS (Last 14 Days) ===
+RECENT PREDICTIONS:
 ${historicalContext}
 
-Generate your market prediction now.`
+Analyze now.`
         }
       ],
       temperature: 0.3,
-      maxTokens: 1500,
+      maxTokens: 500,
       jsonMode: true,
     });
 

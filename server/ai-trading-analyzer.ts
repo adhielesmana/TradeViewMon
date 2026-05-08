@@ -191,11 +191,7 @@ export async function analyzeWithAI(
       messages: [
         {
           role: "system",
-          content: `You are an expert financial market analyst specializing in short-term trading decisions.
-Analyze market data and provide precise, actionable trading recommendations.
-Your goal is to maximize win rate by only recommending trades with high probability of success.
-Be conservative - it's better to miss a trade than lose money.
-Always respond in valid JSON format.`
+          content: `You are a conservative trading analyst. Analyze market data, reply JSON only. Capital preservation first.`
         },
         {
           role: "user",
@@ -203,7 +199,7 @@ Always respond in valid JSON format.`
         }
       ],
       jsonMode: true,
-      maxTokens: 1024,
+      maxTokens: 300,
     });
 
     const content = response.content;
@@ -459,104 +455,17 @@ function buildAnalysisPrompt(context: MarketContext): string {
   
   const breakdownText = analysisBreakdown.map(a => `  [${a.status}] ${a.name}: ${a.description}`).join("\n");
   
-  return `Analyze this trading opportunity for ${symbol}:
+  const predInfo = prediction.latestPrediction
+    ? `Pred: $${prediction.latestPrediction.predictedPrice?.toFixed(2) || '?'} ${prediction.latestPrediction.predictedDirection} (${prediction.latestPrediction.confidence?.toFixed(0) || '?'}%)`
+    : 'No prediction';
 
-CURRENT MARKET STATE:
-- Current Price: $${currentPrice.toFixed(2)}
-- 1-Hour Change: ${priceChange1h >= 0 ? '+' : ''}${priceChange1h.toFixed(2)}%
-- 24-Hour Change: ${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}%
-- Volatility (1h): ${volatility.toFixed(3)}%
-- Overall Trend: ${trend}
+  return `${symbol}: $${currentPrice.toFixed(2)} | 1h:${priceChange1h >= 0 ? '+' : ''}${priceChange1h.toFixed(2)}% | 24h:${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}% | Vol:${volatility.toFixed(3)}% | Trend:${trend}
+EMA12:${indicators.ema12.toFixed(2)} EMA26:${indicators.ema26.toFixed(2)} RSI:${indicators.rsi14.toFixed(1)} MACD:${indicators.macdHistogram.toFixed(3)} Stoch:%K${indicators.stochK.toFixed(1)}
+Signals: ${bullishCount}Bull ${bearishCount}Bear ${neutralCount}Neutral | Tech:${technicalSignal.decision} ${technicalSignal.confidence}%
+${predInfo} | Accuracy:${prediction.recentAccuracy.accuracyPercent.toFixed(1)}%
 
-RAW TECHNICAL INDICATOR VALUES:
-- EMA 12/26: ${indicators.ema12.toFixed(2)} / ${indicators.ema26.toFixed(2)} (spread: ${emaSpread >= 0 ? '+' : ''}${emaSpread.toFixed(2)})
-- RSI(14): ${indicators.rsi14.toFixed(1)}
-- MACD: Line ${indicators.macdLine.toFixed(3)} | Signal ${indicators.macdSignal.toFixed(3)} | Histogram ${indicators.macdHistogram.toFixed(3)}
-- Stochastic: %K ${indicators.stochK.toFixed(1)} | %D ${indicators.stochD.toFixed(1)}
-- ATR(14): ${indicators.atr.toFixed(2)} (average price movement)
-
-ANALYSIS BREAKDOWN (${bullishCount} Bullish, ${bearishCount} Bearish, ${neutralCount} Neutral):
-${breakdownText}
-
-TECHNICAL SIGNAL SUMMARY:
-- Decision: ${technicalSignal.decision}
-- Confidence: ${technicalSignal.confidence}%
-- Bullish Score: ${technicalSignal.bullishScore} | Bearish Score: ${technicalSignal.bearishScore} | Net Score: ${technicalSignal.netScore}
-- Buy Target: ${technicalSignal.targets.buyTarget ? '$' + technicalSignal.targets.buyTarget.toFixed(2) : 'N/A'}
-- Sell Target: ${technicalSignal.targets.sellTarget ? '$' + technicalSignal.targets.sellTarget.toFixed(2) : 'N/A'}
-
-PREDICTION MODEL DATA:
-${prediction.latestPrediction ? `- Latest Prediction: $${prediction.latestPrediction.predictedPrice?.toFixed(2) || 'N/A'} (${prediction.latestPrediction.predictedDirection})
-- Prediction Confidence: ${prediction.latestPrediction.confidence?.toFixed(1) || 'N/A'}%
-- Price Delta: ${prediction.latestPrediction.predictedPrice ? (prediction.latestPrediction.predictedPrice > currentPrice ? '+' : '') + (prediction.latestPrediction.predictedPrice - currentPrice).toFixed(2) : 'N/A'}` : '- No recent prediction available'}
-- Historical Accuracy: ${prediction.recentAccuracy.accuracyPercent.toFixed(1)}% (${prediction.recentAccuracy.matchCount}/${prediction.recentAccuracy.totalPredictions} predictions matched)
-- Average Prediction Error: ${prediction.recentAccuracy.averageError.toFixed(3)}%
-${getMarketSentimentContext(symbol, trend, priceChange24h, volatility)}
-${getRiskManagementContext(prediction)}
-
-YOU ARE A CONSERVATIVE RISK MANAGER FIRST, TRADER SECOND.
-Your primary goal is CAPITAL PRESERVATION. Only recommend trades with high probability of success.
-It is ALWAYS better to miss a trade opportunity than to lose money on a bad trade.
-
-Based on all the above data, provide your trading analysis in this exact JSON format:
-{
-  "direction": "BUY" or "SELL" or "HOLD",
-  "confidence": 0-100 (BE VERY CONSERVATIVE - max 70 unless everything aligns perfectly),
-  "riskLevel": "LOW" or "MEDIUM" or "HIGH",
-  "reasoning": "Detailed explanation covering technicals, prediction model, sentiment, and risk factors",
-  "suggestedAction": "Specific action with risk warning if applicable",
-  "marketCondition": "TRENDING" or "RANGING" or "VOLATILE",
-  "entryQuality": "EXCELLENT" or "GOOD" or "FAIR" or "POOR"
-}
-
-STRICT TRADING RULES (MUST FOLLOW):
-
-1. DEFAULT TO HOLD: When in doubt, choose HOLD. Missing a trade costs nothing. Losing money hurts.
-
-2. REQUIRE CONFLUENCE: Only trade when 4+ of these align:
-   - Technical indicators (EMA, MACD, RSI)
-   - Prediction model direction
-   - Market sentiment
-   - Volatility is acceptable
-   - No contradicting signals
-
-3. VOLATILITY FILTER:
-   - If volatility > 0.8%, set riskLevel = "HIGH" and confidence -= 20
-   - If volatility > 1.2%, recommend HOLD regardless of other signals
-
-4. RSI EXTREMES:
-   - RSI > 75: Do NOT recommend BUY (overbought, reversal risk)
-   - RSI < 25: Do NOT recommend SELL (oversold, reversal risk)
-   - These are reversal zones, not entry zones
-
-5. TREND CONFIRMATION:
-   - Only BUY in uptrend or at clear support
-   - Only SELL in downtrend or at clear resistance
-   - Never trade against the prevailing trend
-
-6. PREDICTION MODEL WEIGHT:
-   - Accuracy >= 65%: Trust prediction, match direction if possible
-   - Accuracy 50-65%: Use as secondary confirmation only
-   - Accuracy < 50%: IGNORE prediction, may even fade it
-
-7. CONFIDENCE SCORING:
-   - Start at 50 (neutral)
-   - Add 10 for each confirming indicator (max +30)
-   - Add 15 if prediction model aligns (accuracy > 60%)
-   - Subtract 15 if volatility is high
-   - Subtract 20 if any major indicator contradicts
-   - NEVER exceed 85 confidence (markets are uncertain)
-   - Below 60 confidence = recommend HOLD
-
-8. ENTRY QUALITY:
-   - EXCELLENT: 5+ indicators align, low volatility, clear trend
-   - GOOD: 4 indicators align, acceptable volatility
-   - FAIR: 3 indicators align, some concerns
-   - POOR: Fewer than 3 align, recommend HOLD
-
-9. CAPITAL PROTECTION PRIORITY:
-   - If unsure, HOLD
-   - If conflicting signals, HOLD
+Rules: HOLD if unsure. Max confidence 85. Need 4+ aligned signals. Vol>0.8%=HIGH risk. RSI>75=no BUY, RSI<25=no SELL.
+JSON: {"direction":"BUY|SELL|HOLD","confidence":0-100,"riskLevel":"LOW|MEDIUM|HIGH","reasoning":"why","suggestedAction":"what to do","marketCondition":"TRENDING|RANGING|VOLATILE","entryQuality":"EXCELLENT|GOOD|FAIR|POOR"}
    - If move already extended (>1% in direction), HOLD - don't chase
    - If near key support/resistance, reduce confidence by 10
 
