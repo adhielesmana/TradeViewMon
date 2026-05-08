@@ -80,12 +80,14 @@ The container still listens on `PORT=5000`; the published host port and Nginx up
 
 ### Ollama (Local AI)
 
-AI-enhanced trading and news analysis is powered by Ollama, a local AI runtime. It is included in the Docker Compose setup and starts automatically.
+AI-enhanced trading and news analysis is powered by Ollama, a local AI runtime installed on the host.
 
-- Default model: `qwen2.5:7b` (~4.5GB, pulled on first start)
+- Install: `curl -fsSL https://ollama.com/install.sh | sh`
+- Pull model: `ollama pull qwen2.5:3b`
+- Default model: `qwen2.5:3b` (~4.5GB)
 - No API keys or external costs required
 - Configure model and URL via the Settings page in the app UI
-- Ollama URL is auto-configured to `http://ollama:11434` in Docker
+- Docker containers reach Ollama via `http://host.docker.internal:11434`
 
 ## Database Schema
 

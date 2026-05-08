@@ -45,9 +45,9 @@ SESSION_SECRET=$SESSION_SECRET
 # API Keys
 FINNHUB_API_KEY=
 
-# Ollama Local AI - auto-configured via Docker
-OLLAMA_URL=http://ollama:11434
-OLLAMA_MODEL=qwen2.5:7b
+# Ollama Local AI - runs on host, accessed via Docker host gateway
+OLLAMA_URL=http://host.docker.internal:11434
+OLLAMA_MODEL=qwen2.5:3b
 EOF
 
 chmod 600 $ENV_FILE
@@ -56,8 +56,9 @@ log_info "Environment file created: $ENV_FILE"
 log_info ""
 log_info "Database will be automatically deployed via Docker"
 log_info ""
-log_info "Ollama (Local AI) is auto-configured via Docker."
-log_info "Default model: qwen2.5:7b (pulled on first start)"
+log_info "Ollama (Local AI) runs on the host. Install with:"
+log_info "  curl -fsSL https://ollama.com/install.sh | sh"
+log_info "  ollama pull qwen2.5:7b"
 log_info ""
 log_warn "OPTIONAL: Configure Finnhub API key for stock data:"
 log_warn ""

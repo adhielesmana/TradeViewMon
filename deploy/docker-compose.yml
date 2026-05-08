@@ -42,20 +42,20 @@ services:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-trady}:${POSTGRES_PASSWORD}@trady-db:5432/${POSTGRES_DB:-trady}"
       SESSION_SECRET: "${SESSION_SECRET}"
       FINNHUB_API_KEY: "${FINNHUB_API_KEY:-}"
-      OLLAMA_URL: "http://ollama:11434"
-      OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen2.5:7b}"
+      OLLAMA_URL: "http://host.docker.internal:11434"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen2.5:3b}"
       ML_SIDECAR_URL: "http://ml-sidecar:8001"
       USE_HTTPS: "${USE_HTTPS:-false}"
       TZ: "${TZ:-Asia/Jakarta}"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       ml-sidecar:
         condition: service_healthy
       db:
-        condition: service_healthy
-      ollama:
         condition: service_healthy
     networks:
       - trady-network
@@ -65,26 +65,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: trady-ollama
-    restart: unless-stopped
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - trady-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     logging:
       driver: "json-file"
       options:
@@ -120,4 +100,3 @@ networks:
 
 volumes:
   postgres_data:
-  ollama_data:

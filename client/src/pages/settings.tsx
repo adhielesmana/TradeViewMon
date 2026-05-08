@@ -788,7 +788,8 @@ export default function SettingsPage() {
                     ))
                   ) : (
                     <>
-                      <option value="qwen2.5:7b">qwen2.5:7b (recommended)</option>
+                      <option value="qwen2.5:3b">qwen2.5:3b (recommended)</option>
+                      <option value="qwen2.5:7b">qwen2.5:7b (more capable, needs 8GB+ RAM)</option>
                       <option value="phi3.5:latest">phi3.5:latest (lighter)</option>
                       <option value="llama3.1:8b">llama3.1:8b</option>
                       <option value="mistral:7b">mistral:7b</option>
