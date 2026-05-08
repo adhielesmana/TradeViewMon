@@ -29,7 +29,7 @@ import {
   type ArticleImageCache, type InsertArticleImageCache
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, gte, lte, lt, gt, and, or, sql, inArray, isNull } from "drizzle-orm";
+import { eq, desc, gte, lte, lt, gt, and, or, sql, inArray, isNull, ilike } from "drizzle-orm";
 
 export interface IStorage {
   // Market Data
@@ -204,6 +204,7 @@ export interface IStorage {
   markArticleImageCacheUsed(cacheKey: string, expiresAt: Date): Promise<ArticleImageCache | null>;
   getExpiredArticleImageCache(olderThan: Date, limit?: number): Promise<ArticleImageCache[]>;
   deleteArticleImageCache(id: number): Promise<boolean>;
+  findRelatedArticleImage(topicTokens: string[]): Promise<ArticleImageCache | null>;
   
   // All open positions for scheduled tasks
   getAllOpenProfitablePositions(): Promise<DemoPosition[]>;
@@ -1761,6 +1762,27 @@ export class DatabaseStorage implements IStorage {
       .where(eq(articleImageCache.id, id))
       .returning();
     return result.length > 0;
+  }
+
+  async findRelatedArticleImage(topicTokens: string[]): Promise<ArticleImageCache | null> {
+    if (topicTokens.length === 0) return null;
+    // Search for cached images whose keywords overlap with the given topic tokens.
+    // Prefer entries with real source images (rss), high usage, and that actually have /uploads/ paths.
+    const conditions = topicTokens.map(token =>
+      ilike(articleImageCache.keywords, `%${token}%`)
+    );
+    const [result] = await db.select()
+      .from(articleImageCache)
+      .where(
+        and(
+          or(...conditions),
+          sql`${articleImageCache.imageUrl} LIKE '/uploads/%'`,
+          sql`${articleImageCache.sourceType} != 'fallback'`,
+        )
+      )
+      .orderBy(desc(articleImageCache.usageCount))
+      .limit(1);
+    return result || null;
   }
 }
 

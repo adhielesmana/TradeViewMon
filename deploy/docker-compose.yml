@@ -48,6 +48,7 @@ services:
       USE_HTTPS: "${USE_HTTPS:-false}"
       TZ: "${TZ:-Asia/Jakarta}"
     volumes:
+      - uploads_data:/app/uploads
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     extra_hosts:
@@ -100,3 +101,4 @@ networks:
 
 volumes:
   postgres_data:
+  uploads_data:

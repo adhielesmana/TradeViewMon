@@ -402,12 +402,20 @@ function snapshotToMarketPrediction(snapshot: NewsAnalysisSnapshot): NewsAnalysi
 // Save AI prediction to cache
 async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"], newsCount: number): Promise<void> {
   if (!prediction) return;
-  
+
   try {
     const generatedArticle = generateArticleText(prediction, newsCount, "regular");
+    // Try to find a source article image from recent news
+    const recentArticles = await storage.getNewsArticles(20);
+    const bestSource = recentArticles.find(a =>
+      a.imageUrl &&
+      a.imageUrl.startsWith("/uploads/") &&
+      a.imageUrl !== "/trady-logo.jpg"
+    ) || recentArticles.find(a => a.imageUrl && a.imageUrl.startsWith("http"));
     const imageResolution = await resolveRelevantImage({
       headline: prediction.headline || prediction.summary.slice(0, 50),
       summary: prediction.summary,
+      sourceImageUrl: bestSource?.imageUrl || null,
     });
     
     const snapshot: InsertNewsAnalysisSnapshot = {
@@ -750,12 +758,16 @@ Generate your market prediction now.`
     // Generate article text for history display
     const generatedArticle = generateArticleText(prediction, recentArticles.length, "hourly");
     
-    // Pick the most relevant stored image from the source articles if available.
-    const rssImageUrl = recentArticles.find(a => a.imageUrl)?.imageUrl;
+    // Pick the best source article image — prefer unique RSS images, skip trady-logo fallbacks
+    const bestSourceArticle = recentArticles.find(a =>
+      a.imageUrl &&
+      a.imageUrl.startsWith("/uploads/") &&
+      a.imageUrl !== "/trady-logo.jpg"
+    ) || recentArticles.find(a => a.imageUrl && a.imageUrl.startsWith("http"));
     const imageResolution = await resolveRelevantImage({
       headline: prediction.headline || prediction.summary.slice(0, 50),
       summary: prediction.summary,
-      sourceImageUrl: rssImageUrl,
+      sourceImageUrl: bestSourceArticle?.imageUrl || null,
     });
     
     // Save enhanced analysis to database with source tracking
