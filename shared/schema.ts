@@ -655,7 +655,7 @@ export const articleImageCache = pgTable("article_image_cache", {
   headline: text("headline"),
   summary: text("summary"),
   keywords: text("keywords"),
-  sourceType: varchar("source_type", { length: 20 }).notNull(), // 'rss', 'openai', 'cache', 'fallback'
+  sourceType: varchar("source_type", { length: 20 }).notNull(), // 'rss', 'cache', 'fallback'
   sourceUrl: text("source_url"),
   imageUrl: text("image_url").notNull(), // Stored internal URL (/objects/... or /uploads/...)
   storagePath: text("storage_path"), // Internal storage path used to persist the image

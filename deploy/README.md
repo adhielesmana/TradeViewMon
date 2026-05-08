@@ -78,22 +78,14 @@ The container still listens on `PORT=5000`; the published host port and Nginx up
 | `SESSION_SECRET` | Yes | Session encryption (auto-generated) |
 | `FINNHUB_API_KEY` | No | Real-time stock data for GDX, SPX, etc. |
 
-### OpenAI API Key Configuration
+### Ollama (Local AI)
 
-The OpenAI API key for AI-enhanced auto-trading is configured via the **Settings page** in the application UI, not through environment variables. 
+AI-enhanced trading and news analysis is powered by Ollama, a local AI runtime. It is included in the Docker Compose setup and starts automatically.
 
-After deployment:
-1. Log in as superadmin
-2. Go to Settings page
-3. Enter your OpenAI API key
-4. The key is encrypted and stored securely in the database
-
-This approach means:
-- No need to edit `.env` files for OpenAI
-- Key persists in the database across deployments
-- Can be updated anytime through the UI
-
-Get your OpenAI key at: https://platform.openai.com/api-keys
+- Default model: `qwen2.5:7b` (~4.5GB, pulled on first start)
+- No API keys or external costs required
+- Configure model and URL via the Settings page in the app UI
+- Ollama URL is auto-configured to `http://ollama:11434` in Docker
 
 ## Database Schema
 

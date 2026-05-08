@@ -1,9 +1,7 @@
 import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
-import OpenAI from "openai";
 import { storage } from "./storage";
-import { decrypt } from "./encryption";
 import { ObjectStorageService } from "./replit_integrations/object_storage";
 import type { InsertArticleImageCache } from "@shared/schema";
 
@@ -64,7 +62,7 @@ const TOPIC_PATTERNS: Array<{ pattern: string; canonical: string }> = [
   { pattern: "opec", canonical: "opec" },
 ];
 
-export type ArticleImageSourceType = "rss" | "openai" | "cache" | "fallback";
+export type ArticleImageSourceType = "rss" | "cache" | "fallback";
 
 export interface ResolveArticleImageInput {
   headline: string;
@@ -137,25 +135,6 @@ export function isManagedImageUrl(imageUrl?: string | null): boolean {
   return imageUrl.startsWith("/objects/") || imageUrl.startsWith("/uploads/");
 }
 
-async function getOpenAIClient(): Promise<OpenAI | null> {
-  const envKey = process.env.OPENAI_API_KEY;
-  if (envKey && envKey !== "not-configured") {
-    return new OpenAI({ apiKey: envKey });
-  }
-
-  try {
-    const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
-    if (encryptedKey) {
-      const decryptedKey = decrypt(encryptedKey);
-      return new OpenAI({ apiKey: decryptedKey });
-    }
-  } catch (error) {
-    console.error("[ArticleImageService] Failed to load OpenAI key:", error);
-  }
-
-  return null;
-}
-
 function mimeTypeToExtension(mimeType: string): string {
   const normalized = mimeType.toLowerCase();
   if (normalized.includes("jpeg") || normalized.includes("jpg")) return "jpg";
@@ -165,7 +144,7 @@ function mimeTypeToExtension(mimeType: string): string {
 }
 
 function inferSourceType(sourceImageUrl?: string | null): ArticleImageSourceType {
-  if (!sourceImageUrl) return "openai";
+  if (!sourceImageUrl) return "fallback";
   return isManagedImageUrl(sourceImageUrl) ? "cache" : "rss";
 }
 
@@ -254,43 +233,6 @@ async function downloadRemoteImage(remoteUrl: string): Promise<{ buffer: Buffer;
   return { buffer, contentType };
 }
 
-async function generateOpenAiImageAsset(headline: string, summary: string, signature: string): Promise<{ imageUrl: string; storagePath: string | null } | null> {
-  const openai = await getOpenAIClient();
-  if (!openai) {
-    return null;
-  }
-
-  const keywords = buildKeywordsText(signature);
-  const prompt = [
-    "Create a polished editorial featured image for a financial news article.",
-    `Headline: ${headline}`,
-    `Summary: ${summary.slice(0, 600)}`,
-    `Visual focus: ${keywords}`,
-    "Style: realistic, high-contrast, professional newsroom illustration, landscape composition, no text, no logos, no watermark, no chart labels.",
-  ].join("\n");
-
-  try {
-    const response = await openai.images.generate({
-      model: "gpt-image-1",
-      prompt,
-      size: "1536x1024",
-      quality: "medium",
-      background: "opaque",
-    });
-
-    const base64 = response.data?.[0]?.b64_json;
-    if (!base64) {
-      return null;
-    }
-
-    const buffer = Buffer.from(base64, "base64");
-    return await storeImageBuffer(buffer, "image/png");
-  } catch (error) {
-    console.error("[ArticleImageService] OpenAI image generation failed:", error);
-    return null;
-  }
-}
-
 export async function resolveRelevantImage(input: ResolveArticleImageInput): Promise<ResolveArticleImageResult> {
   const headline = input.headline?.trim() || "Market analysis";
   const summary = input.summary?.trim() || "";
@@ -337,18 +279,8 @@ export async function resolveRelevantImage(input: ResolveArticleImageInput): Pro
         storagePath = stored.storagePath;
         sourceType = inferSourceType(input.sourceImageUrl);
       } catch (error) {
-        console.warn("[ArticleImageService] Failed to store source image, trying AI fallback:", error);
+        console.warn("[ArticleImageService] Failed to store source image:", error);
       }
-    }
-  }
-
-  if (!imageUrl) {
-    const generated = await generateOpenAiImageAsset(headline, summary, topicSignature);
-    if (generated) {
-      imageUrl = generated.imageUrl;
-      storagePath = generated.storagePath;
-      sourceType = "openai";
-      sourceUrl = null;
     }
   }
 

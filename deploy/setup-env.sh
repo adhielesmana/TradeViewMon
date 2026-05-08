@@ -45,10 +45,9 @@ SESSION_SECRET=$SESSION_SECRET
 # API Keys
 FINNHUB_API_KEY=
 
-# OpenAI API Key - REQUIRED for AI features
-# Set your OpenAI API key here for production deployment
-# Priority: OPENAI_API_KEY env var > Database (Settings page) > Replit integration
-OPENAI_API_KEY=
+# Ollama Local AI - auto-configured via Docker
+OLLAMA_URL=http://ollama:11434
+OLLAMA_MODEL=qwen2.5:7b
 EOF
 
 chmod 600 $ENV_FILE
@@ -57,11 +56,9 @@ log_info "Environment file created: $ENV_FILE"
 log_info ""
 log_info "Database will be automatically deployed via Docker"
 log_info ""
-log_warn "REQUIRED: Configure your OpenAI API key in .env.production:"
-log_warn ""
-log_warn "  OPENAI_API_KEY=sk-your-key-here"
-log_warn "  Get key: https://platform.openai.com/api-keys"
-log_warn ""
+log_info "Ollama (Local AI) is auto-configured via Docker."
+log_info "Default model: qwen2.5:7b (pulled on first start)"
+log_info ""
 log_warn "OPTIONAL: Configure Finnhub API key for stock data:"
 log_warn ""
 log_warn "  FINNHUB_API_KEY=your-key"

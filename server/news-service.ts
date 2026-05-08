@@ -1,9 +1,8 @@
 import Parser from "rss-parser";
-import OpenAI from "openai";
 import crypto from "crypto";
 import { storage } from "./storage";
-import { decrypt } from "./encryption";
 import { resolveRelevantImage } from "./article-image-service";
+import { chatCompletion, isOllamaAvailable } from "./local-ai-client";
 import type { InsertNewsArticle, NewsArticle, InsertNewsAnalysisSnapshot, NewsAnalysisSnapshot } from "@shared/schema";
 
 const parser = new Parser({
@@ -46,29 +45,6 @@ export interface NewsAnalysis {
 
 const DEFAULT_RSS_URL = "https://finance.yahoo.com/news/rssindex";
 
-async function getOpenAIClient(): Promise<OpenAI | null> {
-  // Priority 1: Direct OPENAI_API_KEY environment variable (best for production deployment)
-  const envKey = process.env.OPENAI_API_KEY;
-  if (envKey && envKey !== "not-configured") {
-    console.log("[NewsService] Using OPENAI_API_KEY environment variable");
-    return new OpenAI({ apiKey: envKey });
-  }
-
-  // Priority 2: Database stored encrypted key (Settings page)
-  try {
-    const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
-    if (encryptedKey) {
-      const decryptedKey = decrypt(encryptedKey);
-      console.log("[NewsService] Using OpenAI key from Settings page");
-      return new OpenAI({ apiKey: decryptedKey });
-    }
-  } catch (e) {
-    console.error("[NewsService] Failed to decrypt OpenAI key from database:", e);
-  }
-
-  console.log("[NewsService] No OpenAI key configured - set OPENAI_API_KEY env var or configure in Settings");
-  return null;
-}
 
 export async function getRssFeedUrl(): Promise<string> {
   const savedUrl = await storage.getSetting("RSS_FEED_URL");
@@ -222,11 +198,10 @@ export async function fetchNews(maxItems: number = 10): Promise<NewsItem[]> {
 }
 
 export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis["marketPrediction"]> {
-  const openai = await getOpenAIClient();
-  
-  if (!openai) {
-    // Intentionally return null to show "Configure OpenAI" message in UI
-    console.log("[NewsService] OpenAI not configured, skipping AI analysis");
+  const ollamaUp = await isOllamaAvailable();
+
+  if (!ollamaUp) {
+    console.log("[NewsService] Ollama not available, skipping AI analysis");
     return null;
   }
 
@@ -252,12 +227,11 @@ export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis[
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const response = await chatCompletion({
       messages: [
         {
           role: "system",
-          content: `You are a professional financial analyst specializing in market analysis. 
+          content: `You are a professional financial analyst specializing in market analysis.
 Analyze the provided news headlines and content to generate market predictions.
 Focus on how these news items might affect the following trading instruments: ${supportedSymbols.join(", ")}.
 
@@ -287,17 +261,18 @@ Do NOT use generic titles like "Market Outlook" or "Trading Analysis".`,
         },
       ],
       temperature: 0.3,
-      max_tokens: 1000,
+      maxTokens: 1000,
+      jsonMode: true,
     });
 
-    const content = response.choices[0]?.message?.content;
+    const content = response.content;
     if (!content) {
-      throw new Error("Empty response from OpenAI");
+      throw new Error("Empty response from Ollama");
     }
 
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.warn("[NewsService] No JSON found in OpenAI response, using defaults");
+      console.warn("[NewsService] No JSON found in AI response, using defaults");
       return getDefaultPrediction();
     }
 
@@ -305,7 +280,7 @@ Do NOT use generic titles like "Market Outlook" or "Trading Analysis".`,
     try {
       prediction = JSON.parse(jsonMatch[0]);
     } catch (parseError) {
-      console.warn("[NewsService] Failed to parse JSON from OpenAI, using defaults:", parseError);
+      console.warn("[NewsService] Failed to parse JSON from AI response, using defaults:", parseError);
       return getDefaultPrediction();
     }
     
@@ -625,15 +600,15 @@ interface HourlyAnalysisResult {
 export async function runHourlyAiAnalysis(): Promise<HourlyAnalysisResult> {
   console.log("[NewsService] Starting hourly AI analysis...");
   
-  const openai = await getOpenAIClient();
-  if (!openai) {
-    console.log("[NewsService] OpenAI not configured, skipping hourly analysis");
+  const ollamaUp = await isOllamaAvailable();
+  if (!ollamaUp) {
+    console.log("[NewsService] Ollama not available, skipping hourly analysis");
     return {
       success: false,
       articlesAnalyzed: 0,
       historicalPredictionsUsed: 0,
       prediction: null,
-      error: "OpenAI not configured"
+      error: "Ollama not available"
     };
   }
   
@@ -685,9 +660,7 @@ ${article.content || "No content available"}
         }).join("\n\n")
       : "No historical predictions available.";
     
-    // Generate comprehensive AI analysis
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const response = await chatCompletion({
       messages: [
         {
           role: "system",
@@ -719,7 +692,7 @@ Respond in JSON format with this exact structure:
 
 IMPORTANT: The "headline" must read like a real news headline from Reuters, Bloomberg, or WSJ. Examples:
 - "Gold Surges as Fed Signals Rate Pause"
-- "Asian Markets Rally on Strong China Data"  
+- "Asian Markets Rally on Strong China Data"
 - "Oil Prices Slip Amid OPEC Supply Concerns"
 Do NOT use generic titles like "Market Outlook" or "Trading Analysis".
 
@@ -740,12 +713,13 @@ Generate your market prediction now.`
         }
       ],
       temperature: 0.3,
-      max_tokens: 1500,
+      maxTokens: 1500,
+      jsonMode: true,
     });
-    
-    const content = response.choices[0]?.message?.content;
+
+    const content = response.content;
     if (!content) {
-      throw new Error("Empty response from OpenAI");
+      throw new Error("Empty response from Ollama");
     }
     
     // Parse the JSON response
@@ -1100,54 +1074,8 @@ function getFallbackImage(keywords: string, articleId: number): string {
   return defaultImages[articleId % defaultImages.length];
 }
 
-// AI-powered image keyword extraction using OpenAI
-async function extractImageKeywordsWithAI(headline: string, summary: string): Promise<string> {
-  try {
-    const openai = await getOpenAIClient();
-    if (!openai) {
-      console.log("[NewsService] OpenAI not available for image keywords, using fallback");
-      return extractKeywordsFromHeadline(headline).join(" ");
-    }
-
-    const prompt = `Analyze this financial news article and generate a specific image search query.
-
-HEADLINE: ${headline}
-SUMMARY: ${summary.slice(0, 500)}
-
-RULES:
-1. Identify the PRIMARY SUBJECT (e.g., gold bars, bitcoin coin, oil barrels, stock chart)
-2. Identify any COUNTRY or REGION mentioned (e.g., China, USA, Europe, Middle East)
-3. Identify any COMPANY or PRODUCT (e.g., Tesla car, Apple iPhone, mining equipment)
-4. Combine these into a descriptive image search query
-
-EXAMPLES:
-- "Gold prices rise in China" → "gold bars chinese currency yuan"
-- "Bitcoin hits new high" → "bitcoin cryptocurrency digital coin"
-- "Tesla stock surges" → "Tesla electric car factory"
-- "Oil prices drop in Middle East" → "oil barrels desert middle east"
-- "Federal Reserve interest rates" → "federal reserve building washington"
-- "Silver mining production increases" → "silver bars mining equipment"
-
-Return ONLY the image search query (3-6 words), nothing else. Be specific and visual.`;
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 50,
-      temperature: 0.3,
-    });
-
-    const keywords = response.choices[0]?.message?.content?.trim();
-    if (keywords && keywords.length > 0 && keywords.length < 100) {
-      console.log(`[NewsService] AI extracted image keywords: "${keywords}" for: ${headline.slice(0, 50)}...`);
-      return keywords;
-    }
-
-    return extractKeywordsFromHeadline(headline).join(" ");
-  } catch (error: any) {
-    console.error("[NewsService] AI image keyword extraction failed:", error.message);
-    return extractKeywordsFromHeadline(headline).join(" ");
-  }
+function extractImageKeywords(headline: string, _summary: string): string {
+  return extractKeywordsFromHeadline(headline).join(" ");
 }
 
 // Get AI-powered relevant image for an article
