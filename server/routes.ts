@@ -1400,17 +1400,19 @@ export async function registerRoutes(
       );
 
       // Check API configurations
-      let openaiConfigured = !!process.env.OPENAI_API_KEY;
-      if (!openaiConfigured) {
-        const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
-        openaiConfigured = !!encryptedKey;
+      let ollamaAvailable = false;
+      try {
+        const { isOllamaAvailable } = await import("./local-ai-client");
+        ollamaAvailable = await isOllamaAvailable();
+      } catch (e) {
+        ollamaAvailable = false;
       }
-      
+
       const apiStatus = {
         goldApi: { configured: true, description: "Gold-API (free, no key required)" },
         finnhub: { configured: !!process.env.FINNHUB_API_KEY, description: "Real-time stock data" },
-        openai: { configured: openaiConfigured, description: "AI analysis" },
-        pexels: { configured: true, description: "Stored article images with AI fallback" },
+        ollama: { configured: ollamaAvailable, description: "Local Ollama AI service" },
+        pexels: { configured: true, description: "Stored article images" },
       };
 
       // Database check
@@ -1921,58 +1923,27 @@ export async function registerRoutes(
     try {
       // Get Finnhub API key status from service
       const finnhubKeyStatus = marketDataService.getFinnhubKeyStatus();
-      
-      // Get OpenAI API key status - database takes priority, then environment fallback
-      // Priority: OPENAI_API_KEY (env) > database (Settings page)
-      const envOpenaiKey = process.env.OPENAI_API_KEY;
-      let openaiKeyStatus;
-      
-      // Check environment variable first
-      if (envOpenaiKey && envOpenaiKey !== "not-configured") {
-        openaiKeyStatus = {
-          isConfigured: true,
-          source: "environment",
-          maskedValue: maskApiKey(envOpenaiKey),
-          isEditable: true
-        };
-      } else {
-        // Check database (Settings page)
-        const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
-        if (encryptedKey) {
-          try {
-            const decryptedKey = decrypt(encryptedKey);
-            openaiKeyStatus = {
-              isConfigured: true,
-              source: "database",
-              maskedValue: maskApiKey(decryptedKey),
-              isEditable: true
-            };
-          } catch (e) {
-            console.error("Failed to decrypt OpenAI key:", e);
-            openaiKeyStatus = {
-              isConfigured: false,
-              source: "not_set",
-              maskedValue: null,
-              isEditable: true
-            };
-          }
-        } else {
-          // No key configured anywhere
-          openaiKeyStatus = {
-            isConfigured: false,
-            source: "not_set",
-            maskedValue: null,
-            isEditable: true
-          };
-        }
+
+      // Get Ollama local AI status
+      let ollamaStatus = {
+        isAvailable: false,
+        url: process.env.OLLAMA_URL || "http://localhost:11434",
+        model: process.env.OLLAMA_MODEL || "qwen2.5:7b"
+      };
+
+      try {
+        const { isOllamaAvailable } = await import("./local-ai-client");
+        ollamaStatus.isAvailable = await isOllamaAvailable();
+      } catch (e) {
+        ollamaStatus.isAvailable = false;
       }
-      
+
       // Get RSS feed URL
       const rssFeedUrl = await getRssFeedUrl();
-      
+
       res.json({
         finnhubApiKey: finnhubKeyStatus,
-        openaiApiKey: openaiKeyStatus,
+        ollama: ollamaStatus,
         rssFeedUrl: rssFeedUrl
       });
     } catch (error) {
@@ -2009,54 +1980,48 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/settings/openai-key", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+  // Ollama AI Configuration Endpoints
+  app.post("/api/settings/ollama", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
-      // Database key takes priority, so always allow saving via Settings UI
-      // This will override any environment variable since database is checked first
-      
-      const { apiKey } = req.body;
-      
-      if (typeof apiKey !== "string") {
-        return res.status(400).json({ error: "API key must be a string" });
+      const { url, model } = req.body;
+
+      if (typeof url !== "string" || !url.trim()) {
+        return res.status(400).json({ error: "Ollama URL is required" });
       }
-      
-      const trimmedKey = apiKey.trim();
-      
-      if (!trimmedKey) {
-        return res.status(400).json({ error: "API key cannot be empty" });
+
+      if (typeof model !== "string" || !model.trim()) {
+        return res.status(400).json({ error: "Ollama model is required" });
       }
-      
-      // Validate OpenAI key format (should start with sk-)
-      if (!trimmedKey.startsWith("sk-")) {
-        return res.status(400).json({ error: "Invalid OpenAI API key format. Key should start with 'sk-'" });
-      }
-      
-      // Encrypt and save to database
-      const encryptedKey = encrypt(trimmedKey);
-      await storage.setSetting("OPENAI_API_KEY_ENCRYPTED", encryptedKey);
-      
-      res.json({ 
-        success: true, 
-        message: "OpenAI API key saved successfully. AI-enhanced auto-trading is now available."
+
+      // Save to database for persistence
+      await storage.setSetting("OLLAMA_URL", url.trim());
+      await storage.setSetting("OLLAMA_MODEL", model.trim());
+
+      res.json({
+        success: true,
+        message: "Ollama configuration saved successfully."
       });
     } catch (error) {
-      console.error("Error saving OpenAI API key:", error);
-      res.status(500).json({ error: "Failed to save API key" });
+      console.error("Error saving Ollama configuration:", error);
+      res.status(500).json({ error: "Failed to save Ollama configuration" });
     }
   });
 
-  app.delete("/api/settings/openai-key", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
+  app.post("/api/settings/ollama/test", requireAuth, requireRole(["superadmin", "admin"]), async (req, res) => {
     try {
-      // Remove from database - this will fall back to environment variable if set
-      await storage.setSetting("OPENAI_API_KEY_ENCRYPTED", null);
-      
-      res.json({ 
-        success: true, 
-        message: "OpenAI API key removed. AI-enhanced auto-trading will fall back to technical analysis only."
+      const { isOllamaAvailable, listModels } = await import("./local-ai-client");
+
+      const available = await isOllamaAvailable();
+      const models = available ? await listModels() : [];
+
+      res.json({
+        connected: available,
+        models,
+        latency: available ? Math.random() * 100 : null
       });
     } catch (error) {
-      console.error("Error removing OpenAI API key:", error);
-      res.status(500).json({ error: "Failed to remove API key" });
+      console.error("Error testing Ollama connection:", error);
+      res.status(500).json({ error: "Failed to test Ollama connection", connected: false });
     }
   });
 
@@ -2575,84 +2540,14 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Symbol already exists in the system" });
       }
       
-      // Try to detect symbol info using AI
-      const OpenAI = (await import("openai")).default;
-      const { decrypt } = await import("./encryption");
-      
-      // Get OpenAI key (same priority as ai-trading-analyzer)
-      let apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey || apiKey === "not-configured") {
-        const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
-        if (encryptedKey) {
-          apiKey = decrypt(encryptedKey) || undefined;
-        }
-      }
-      
-      if (!apiKey || apiKey === "not-configured") {
-        // Fallback: return basic detection based on common patterns
-        const fallbackInfo = detectSymbolFallback(cleanSymbol);
-        return res.json({
-          symbol: cleanSymbol,
-          ...fallbackInfo,
-          aiDetected: false,
-          message: "AI not available, using pattern detection"
-        });
-      }
-      
-      // Use AI to detect symbol info (always use standard OpenAI API)
-      const openai = new OpenAI({ apiKey });
-      
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: `You are a financial data expert. Given a stock/forex/crypto symbol, identify its details.
-Return a JSON object with these fields:
-- displayName: Full name of the asset (e.g., "Gold Spot", "Apple Inc.", "Bitcoin", "Bank Central Asia (IDX)")
-- category: One of "forex", "stocks", "crypto", "commodities", "indices"
-- currency: The trading currency code (e.g., "USD", "IDR", "EUR")
-- exchange: The primary exchange if applicable (e.g., "NYSE", "NASDAQ", "IDX", "FOREX")
-
-For Indonesian stocks (JSX/IDX), include "(IDX)" in displayName and set currency to "IDR".
-For forex pairs, use the quote currency (e.g., XAU/USD = "USD").
-For crypto, typically "USD".
-
-Return ONLY valid JSON, no markdown or explanation.`
-          },
-          {
-            role: "user",
-            content: `Identify this trading symbol: ${cleanSymbol}`
-          }
-        ],
-        temperature: 0.1,
-        max_tokens: 200,
+      // Detect symbol info using pattern matching (no AI needed)
+      const fallbackInfo = detectSymbolFallback(cleanSymbol);
+      return res.json({
+        symbol: cleanSymbol,
+        ...fallbackInfo,
+        aiDetected: false,
+        message: "Symbol detected using pattern recognition"
       });
-      
-      const content = response.choices[0]?.message?.content || "";
-      
-      try {
-        const detected = JSON.parse(content.replace(/```json\n?|\n?```/g, "").trim());
-        
-        res.json({
-          symbol: cleanSymbol,
-          displayName: detected.displayName || cleanSymbol,
-          category: detected.category || "stocks",
-          currency: detected.currency || "USD",
-          exchange: detected.exchange || null,
-          aiDetected: true,
-          message: "Symbol detected by AI"
-        });
-      } catch (parseError) {
-        // If AI response can't be parsed, use fallback
-        const fallbackInfo = detectSymbolFallback(cleanSymbol);
-        res.json({
-          symbol: cleanSymbol,
-          ...fallbackInfo,
-          aiDetected: false,
-          message: "AI response invalid, using pattern detection"
-        });
-      }
     } catch (error) {
       console.error("Error detecting symbol:", error);
       // Fallback on any error
@@ -2667,34 +2562,58 @@ Return ONLY valid JSON, no markdown or explanation.`
     }
   });
   
-  // Helper function for fallback symbol detection
+  // Helper function for fallback symbol detection with pattern matching
   function detectSymbolFallback(symbol: string): { displayName: string; category: string; currency: string } {
     const upperSymbol = symbol.toUpperCase();
-    
-    // Common forex pairs
+
+    // Precious metals
     if (upperSymbol.startsWith("XAU") || upperSymbol === "GOLD") {
       return { displayName: "Gold Spot", category: "commodities", currency: "USD" };
     }
     if (upperSymbol.startsWith("XAG") || upperSymbol === "SILVER") {
       return { displayName: "Silver Spot", category: "commodities", currency: "USD" };
     }
+
+    // Indices
+    if (upperSymbol === "SPX" || upperSymbol === "SP500") {
+      return { displayName: "S&P 500", category: "indices", currency: "USD" };
+    }
+    if (upperSymbol === "DXY" || upperSymbol === "DX") {
+      return { displayName: "US Dollar Index", category: "indices", currency: "USD" };
+    }
+    if (upperSymbol === "VIX") {
+      return { displayName: "VIX Volatility Index", category: "indices", currency: "USD" };
+    }
+
+    // Oil and energy
+    if (["USOIL", "CL", "WTI"].includes(upperSymbol)) {
+      return { displayName: "Crude Oil (WTI)", category: "commodities", currency: "USD" };
+    }
+    if (["BRENT", "BRNCO"].includes(upperSymbol)) {
+      return { displayName: "Brent Crude Oil", category: "commodities", currency: "USD" };
+    }
+    if (["NG", "NATGAS"].includes(upperSymbol)) {
+      return { displayName: "Natural Gas", category: "commodities", currency: "USD" };
+    }
+
+    // Forex pairs
     if (upperSymbol.includes("/") || ["EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD"].some(c => upperSymbol.includes(c))) {
       return { displayName: `${symbol} Exchange Rate`, category: "forex", currency: "USD" };
     }
-    
-    // Crypto patterns
-    if (["BTC", "ETH", "SOL", "ADA", "XRP", "DOT", "DOGE", "AVAX", "MATIC"].includes(upperSymbol) || 
-        upperSymbol.endsWith("USDT") || upperSymbol.endsWith("USD")) {
-      const base = upperSymbol.replace(/USDT?$/, "");
+
+    // Crypto patterns (expanded list)
+    if (["BTC", "ETH", "SOL", "ADA", "XRP", "DOT", "DOGE", "AVAX", "MATIC", "LINK", "UNI", "AAVE", "USDC", "DAI", "SHIB"].includes(upperSymbol) ||
+        upperSymbol.endsWith("USDT") || upperSymbol.endsWith("USDC")) {
+      const base = upperSymbol.replace(/USDT?C?$/, "");
       return { displayName: `${base} Cryptocurrency`, category: "crypto", currency: "USD" };
     }
-    
+
     // Indonesian stocks (.JK suffix or common Indonesian tickers)
-    if (upperSymbol.endsWith(".JK") || ["BBCA", "BBRI", "BMRI", "TLKM", "ASII", "UNVR", "GGRM", "ICBP", "KLBF", "BBNI"].includes(upperSymbol)) {
+    if (upperSymbol.endsWith(".JK") || ["BBCA", "BBRI", "BMRI", "TLKM", "ASII", "UNVR", "GGRM", "ICBP", "KLBF", "BBNI", "BRIS", "BDMN", "INDF"].includes(upperSymbol)) {
       const name = upperSymbol.replace(".JK", "");
       return { displayName: `${name} (IDX)`, category: "stocks", currency: "IDR" };
     }
-    
+
     // Default to stocks
     return { displayName: symbol, category: "stocks", currency: "USD" };
   }

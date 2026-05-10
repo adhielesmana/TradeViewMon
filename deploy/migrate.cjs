@@ -110,7 +110,11 @@ async function runMigrations() {
                 CREATE TABLE demo_accounts (
                     id SERIAL PRIMARY KEY,
                     user_id INTEGER NOT NULL,
-                    balance REAL NOT NULL DEFAULT 100000,
+                    balance REAL NOT NULL DEFAULT 0,
+                    total_deposited REAL NOT NULL DEFAULT 0,
+                    total_withdrawn REAL NOT NULL DEFAULT 0,
+                    total_profit REAL NOT NULL DEFAULT 0,
+                    total_loss REAL NOT NULL DEFAULT 0,
                     currency VARCHAR(10) NOT NULL DEFAULT 'USD',
                     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -140,19 +144,39 @@ async function runMigrations() {
             tablesToCreate.push(`
                 CREATE TABLE demo_positions (
                     id SERIAL PRIMARY KEY,
+                    account_id INTEGER NOT NULL,
                     user_id INTEGER NOT NULL,
                     symbol VARCHAR(20) NOT NULL,
                     type VARCHAR(10) NOT NULL,
                     entry_price REAL NOT NULL,
+                    current_price REAL,
                     exit_price REAL,
                     quantity REAL NOT NULL,
                     stop_loss REAL,
                     take_profit REAL,
                     status VARCHAR(20) NOT NULL DEFAULT 'open',
                     profit_loss REAL,
+                    profit_loss_percent REAL DEFAULT 0,
                     is_auto_trade BOOLEAN DEFAULT FALSE,
+                    opened_at TIMESTAMP NOT NULL DEFAULT NOW(),
                     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                     closed_at TIMESTAMP
+                )
+            `);
+        }
+
+        if (!existingTables.includes('demo_transactions')) {
+            tablesToCreate.push(`
+                CREATE TABLE demo_transactions (
+                    id SERIAL PRIMARY KEY,
+                    account_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    type VARCHAR(20) NOT NULL,
+                    amount REAL NOT NULL,
+                    balance_after REAL NOT NULL,
+                    description TEXT,
+                    position_id INTEGER,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
                 )
             `);
         }
@@ -282,6 +306,12 @@ async function runMigrations() {
             'CREATE INDEX IF NOT EXISTS article_image_cache_last_used_idx ON article_image_cache(last_used_at)',
             'CREATE UNIQUE INDEX IF NOT EXISTS system_status_component_idx ON system_status(component)',
             'CREATE UNIQUE INDEX IF NOT EXISTS demo_accounts_user_id_idx ON demo_accounts(user_id)',
+            'CREATE INDEX IF NOT EXISTS demo_accounts_currency_idx ON demo_accounts(currency)',
+            'CREATE INDEX IF NOT EXISTS demo_transactions_account_idx ON demo_transactions(account_id)',
+            'CREATE INDEX IF NOT EXISTS demo_transactions_user_idx ON demo_transactions(user_id)',
+            'CREATE INDEX IF NOT EXISTS demo_transactions_type_idx ON demo_transactions(type)',
+            'CREATE INDEX IF NOT EXISTS demo_transactions_created_idx ON demo_transactions(created_at)',
+            'CREATE INDEX IF NOT EXISTS demo_positions_account_idx ON demo_positions(account_id)',
             'CREATE INDEX IF NOT EXISTS demo_trades_user_id_idx ON demo_trades(user_id)',
             'CREATE INDEX IF NOT EXISTS demo_trades_status_idx ON demo_trades(status)',
             'CREATE INDEX IF NOT EXISTS demo_positions_user_id_idx ON demo_positions(user_id)',
@@ -345,9 +375,19 @@ async function runMigrations() {
         
         const alterStatements = [
             // demo_positions columns
+            'ALTER TABLE demo_positions ADD COLUMN IF NOT EXISTS account_id INTEGER',
+            'ALTER TABLE demo_positions ADD COLUMN IF NOT EXISTS current_price REAL',
+            'ALTER TABLE demo_positions ADD COLUMN IF NOT EXISTS profit_loss_percent REAL DEFAULT 0',
+            'ALTER TABLE demo_positions ADD COLUMN IF NOT EXISTS opened_at TIMESTAMP NOT NULL DEFAULT NOW()',
             'ALTER TABLE demo_positions ADD COLUMN IF NOT EXISTS is_auto_trade BOOLEAN DEFAULT FALSE',
             'ALTER TABLE demo_positions ADD COLUMN IF NOT EXISTS stop_loss REAL',
             'ALTER TABLE demo_positions ADD COLUMN IF NOT EXISTS take_profit REAL',
+
+            // demo_accounts columns
+            'ALTER TABLE demo_accounts ADD COLUMN IF NOT EXISTS total_deposited REAL NOT NULL DEFAULT 0',
+            'ALTER TABLE demo_accounts ADD COLUMN IF NOT EXISTS total_withdrawn REAL NOT NULL DEFAULT 0',
+            'ALTER TABLE demo_accounts ADD COLUMN IF NOT EXISTS total_profit REAL NOT NULL DEFAULT 0',
+            'ALTER TABLE demo_accounts ADD COLUMN IF NOT EXISTS total_loss REAL NOT NULL DEFAULT 0',
             
             // auto_trade_settings columns - CRITICAL: add symbol column
             "ALTER TABLE auto_trade_settings ADD COLUMN IF NOT EXISTS symbol VARCHAR(20) DEFAULT 'XAUUSD'",

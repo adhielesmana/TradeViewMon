@@ -5,6 +5,10 @@ set -e
 APP_NAME="trady"
 DEFAULT_PORT=8111
 DOMAIN=""
+APP_DOMAIN=""
+REDIRECT_DOMAIN=""
+CERT_DOMAIN=""
+SESSION_COOKIE_DOMAIN=""
 EMAIL=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -86,7 +90,7 @@ show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  -d, --domain DOMAIN     Domain name for the application (enables HTTPS)"
+    echo "  -d, --domain DOMAIN     Apex domain (app runs on trady.DOMAIN and apex redirects)"
     echo "  -e, --email EMAIL       Email for Let's Encrypt SSL certificate"
     echo "  -p, --port PORT         Deprecated; host port is fixed at 8111"
     echo "  -k, --finnhub-key KEY   Finnhub API key (optional)"
@@ -98,7 +102,7 @@ show_usage() {
     echo ""
     echo "Examples:"
     echo "  $0                                              # Quick redeploy (uses saved config)"
-    echo "  $0 --domain tradeview.example.com --email admin@example.com  # First time with SSL"
+    echo "  $0 --domain maxline.id --email admin@example.com  # Apex redirects to trady.maxline.id"
     echo "  $0 --reconfigure-ssl                            # Force reconfigure Nginx/SSL"
     echo "  $0 --finnhub-key YOUR_KEY                       # With API key"
     echo ""
@@ -148,6 +152,35 @@ if [ -f "$DEPLOY_CONFIG" ]; then
     
     log_info "Using domain: ${DOMAIN:-none}"
     log_info "Using email: ${EMAIL:-none}"
+fi
+
+normalize_domains() {
+    APP_DOMAIN=""
+    REDIRECT_DOMAIN=""
+    CERT_DOMAIN=""
+    SESSION_COOKIE_DOMAIN=""
+
+    if [ -z "$DOMAIN" ]; then
+        return 0
+    fi
+
+    if [[ "$DOMAIN" == trady.* ]]; then
+        APP_DOMAIN="$DOMAIN"
+        REDIRECT_DOMAIN="${DOMAIN#trady.}"
+    else
+        REDIRECT_DOMAIN="$DOMAIN"
+        APP_DOMAIN="trady.$DOMAIN"
+    fi
+
+    CERT_DOMAIN="$REDIRECT_DOMAIN"
+    SESSION_COOKIE_DOMAIN=".${REDIRECT_DOMAIN}"
+}
+
+normalize_domains
+
+if [ -n "$DOMAIN" ]; then
+    log_info "Using redirect domain: ${REDIRECT_DOMAIN}"
+    log_info "Using app domain: ${APP_DOMAIN}"
 fi
 
 # Determine if we need to configure/reconfigure SSL
@@ -311,6 +344,7 @@ POSTGRES_DB=trady
 
 # Security
 SESSION_SECRET=$SESSION_SECRET
+SESSION_COOKIE_DOMAIN=$SESSION_COOKIE_DOMAIN
 
 # API Keys (optional - can be configured via Settings page)
 FINNHUB_API_KEY=${FINNHUB_KEY}
@@ -344,6 +378,14 @@ else
         sed -i "s|^USE_HTTPS=.*|USE_HTTPS=$USE_HTTPS|" $ENV_FILE
     else
         echo "USE_HTTPS=$USE_HTTPS" >> $ENV_FILE
+    fi
+
+    if [ -n "$SESSION_COOKIE_DOMAIN" ]; then
+        if grep -q "^SESSION_COOKIE_DOMAIN=" $ENV_FILE; then
+            sed -i "s|^SESSION_COOKIE_DOMAIN=.*|SESSION_COOKIE_DOMAIN=$SESSION_COOKIE_DOMAIN|" $ENV_FILE
+        else
+            echo "SESSION_COOKIE_DOMAIN=$SESSION_COOKIE_DOMAIN" >> $ENV_FILE
+        fi
     fi
 fi
 
@@ -520,25 +562,50 @@ configure_nginx() {
         return 0
     fi
 
-    log_info "Configuring Nginx for $DOMAIN..."
+    if [ -z "$APP_DOMAIN" ] || [ -z "$REDIRECT_DOMAIN" ]; then
+        log_warn "No domain configured; skipping Nginx setup"
+        return 0
+    fi
+
+    log_info "Configuring Nginx..."
+    log_info "  Redirect domain: $REDIRECT_DOMAIN"
+    log_info "  App domain: $APP_DOMAIN"
+    log_info "  Certificate domain: $CERT_DOMAIN"
 
     NGINX_CONF="/etc/nginx/sites-available/$APP_NAME"
-    SSL_CERT_FILE="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
-    SSL_KEY_FILE="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+    SSL_CERT_FILE="/etc/letsencrypt/live/$CERT_DOMAIN/fullchain.pem"
+    SSL_KEY_FILE="/etc/letsencrypt/live/$CERT_DOMAIN/privkey.pem"
+    REDIRECT_TARGET="https://$APP_DOMAIN"
 
-    if [ "$USE_HTTPS" = "true" ] && [ -f "$SSL_CERT_FILE" ] && [ -f "$SSL_KEY_FILE" ]; then
-        log_info "Using HTTPS Nginx template for $DOMAIN"
-        sed "s|\${DOMAIN}|$DOMAIN|g" "$SCRIPT_DIR/nginx-ssl.conf.template" > /tmp/trady-nginx.conf
-    else
-        if [ "$USE_HTTPS" = "true" ]; then
-            log_warn "HTTPS requested but certificate files are missing; using temporary HTTP config until certbot runs."
-        fi
+    CERT_EXISTS=false
+    if [ -f "$SSL_CERT_FILE" ] && [ -f "$SSL_KEY_FILE" ]; then
+        CERT_EXISTS=true
+    fi
 
+    write_http_config() {
         cat > /tmp/trady-nginx.conf << EOF
 server {
     listen 80;
     listen [::]:80;
-    server_name $DOMAIN;
+    server_name $REDIRECT_DOMAIN;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 http://$APP_DOMAIN\$request_uri;
+    }
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $APP_DOMAIN;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:8111;
@@ -565,20 +632,58 @@ server {
     }
 }
 EOF
+    }
+
+    if [ "$USE_HTTPS" = "true" ] && [ "$CERT_EXISTS" = true ]; then
+        log_info "Using HTTPS Nginx template for $APP_DOMAIN"
+        sed \
+            -e "s|\${APP_DOMAIN}|$APP_DOMAIN|g" \
+            -e "s|\${REDIRECT_DOMAIN}|$REDIRECT_DOMAIN|g" \
+            -e "s|\${CERT_DOMAIN}|$CERT_DOMAIN|g" \
+            -e "s|\${REDIRECT_TARGET}|$REDIRECT_TARGET|g" \
+            "$SCRIPT_DIR/nginx-ssl.conf.template" > /tmp/trady-nginx.conf
+    else
+        if [ "$USE_HTTPS" = "true" ]; then
+            log_warn "HTTPS requested but certificate files are missing; using temporary HTTP config until certbot runs."
+        fi
+        write_http_config
     fi
 
     if [ -w /etc/nginx/sites-available ] || [ "$(id -u)" = "0" ]; then
         cp /tmp/trady-nginx.conf "$NGINX_CONF"
         ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
         rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-        nginx -t && systemctl reload nginx
-        log_info "Nginx configured successfully"
+        if nginx -t; then
+            systemctl reload nginx
+            log_info "Nginx configured successfully"
+        else
+            log_error "Nginx configuration test failed"
+            exit 1
+        fi
 
-        if [ "$NEEDS_SSL_CONFIG" = true ] && [ -n "$EMAIL" ] && command -v certbot &> /dev/null; then
+        if [ "$USE_HTTPS" = "true" ] && { [ "$NEEDS_SSL_CONFIG" = true ] || [ "$CERT_EXISTS" = false ]; } && [ -n "$EMAIL" ] && command -v certbot &> /dev/null; then
             log_info "Obtaining SSL certificate..."
-            certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --redirect || {
+            CERTBOT_ARGS=(certbot certonly --webroot -w /var/www/certbot -d "$REDIRECT_DOMAIN" -d "$APP_DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --cert-name "$CERT_DOMAIN")
+            if [ "$CERT_EXISTS" = true ]; then
+                CERTBOT_ARGS+=(--expand)
+            fi
+
+            if "${CERTBOT_ARGS[@]}"; then
+                log_info "SSL certificate ready"
+                if [ -f "$SSL_CERT_FILE" ] && [ -f "$SSL_KEY_FILE" ]; then
+                    sed \
+                        -e "s|\${APP_DOMAIN}|$APP_DOMAIN|g" \
+                        -e "s|\${REDIRECT_DOMAIN}|$REDIRECT_DOMAIN|g" \
+                        -e "s|\${CERT_DOMAIN}|$CERT_DOMAIN|g" \
+                        -e "s|\${REDIRECT_TARGET}|$REDIRECT_TARGET|g" \
+                        "$SCRIPT_DIR/nginx-ssl.conf.template" > /tmp/trady-nginx.conf
+                    cp /tmp/trady-nginx.conf "$NGINX_CONF"
+                    nginx -t && systemctl reload nginx
+                    log_info "Nginx reloaded with HTTPS configuration"
+                fi
+            else
                 log_warn "SSL certificate setup failed. You may need to run certbot manually."
-            }
+            fi
         fi
     else
         log_warn "Cannot write to /etc/nginx. Run with sudo or copy config manually:"
@@ -603,11 +708,13 @@ docker ps --filter "name=trady" --format "table {{.Names}}\t{{.Status}}\t{{.Port
 echo ""
 
 log_info "Application running on port: $APP_PORT"
-if [ -n "$DOMAIN" ]; then
+if [ -n "$APP_DOMAIN" ]; then
     if [ "$USE_HTTPS" = "true" ]; then
-        log_info "Access your app at: https://$DOMAIN"
+        log_info "Access your app at: https://$APP_DOMAIN"
+        log_info "Apex redirect: https://$REDIRECT_DOMAIN -> https://$APP_DOMAIN"
     else
-        log_info "Access your app at: http://$DOMAIN"
+        log_info "Access your app at: http://$APP_DOMAIN"
+        log_info "Apex redirect: http://$REDIRECT_DOMAIN -> http://$APP_DOMAIN"
     fi
 else
     log_info "Access your app at: http://YOUR_SERVER_IP:$APP_PORT"

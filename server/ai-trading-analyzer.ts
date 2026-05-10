@@ -1,75 +1,7 @@
-import OpenAI from "openai";
 import type { MarketData } from "@shared/schema";
 import { generateUnifiedSignal, type UnifiedSignalResult } from "./unified-signal-generator";
+import { chatCompletion, isOllamaAvailable } from "./local-ai-client";
 import { storage } from "./storage";
-import { decrypt } from "./encryption";
-
-// Cache for OpenAI client to avoid recreating on every call
-let cachedOpenAIClient: OpenAI | null = null;
-let cachedApiKey: string | null = null;
-
-interface OpenAIKeyResult {
-  key: string;
-  source: "database" | "env";
-}
-
-async function getOpenAIKeyWithSource(): Promise<OpenAIKeyResult | null> {
-  // Priority 1: Direct OPENAI_API_KEY environment variable (best for production deployment)
-  const envKey = process.env.OPENAI_API_KEY;
-  if (envKey && envKey !== "not-configured") {
-    return { key: envKey, source: "env" };
-  }
-  
-  // Priority 2: Check database for encrypted key (configured via Settings page)
-  try {
-    const encryptedKey = await storage.getSetting("OPENAI_API_KEY_ENCRYPTED");
-    if (encryptedKey) {
-      const decryptedKey = decrypt(encryptedKey);
-      if (decryptedKey) {
-        return { key: decryptedKey, source: "database" };
-      }
-    }
-  } catch (e) {
-    console.error("[AI Analyzer] Failed to retrieve OpenAI key from database:", e);
-  }
-  
-  return null;
-}
-
-async function getOpenAIClient(): Promise<OpenAI | null> {
-  const keyResult = await getOpenAIKeyWithSource();
-  
-  if (!keyResult) {
-    cachedOpenAIClient = null;
-    cachedApiKey = null;
-    console.log("[AI Analyzer] No OpenAI key configured");
-    return null;
-  }
-  
-  // Return cached client if key hasn't changed
-  if (cachedOpenAIClient && cachedApiKey === keyResult.key) {
-    return cachedOpenAIClient;
-  }
-  
-  // Create new client with updated key (always use standard OpenAI API)
-  cachedApiKey = keyResult.key;
-  
-  cachedOpenAIClient = new OpenAI({
-    apiKey: keyResult.key,
-  });
-  
-  const sourceLabel = keyResult.source === "database" ? "Settings page" : "environment variable";
-  console.log(`[AI Analyzer] OpenAI client initialized (${sourceLabel}, direct OpenAI API)`);
-  
-  return cachedOpenAIClient;
-}
-
-// Log OpenAI key source on startup (actual key retrieval happens on first use)
-if (process.env.OPENAI_API_KEY) {
-  console.log("[AI Analyzer] OPENAI_API_KEY environment variable configured");
-} else {
-  console.log("[AI Analyzer] Will use OpenAI key from Settings page - configure via Settings if needed");
-}
 
 export interface AITradingAnalysis {
   shouldTrade: boolean;
@@ -210,60 +142,59 @@ export async function analyzeWithAI(
   }
 
   const context = await buildMarketContext(symbol, candles, technicalSignal);
-  
+
   try {
-    // Get OpenAI client dynamically (checks env first, then database)
-    const openai = await getOpenAIClient();
-    
-    if (!openai) {
-      console.log("[AI Analyzer] No OpenAI API key configured");
-      
-      // No API key available - check if AI filter is required
+    // Check if Ollama is available
+    const ollamaAvailable = await isOllamaAvailable();
+
+    if (!ollamaAvailable) {
+      console.log("[AI Analyzer] Ollama service not available");
+
+      // Ollama unavailable - check if AI filter is required
       if (minConfidence > 0) {
         console.log("[AI Analyzer] AI unavailable and minConfidence is set - blocking trade for safety");
         return {
           shouldTrade: false,
           direction: "HOLD",
           confidence: 0,
-          reasoning: "AI analysis unavailable - no API key configured. Set key in Settings or environment.",
+          reasoning: "AI analysis unavailable - Ollama service not running. Start Ollama to enable AI-enhanced trading.",
           riskLevel: "HIGH",
-          suggestedAction: "Configure OpenAI API key in Settings to enable AI-enhanced trading",
+          suggestedAction: "Start Ollama service to enable AI-enhanced trading",
           technicalSignal,
           aiEnhanced: false,
         };
       }
-      
-      // STRICT FALLBACK: When no OpenAI key configured, only allow very high-confidence trades
+
+      // STRICT FALLBACK: When Ollama unavailable, only allow very high-confidence trades
       const fallbackConfidence = technicalSignal.confidence;
       const veryHighConfidence = fallbackConfidence >= 80;
       const shouldTrade = veryHighConfidence && technicalSignal.decision !== "HOLD";
-      
-      console.log(`[AI Analyzer] No OpenAI key fallback - tech confidence: ${fallbackConfidence}, allowing trade: ${shouldTrade}`);
-      
+
+      console.log(`[AI Analyzer] Ollama unavailable fallback - tech confidence: ${fallbackConfidence}, allowing trade: ${shouldTrade}`);
+
       return {
         shouldTrade,
         direction: shouldTrade ? technicalSignal.decision : "HOLD",
         confidence: shouldTrade ? fallbackConfidence : 0,
-        reasoning: shouldTrade 
-          ? `Using technical analysis only (very high confidence ${fallbackConfidence}%, no AI key)`
-          : "No OpenAI API key - defaulting to HOLD for safety (tech confidence too low to trade without AI)",
+        reasoning: shouldTrade
+          ? `Using technical analysis only (very high confidence ${fallbackConfidence}%, Ollama unavailable)`
+          : "Ollama service unavailable - defaulting to HOLD for safety (tech confidence too low to trade without AI)",
         riskLevel: shouldTrade ? "MEDIUM" : "HIGH",
-        suggestedAction: shouldTrade 
+        suggestedAction: shouldTrade
           ? `Execute ${technicalSignal.decision} based on strong technical signals`
-          : "Configure OpenAI API key in Settings to enable AI-enhanced trading",
+          : "Start Ollama service to enable AI-enhanced trading",
         technicalSignal,
         aiEnhanced: false,
       };
     }
-    
+
     const prompt = buildAnalysisPrompt(context);
-    
-    const response = await openai.chat.completions.create({
-      model: "gpt-5-nano",  // Cheapest option: $0.05/1M input, $0.40/1M output
+
+    const response = await chatCompletion({
       messages: [
         {
           role: "system",
-          content: `You are an expert financial market analyst specializing in short-term trading decisions. 
+          content: `You are an expert financial market analyst specializing in short-term trading decisions.
 Analyze market data and provide precise, actionable trading recommendations.
 Your goal is to maximize win rate by only recommending trades with high probability of success.
 Be conservative - it's better to miss a trade than lose money.
@@ -274,12 +205,11 @@ Always respond in valid JSON format.`
           content: prompt
         }
       ],
-      response_format: { type: "json_object" },
-      max_completion_tokens: 1024,
+      jsonMode: true,
+      maxTokens: 1024,
     });
 
-    const content = response.choices[0]?.message?.content || "{}";
-    const aiAnalysis = JSON.parse(content);
+    const aiAnalysis = JSON.parse(response.content);
     
     const confidence = Math.min(Math.max(aiAnalysis.confidence || 0, 0), 100);
     const direction = validateDirection(aiAnalysis.direction);
@@ -351,8 +281,8 @@ Always respond in valid JSON format.`
     };
     
   } catch (error) {
-    console.error("[AI Analyzer] Error calling OpenAI:", error);
-    
+    console.error("[AI Analyzer] Error calling Ollama local AI:", error);
+
     // CRITICAL: When AI is unavailable and user has configured AI filter,
     // we must NOT trade to respect their minimum confidence requirement.
     // Only allow fallback to technical analysis if minConfidence is 0 (disabled).
@@ -364,31 +294,31 @@ Always respond in valid JSON format.`
         confidence: 0,
         reasoning: "AI analysis unavailable - trade blocked for safety (minConfidence requirement active)",
         riskLevel: "HIGH",
-        suggestedAction: "Wait for AI service to become available",
+        suggestedAction: "Check that Ollama service is running",
         technicalSignal,
         aiEnhanced: false,
       };
     }
-    
+
     // STRICT FALLBACK: When AI is unavailable, default to NO TRADE for safety.
     // Only allow very high-confidence technical signals (>=80) to proceed without AI validation.
     const fallbackConfidence = technicalSignal.confidence;
     const veryHighConfidence = fallbackConfidence >= 80;
     const shouldTrade = veryHighConfidence && technicalSignal.decision !== "HOLD";
-    
+
     console.log(`[AI Analyzer] AI unavailable fallback - tech confidence: ${fallbackConfidence}, allowing trade: ${shouldTrade}`);
-    
+
     return {
       shouldTrade,
       direction: shouldTrade ? technicalSignal.decision : "HOLD",
       confidence: shouldTrade ? fallbackConfidence : 0,
-      reasoning: shouldTrade 
+      reasoning: shouldTrade
         ? `Using technical analysis only (very high confidence ${fallbackConfidence}%)`
         : "AI unavailable - defaulting to HOLD for safety (tech confidence too low to trade without AI validation)",
       riskLevel: shouldTrade ? "MEDIUM" : "HIGH",
-      suggestedAction: shouldTrade 
+      suggestedAction: shouldTrade
         ? `Execute ${technicalSignal.decision} based on strong technical signals`
-        : "Wait for AI service to become available",
+        : "Check that Ollama service is running",
       technicalSignal,
       aiEnhanced: false,
     };

@@ -106,10 +106,12 @@ app.use('/api', (req, res, next) => {
 
 // In production, check if HTTPS is being used
 const useSecureCookies = isProduction && process.env.USE_HTTPS === "true";
+const sessionCookieDomain = process.env.SESSION_COOKIE_DOMAIN || undefined;
 
 console.log(`[Session] Environment: ${isProduction ? 'production' : 'development'}`);
 console.log(`[Session] USE_HTTPS env: ${process.env.USE_HTTPS}`);
 console.log(`[Session] Secure cookies: ${useSecureCookies}`);
+console.log(`[Session] Cookie domain: ${sessionCookieDomain || "host-only"}`);
 console.log(`[Session] Using PostgreSQL session store`);
 
 app.use(
@@ -128,6 +130,7 @@ app.use(
       secure: useSecureCookies,
       httpOnly: true,
       sameSite: "lax",
+      domain: sessionCookieDomain,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days for persistent login
       path: "/",
     },

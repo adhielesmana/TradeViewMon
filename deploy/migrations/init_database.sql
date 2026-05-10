@@ -616,6 +616,40 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='auto_trade_settings' AND column_name='last_precision_trade_at') THEN
         ALTER TABLE auto_trade_settings ADD COLUMN last_precision_trade_at TIMESTAMP;
     END IF;
+
+    -- demo_accounts totals
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='demo_accounts' AND column_name='total_deposited') THEN
+        ALTER TABLE demo_accounts ADD COLUMN total_deposited REAL NOT NULL DEFAULT 0;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='demo_accounts' AND column_name='total_withdrawn') THEN
+        ALTER TABLE demo_accounts ADD COLUMN total_withdrawn REAL NOT NULL DEFAULT 0;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='demo_accounts' AND column_name='total_profit') THEN
+        ALTER TABLE demo_accounts ADD COLUMN total_profit REAL NOT NULL DEFAULT 0;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='demo_accounts' AND column_name='total_loss') THEN
+        ALTER TABLE demo_accounts ADD COLUMN total_loss REAL NOT NULL DEFAULT 0;
+    END IF;
+
+    -- demo_positions compatibility columns
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='demo_positions' AND column_name='account_id') THEN
+        ALTER TABLE demo_positions ADD COLUMN account_id INTEGER;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='demo_positions' AND column_name='current_price') THEN
+        ALTER TABLE demo_positions ADD COLUMN current_price REAL;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='demo_positions' AND column_name='profit_loss_percent') THEN
+        ALTER TABLE demo_positions ADD COLUMN profit_loss_percent REAL DEFAULT 0;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='demo_positions' AND column_name='opened_at') THEN
+        ALTER TABLE demo_positions ADD COLUMN opened_at TIMESTAMP NOT NULL DEFAULT NOW();
+    END IF;
     
     -- is_auto_trade column in demo_positions
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='demo_positions' AND column_name='is_auto_trade') THEN

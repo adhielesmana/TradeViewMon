@@ -34,6 +34,8 @@ chmod +x deploy/*.sh
 ./deploy/deploy.sh --domain tradeview.example.com --email admin@example.com
 ```
 
+On this production setup, the apex domain is a redirect-only entry point and the app is served from `trady.maxline.id`. For example, `maxline.id` redirects to `https://trady.maxline.id`.
+
 ### Fixed Host Port
 The deployment always uses host port `8111`, so there is no custom-port flag anymore.
 
@@ -42,10 +44,11 @@ The deployment always uses host port `8111`, so there is no custom-port flag any
 1. **Trady Shutdown**: Stops ONLY existing Trady containers (other apps are not touched)
 2. **Port Detection**: Checks if fixed host port `8111` is in use by Docker or other services
 3. **Fixed Port**: If the port is busy, deployment stops instead of shifting to another port
-4. **Nginx Check**: Detects if Nginx is installed
-5. **Docker Check**: Detects if Docker is installed
-6. **SSL Setup**: Uses Certbot to obtain and configure Let's Encrypt SSL certificates
-7. **App Deployment**: Builds and runs the application in a Docker container
+4. **Apex Redirect**: Redirects the apex domain to `trady.maxline.id`
+5. **Nginx Check**: Detects if Nginx is installed
+6. **Docker Check**: Detects if Docker is installed
+7. **SSL Setup**: Uses Certbot to obtain and configure Let's Encrypt SSL certificates
+8. **App Deployment**: Builds and runs the application in a Docker container
 
 ### Safe Shutdown Behavior
 
@@ -70,6 +73,7 @@ FINNHUB_API_KEY=your-finnhub-api-key
 ```
 
 The container still listens on `PORT=5000`; the published host port and Nginx upstream are fixed at `8111`.
+The session cookie domain is set automatically so a login on `maxline.id` carries over to `trady.maxline.id`.
 
 ### API Keys Required
 
@@ -149,6 +153,7 @@ certbot renew
 ## Nginx Configuration
 
 The deployment script creates an Nginx config at `/etc/nginx/sites-available/trady`.
+The apex domain redirects to `trady.maxline.id`, and the app itself is proxied from `trady.maxline.id` only.
 
 To manually update:
 ```bash
