@@ -132,7 +132,8 @@ function buildKeywordsText(signature: string): string {
 
 export function isManagedImageUrl(imageUrl?: string | null): boolean {
   if (!imageUrl) return false;
-  return imageUrl.startsWith("/objects/") || imageUrl.startsWith("/uploads/");
+  // Check for server-managed image paths: /objects/, /uploads/, or static assets like /trady-logo.jpg
+  return imageUrl.startsWith("/objects/") || imageUrl.startsWith("/uploads/") || imageUrl.startsWith("/") && !imageUrl.includes("://");
 }
 
 function mimeTypeToExtension(mimeType: string): string {
