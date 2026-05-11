@@ -44,7 +44,7 @@ services:
       SESSION_COOKIE_DOMAIN: "${SESSION_COOKIE_DOMAIN:-}"
       FINNHUB_API_KEY: "${FINNHUB_API_KEY:-}"
       OLLAMA_URL: "${OLLAMA_URL:-http://ollama:11434}"
-      OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen2.5:7b}"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen2.5:0.5b}"
       ML_SIDECAR_URL: "http://ml-sidecar:8001"
       USE_HTTPS: "${USE_HTTPS:-false}"
       TZ: "${TZ:-Asia/Jakarta}"
@@ -52,6 +52,8 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
       - uploads_data:/app/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       ml-sidecar:
         condition: service_healthy

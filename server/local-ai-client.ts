@@ -51,8 +51,8 @@ async function getOllamaConfig(): Promise<OllamaConfig> {
 
   // Priority 1: Environment variables (best for production)
   const envUrl = process.env.OLLAMA_URL || "http://localhost:11434";
-  const envModel = process.env.OLLAMA_MODEL || "qwen2.5:7b";
-  const envTimeout = parseInt(process.env.OLLAMA_TIMEOUT_MS || "30000", 10);
+  const envModel = process.env.OLLAMA_MODEL || "qwen2.5:0.5b";
+  const envTimeout = parseInt(process.env.OLLAMA_TIMEOUT_MS || "180000", 10);
 
   // Priority 2: Check database for custom settings
   try {
@@ -147,7 +147,7 @@ export async function listModels(): Promise<string[]> {
 export async function chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult> {
   const config = await getOllamaConfig();
   const model = options.model || config.model;
-  const maxRetries = 2;
+  const maxRetries = 0;
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -159,7 +159,13 @@ export async function chatCompletion(options: ChatCompletionOptions): Promise<Ch
         model,
         messages: options.messages,
         stream: false,
-        temperature: options.temperature ?? 0.7,
+        keep_alive: -1,
+        options: {
+          temperature: options.temperature ?? 0.7,
+          num_ctx: 1024,
+          num_predict: options.maxTokens || 400,
+          num_thread: parseInt(process.env.OLLAMA_NUM_THREADS || "0", 10) || undefined,
+        },
       };
 
       // Add JSON mode if requested (Ollama supports this)
@@ -211,7 +217,36 @@ export async function chatCompletion(options: ChatCompletionOptions): Promise<Ch
 }
 
 /**
- * Initialize Ollama on startup (log configuration)
+ * Pre-warm the model so it stays loaded in RAM (avoids cold-start penalty on first real request)
+ */
+async function warmupModel(): Promise<void> {
+  try {
+    const config = await getOllamaConfig();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    await fetch(`${config.url}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [{ role: "user", content: "hi" }],
+        stream: false,
+        keep_alive: "30m",
+        options: { num_predict: 1, num_ctx: 512 },
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    console.log(`[Ollama Client] Model ${config.model} pre-warmed and loaded in RAM`);
+  } catch (e) {
+    // Non-fatal — model will load on first real request
+    console.warn("[Ollama Client] Warmup skipped:", (e as Error).message);
+  }
+}
+
+/**
+ * Initialize Ollama on startup (log configuration and pre-warm model)
  */
 async function initializeOllama() {
   try {
@@ -220,6 +255,8 @@ async function initializeOllama() {
 
     if (available) {
       console.log(`[Ollama Client] Initialized and connected - URL: ${config.url}, Model: ${config.model}`);
+      // Pre-warm model in background (don't block startup)
+      warmupModel().catch(() => {});
     } else {
       console.warn(
         `[Ollama Client] Configured but not available - URL: ${config.url}. Will gracefully fall back to technical analysis.`

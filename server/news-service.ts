@@ -210,9 +210,9 @@ export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis[
     return getDefaultPrediction();
   }
 
-  const newsContext = news
-    .map((item, i) => `${i + 1}. [${item.pubDate}] ${item.title}\n   ${item.content.slice(0, 200)}...`)
-    .join("\n\n");
+  const newsContext = news.slice(0, 8)
+    .map((item, i) => `${i + 1}. ${item.title}`)
+    .join("\n");
 
   // Get supported symbols from database instead of hardcoding
   const monitoredSymbols = await storage.getMonitoredSymbols();
@@ -231,37 +231,20 @@ export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis[
       messages: [
         {
           role: "system",
-          content: `You are a professional financial analyst specializing in market analysis.
-Analyze the provided news headlines and content to generate market predictions.
-Focus on how these news items might affect the following trading instruments: ${supportedSymbols.join(", ")}.
+          content: `Analyze financial headlines. Return JSON only.
 
-Respond in JSON format with this exact structure:
-{
-  "headline": "A natural news-style headline (like a real newspaper) highlighting the key market story from the articles - NOT 'Market Outlook' or 'AI Analysis' style",
-  "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
-  "confidence": 0-100,
-  "summary": "Brief 2-3 sentence market outlook based on the news",
-  "keyFactors": ["Factor 1", "Factor 2", "Factor 3"],
-  "affectedSymbols": [
-    {"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Brief reason"}
-  ],
-  "tradingRecommendation": "Brief actionable recommendation",
-  "riskLevel": "LOW" | "MEDIUM" | "HIGH"
-}
+Example output:
+{"headline":"Oil Slips as OPEC Signals Supply Boost","overallSentiment":"BEARISH","confidence":60,"summary":"Crude oil prices dropped sharply after OPEC members signaled willingness to increase production quotas, putting pressure on energy-linked assets across the board. The move comes amid growing concerns about global demand as manufacturing data from Europe disappointed expectations. Meanwhile, precious metals held steady as investors weighed the implications of a weaker dollar against rising Treasury yields. Market participants are closely watching tonight's API inventory report, which could set the tone for energy trading through the rest of the week.","keyFactors":["OPEC production increase","Weak EU manufacturing data","API inventory report tonight"],"affectedSymbols":[{"symbol":"XAUUSD","impact":"NEUTRAL","reason":"Dollar weakness offsets yield pressure"}],"tradingRecommendation":"Stay cautious on oil longs. Gold range-bound, wait for breakout above 2400.","riskLevel":"MEDIUM"}
 
-IMPORTANT: The "headline" must read like a real news headline from Reuters, Bloomberg, or WSJ. Examples:
-- "Gold Surges as Fed Signals Rate Pause"
-- "Asian Markets Rally on Strong China Data"
-- "Oil Prices Slip Amid OPEC Supply Concerns"
-Do NOT use generic titles like "Market Outlook" or "Trading Analysis".`,
+Write summary as 4-5 engaging sentences like a Bloomberg market brief. Focus on: ${supportedSymbols.slice(0, 4).join(", ")}`,
         },
         {
           role: "user",
-          content: `Analyze these recent financial news items and provide market predictions:\n\n${newsContext}`,
+          content: `Headlines:\n${newsContext}`,
         },
       ],
-      temperature: 0.3,
-      maxTokens: 1000,
+      temperature: 0.4,
+      maxTokens: 500,
       jsonMode: true,
     });
 
@@ -330,16 +313,16 @@ Do NOT use generic titles like "Market Outlook" or "Trading Analysis".`,
 }
 
 function getDefaultPrediction(): NewsAnalysis["marketPrediction"] {
-  return {
-    headline: "Markets Await Key Economic Developments",
-    overallSentiment: "NEUTRAL",
-    confidence: 50,
-    summary: "Unable to analyze news at this time",
-    keyFactors: [],
-    affectedSymbols: [],
-    tradingRecommendation: "Monitor market conditions",
-    riskLevel: "MEDIUM",
-  };
+  // Return null instead of fake content — callers should
+  // fall back to the latest real snapshot from the database
+  return null;
+}
+
+function isRealPrediction(prediction: NewsAnalysis["marketPrediction"]): boolean {
+  if (!prediction) return false;
+  if (!prediction.headline || prediction.headline === "Markets Await Key Economic Developments") return false;
+  if (prediction.summary === "Unable to analyze news at this time") return false;
+  return true;
 }
 
 // Generate article-style text for history display
@@ -399,17 +382,35 @@ function snapshotToMarketPrediction(snapshot: NewsAnalysisSnapshot): NewsAnalysi
   };
 }
 
-// Save AI prediction to cache
+// Save AI prediction to cache — only real AI results, never fallback content
 async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"], newsCount: number): Promise<void> {
-  if (!prediction) return;
-  
+  if (!prediction || !isRealPrediction(prediction)) {
+    console.log("[NewsService] Skipping cache save — not a real AI prediction");
+    return;
+  }
+
   try {
+    // Dedup: skip if the latest snapshot already has the same headline
+    const latestSnapshot = await storage.getLatestNewsAnalysisSnapshot();
+    if (latestSnapshot && prediction.headline && latestSnapshot.headline === prediction.headline) {
+      console.log("[NewsService] Skipping duplicate snapshot (same headline as latest)");
+      return;
+    }
+
     const generatedArticle = generateArticleText(prediction, newsCount, "regular");
     const imageResolution = await resolveRelevantImage({
       headline: prediction.headline || prediction.summary.slice(0, 50),
       summary: prediction.summary,
     });
-    
+
+    // Never save trady-logo as snapshot image — use a topic-relevant fallback instead
+    let snapshotImageUrl = imageResolution.imageUrl;
+    if (snapshotImageUrl === "/trady-logo.jpg" || snapshotImageUrl.startsWith("/trady-")) {
+      const headlineForImage = prediction.headline || prediction.summary;
+      snapshotImageUrl = getFallbackImage(headlineForImage, Math.abs(hashCode(headlineForImage)));
+      console.log(`[NewsService] Replaced trady-logo with topic fallback: ${snapshotImageUrl.slice(0, 80)}...`);
+    }
+
     const snapshot: InsertNewsAnalysisSnapshot = {
       overallSentiment: prediction.overallSentiment,
       confidence: prediction.confidence,
@@ -423,7 +424,7 @@ async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"],
       analyzedAt: new Date(),
       analysisType: "regular",
       generatedArticle: generatedArticle,
-      imageUrl: imageResolution.imageUrl,
+      imageUrl: snapshotImageUrl,
     };
     
     await storage.saveNewsAnalysisSnapshot(snapshot);
@@ -631,90 +632,36 @@ export async function runHourlyAiAnalysis(): Promise<HourlyAnalysisResult> {
       supportedSymbols.push("XAUUSD", "XAGUSD", "BTCUSD");
     }
 
-    // Build full article context (complete content, not just summaries)
-    const articleContext = recentArticles.length > 0
-      ? recentArticles.map((article, i) => {
-          const publishedTime = article.publishedAt
-            ? new Date(article.publishedAt).toISOString()
-            : new Date(article.fetchedAt).toISOString();
-          return `ARTICLE ${i + 1}:
-Title: ${article.title}
-Source: ${article.source || "Unknown"}
-Published: ${publishedTime}
-Full Content:
-${article.content || "No content available"}
----`;
-        }).join("\n\n")
+    // Build ultra-compact article context (headlines only, max 5)
+    const limitedArticles = recentArticles.slice(0, 5);
+    const articleContext = limitedArticles.length > 0
+      ? limitedArticles.map((article, i) => `${i + 1}. ${article.title}`).join("\n")
       : "No new articles in the last hour.";
 
-    // Build historical prediction context
-    const historicalContext = historicalPredictions.length > 0
-      ? historicalPredictions.slice(0, 10).map((pred, i) => {
-          const analyzedTime = new Date(pred.analyzedAt).toISOString();
-          return `PREDICTION ${i + 1} (${analyzedTime}):
-- Sentiment: ${pred.overallSentiment}
-- Confidence: ${pred.confidence}%
-- Summary: ${pred.summary}
-- Risk Level: ${pred.riskLevel}
-- Recommendation: ${pred.tradingRecommendation}`;
-        }).join("\n\n")
-      : "No historical predictions available.";
+    // Skip historical context to save tokens
+    const lastSentiment = historicalPredictions.length > 0
+      ? historicalPredictions[0].overallSentiment
+      : "NEUTRAL";
 
-    // Generate comprehensive AI analysis
+    // Generate AI analysis (optimized for low-resource Ollama inference)
     const response = await chatCompletion({
       messages: [
         {
           role: "system",
-          content: `You are an expert financial analyst performing a comprehensive HOURLY market analysis.
+          content: `Analyze financial headlines. Return JSON only.
 
-Your task is to analyze recent news articles in depth and combine this with historical AI predictions to generate an accurate market outlook.
+Example output:
+{"headline":"Gold Rallies as Fed Holds Rates Steady","overallSentiment":"BULLISH","confidence":65,"summary":"Markets are showing renewed optimism as the Federal Reserve held interest rates steady, signaling confidence in the economic recovery. Gold prices surged past key resistance levels, drawing attention from institutional investors seeking safe-haven assets. Energy stocks pulled back slightly on profit-taking after last week's rally, but the broader trend remains constructive. Traders should watch upcoming jobs data closely, as strong employment numbers could shift the Fed's tone at the next meeting and impact precious metals positioning.","keyFactors":["Fed holds rates steady","Gold breaks resistance","Jobs data upcoming"],"affectedSymbols":[{"symbol":"XAUUSD","impact":"POSITIVE","reason":"Safe-haven demand rising on rate pause"}],"tradingRecommendation":"Consider long positions in gold on pullbacks. Watch support at 2380 for entries.","riskLevel":"MEDIUM"}
 
-ANALYSIS APPROACH:
-1. READ AND ANALYZE each article thoroughly - extract key financial implications, market sentiment drivers, and trading signals
-2. CORRELATE with historical predictions - identify trends, patterns, and whether recent predictions were accurate
-3. SYNTHESIZE a comprehensive market prediction
-
-Focus on these trading instruments: ${supportedSymbols.join(", ")}
-
-Respond in JSON format with this exact structure:
-{
-  "headline": "A natural news-style headline highlighting the key market story - like Reuters, Bloomberg, or WSJ",
-  "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
-  "confidence": 0-100,
-  "summary": "Detailed 3-5 sentence market outlook based on FULL article analysis and historical context",
-  "keyFactors": ["Factor 1 with specific detail from articles", "Factor 2", "Factor 3", "Factor 4"],
-  "affectedSymbols": [
-    {"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Specific reason from article analysis"}
-  ],
-  "tradingRecommendation": "Detailed actionable recommendation with risk context",
-  "riskLevel": "LOW" | "MEDIUM" | "HIGH",
-  "historicalTrendNote": "Brief note on how current analysis aligns with or differs from recent 7-day predictions"
-}
-
-IMPORTANT: The "headline" must read like a real news headline from Reuters, Bloomberg, or WSJ. Examples:
-- "Gold Surges as Fed Signals Rate Pause"
-- "Asian Markets Rally on Strong China Data"
-- "Oil Prices Slip Amid OPEC Supply Concerns"
-Do NOT use generic titles like "Market Outlook" or "Trading Analysis".
-
-BE CONSERVATIVE with confidence scores - markets are uncertain.
-If articles lack clear trading signals, default to NEUTRAL with appropriate explanation.`
+Write summary as 4-5 engaging sentences like a Bloomberg market brief. Focus on: ${supportedSymbols.slice(0, 4).join(", ")}`
         },
         {
           role: "user",
-          content: `Perform comprehensive hourly analysis based on:
-
-=== RECENT NEWS ARTICLES (Last 1 Hour) ===
-${articleContext}
-
-=== HISTORICAL AI PREDICTIONS (Last 14 Days) ===
-${historicalContext}
-
-Generate your market prediction now.`
+          content: `Headlines:\n${articleContext}\n\nPrevious sentiment: ${lastSentiment}`
         }
       ],
-      temperature: 0.3,
-      maxTokens: 1500,
+      temperature: 0.4,
+      maxTokens: 500,
       jsonMode: true,
     });
     
@@ -748,9 +695,21 @@ Generate your market prediction now.`
       riskLevel: parsed.riskLevel || "MEDIUM",
     };
     
+    // Only save real AI predictions — never persist fallback/default content
+    if (!isRealPrediction(prediction)) {
+      console.log("[NewsService] Hourly analysis produced non-real prediction, skipping save");
+      return {
+        success: false,
+        articlesAnalyzed: recentArticles.length,
+        historicalPredictionsUsed: historicalPredictions.length,
+        prediction: null,
+        error: "AI produced unusable prediction"
+      };
+    }
+
     // Generate article text for history display
     const generatedArticle = generateArticleText(prediction, recentArticles.length, "hourly");
-    
+
     // Pick the most relevant stored image from the source articles if available.
     const rssImageUrl = recentArticles.find(a => a.imageUrl)?.imageUrl;
     const imageResolution = await resolveRelevantImage({
@@ -758,7 +717,15 @@ Generate your market prediction now.`
       summary: prediction.summary,
       sourceImageUrl: rssImageUrl,
     });
-    
+
+    // Never save trady-logo as snapshot image — use a topic-relevant fallback instead
+    let hourlyImageUrl = imageResolution.imageUrl;
+    if (hourlyImageUrl === "/trady-logo.jpg" || hourlyImageUrl.startsWith("/trady-")) {
+      const headlineForImage = prediction.headline || prediction.summary;
+      hourlyImageUrl = getFallbackImage(headlineForImage, Math.abs(hashCode(headlineForImage)));
+      console.log(`[NewsService] Replaced trady-logo with topic fallback: ${hourlyImageUrl.slice(0, 80)}...`);
+    }
+
     // Save enhanced analysis to database with source tracking
     const snapshot: InsertNewsAnalysisSnapshot = {
       overallSentiment: prediction.overallSentiment,
@@ -779,10 +746,16 @@ Generate your market prediction now.`
       }),
       analysisType: "hourly",
       generatedArticle: generatedArticle,
-      imageUrl: imageResolution.imageUrl,
+      imageUrl: hourlyImageUrl,
     };
-    
-    await storage.saveNewsAnalysisSnapshot(snapshot);
+
+    // Dedup: skip if the latest snapshot already has the same headline
+    const latestSnapshot = await storage.getLatestNewsAnalysisSnapshot();
+    if (latestSnapshot && prediction.headline && latestSnapshot.headline === prediction.headline) {
+      console.log(`[NewsService] Skipping duplicate hourly snapshot (same headline: "${prediction.headline?.slice(0, 50)}")`);
+    } else {
+      await storage.saveNewsAnalysisSnapshot(snapshot);
+    }
     
     // Keep last 336 snapshots (14 days of hourly data)
     await storage.deleteOldNewsAnalysisSnapshots(336);
@@ -1167,8 +1140,14 @@ export async function backfillArticleImages(): Promise<{ updated: number; total:
         sourceImageUrl: article.imageUrl || null,
       });
 
-      if (article.imageUrl !== imageResolution.imageUrl) {
-        await storage.updateArticleImageUrl(article.id, imageResolution.imageUrl);
+      // Never backfill with trady-logo — use topic-relevant fallback instead
+      let resolvedUrl = imageResolution.imageUrl;
+      if (resolvedUrl === "/trady-logo.jpg" || resolvedUrl.startsWith("/trady-")) {
+        resolvedUrl = getFallbackImage(article.title, article.id);
+      }
+
+      if (article.imageUrl !== resolvedUrl) {
+        await storage.updateArticleImageUrl(article.id, resolvedUrl);
         updated++;
       }
     }
@@ -1185,18 +1164,26 @@ export async function backfillArticleImages(): Promise<{ updated: number; total:
 // Backfill images for snapshots that don't have them or still point to external URLs
 export async function backfillSnapshotImages(): Promise<{ updated: number; total: number }> {
   console.log("[NewsService] Starting snapshot image normalization...");
-  
+
   try {
     const snapshots = await storage.getAllNewsSnapshots();
-    const snapshotsToNormalize = snapshots;
+    // Only backfill snapshots that have no image or still use external URLs
+    // Skip snapshots that already have valid local /uploads/ images
+    const snapshotsToNormalize = snapshots.filter(s => {
+      if (!s.imageUrl) return true; // no image
+      if (s.imageUrl.startsWith("/uploads/")) return false; // already has local image — keep it
+      if (s.imageUrl.startsWith("/trady-logo") || s.imageUrl.startsWith("/trady-icon")) return false; // acceptable fallback
+      if (s.imageUrl.startsWith("http")) return true; // external URL — needs normalization
+      return false;
+    });
 
     if (snapshotsToNormalize.length === 0) {
       console.log("[NewsService] No snapshots need image backfill");
       return { updated: 0, total: 0 };
     }
-    
+
     let updated = 0;
-    
+
     for (const snapshot of snapshotsToNormalize) {
       const headline = snapshot.headline || snapshot.summary.slice(0, 50);
       const imageResolution = await resolveRelevantImage({
@@ -1205,15 +1192,21 @@ export async function backfillSnapshotImages(): Promise<{ updated: number; total
         sourceImageUrl: snapshot.imageUrl || null,
       });
 
-      if (snapshot.imageUrl !== imageResolution.imageUrl) {
-        await storage.updateSnapshotImageUrl(snapshot.id, imageResolution.imageUrl);
+      // Never backfill with trady-logo — use topic-relevant fallback instead
+      let resolvedUrl = imageResolution.imageUrl;
+      if (resolvedUrl === "/trady-logo.jpg" || resolvedUrl.startsWith("/trady-")) {
+        resolvedUrl = getFallbackImage(headline, Math.abs(hashCode(headline)));
+      }
+
+      if (snapshot.imageUrl !== resolvedUrl) {
+        await storage.updateSnapshotImageUrl(snapshot.id, resolvedUrl);
         updated++;
       }
     }
-    
+
     console.log(`[NewsService] Backfilled images for ${updated}/${snapshotsToNormalize.length} snapshots`);
     return { updated, total: snapshotsToNormalize.length };
-    
+
   } catch (error: any) {
     console.error("[NewsService] Snapshot image backfill failed:", error.message);
     return { updated: 0, total: 0 };
@@ -1245,8 +1238,14 @@ export async function regenerateAllSnapshotImages(forceAll: boolean = false): Pr
         sourceImageUrl: snapshot.imageUrl || null,
         forceRefresh: forceAll,
       });
-      
-      await storage.updateSnapshotImageUrl(snapshot.id, imageResolution.imageUrl);
+
+      // Never save trady-logo — use topic-relevant fallback instead
+      let resolvedUrl = imageResolution.imageUrl;
+      if (resolvedUrl === "/trady-logo.jpg" || resolvedUrl.startsWith("/trady-")) {
+        resolvedUrl = getFallbackImage(headline, Math.abs(hashCode(headline)));
+      }
+
+      await storage.updateSnapshotImageUrl(snapshot.id, resolvedUrl);
       updated++;
       
       // Rate limit to avoid AI/image-service bursts

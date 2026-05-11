@@ -1113,7 +1113,7 @@ export default function PublicNewsPage() {
           ) : snapshots.length > 0 ? (
             <>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {snapshots.map((snapshot) => (
+                {snapshots.slice(1).map((snapshot) => (
                   <Card 
                     key={snapshot.id} 
                     className="hover-elevate cursor-pointer overflow-hidden" 
