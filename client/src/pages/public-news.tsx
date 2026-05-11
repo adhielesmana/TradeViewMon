@@ -47,6 +47,7 @@ interface NewsSnapshot {
   affectedSymbols?: string;
   tradingRecommendation?: string;
   imageUrl?: string;
+  language?: string;
 }
 
 interface FullArticle extends NewsSnapshot {
@@ -756,6 +757,11 @@ export default function PublicNewsPage() {
                       <span className="text-sm" data-testid="text-confidence">
                         Confidence: {selectedArticle.confidence}%
                       </span>
+                      {selectedArticle.language && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 uppercase font-medium">
+                          {selectedArticle.language === "id" ? "🇮🇩 ID" : selectedArticle.language === "en" ? "🇺🇸 EN" : selectedArticle.language.toUpperCase()}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1128,12 +1134,18 @@ export default function PublicNewsPage() {
                         className="h-full w-full object-cover"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                      <Badge 
-                        variant={snapshot.overallSentiment === "BULLISH" ? "default" : snapshot.overallSentiment === "BEARISH" ? "destructive" : "secondary"}
-                        className="absolute bottom-2 left-2"
-                      >
-                        {snapshot.overallSentiment}
-                      </Badge>
+                      <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
+                        <Badge
+                          variant={snapshot.overallSentiment === "BULLISH" ? "default" : snapshot.overallSentiment === "BEARISH" ? "destructive" : "secondary"}
+                        >
+                          {snapshot.overallSentiment}
+                        </Badge>
+                        {snapshot.language && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white font-medium uppercase">
+                            {snapshot.language === "id" ? "🇮🇩" : snapshot.language === "en" ? "🇺🇸" : snapshot.language.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <CardContent className="p-4">
                       <div className="mb-2 flex items-center gap-2">
@@ -1384,6 +1396,11 @@ export default function PublicNewsPage() {
                         {format(new Date(selectedArticle.analyzedAt), "MMMM d, yyyy 'at' HH:mm")}
                       </span>
                       <span>Confidence: {selectedArticle.confidence}%</span>
+                      {selectedArticle.language && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 uppercase font-medium">
+                          {selectedArticle.language === "id" ? "🇮🇩 ID" : selectedArticle.language === "en" ? "🇺🇸 EN" : selectedArticle.language.toUpperCase()}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

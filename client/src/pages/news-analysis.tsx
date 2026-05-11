@@ -99,6 +99,7 @@ interface HistorySnapshot {
   analyzedAt: string;
   createdAt: string;
   analysisType: string | null;
+  language: string | null;
   generatedArticle: string | null;
 }
 
@@ -643,6 +644,11 @@ export default function NewsAnalysisPage() {
                               Hourly
                             </Badge>
                           )}
+                          {snapshot.language && (
+                            <Badge variant="outline" className="text-xs">
+                              {snapshot.language === "id" ? "🇮🇩 ID" : snapshot.language === "en" ? "🇺🇸 EN" : snapshot.language.toUpperCase()}
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-sm text-muted-foreground line-clamp-1 mt-1">
                           {snapshot.summary}
@@ -723,6 +729,11 @@ export default function NewsAnalysisPage() {
                   <SentimentBadge sentiment={selectedSnapshot.overallSentiment} />
                   {selectedSnapshot.riskLevel && (
                     <RiskBadge risk={selectedSnapshot.riskLevel} />
+                  )}
+                  {selectedSnapshot.language && (
+                    <Badge variant="outline" className="text-xs">
+                      {selectedSnapshot.language === "id" ? "🇮🇩 Indonesian" : selectedSnapshot.language === "en" ? "🇺🇸 English" : selectedSnapshot.language.toUpperCase()}
+                    </Badge>
                   )}
                 </div>
                 <DialogTitle className="text-xl">

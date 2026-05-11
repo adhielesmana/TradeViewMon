@@ -28,6 +28,7 @@ export interface NewsAnalysis {
   news: NewsItem[];
   marketPrediction: {
     headline?: string;
+    language?: string;
     overallSentiment: "BULLISH" | "BEARISH" | "NEUTRAL";
     confidence: number;
     summary: string;
@@ -250,6 +251,7 @@ LANGUAGE RULE (MANDATORY):
 
 Respond in JSON format with this exact structure:
 {
+  "language": "id" or "en" (ISO 639-1 code of the language you are writing in, based on source articles),
   "headline": "A headline reflecting the ACTUAL main story from the articles",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
@@ -264,6 +266,7 @@ Respond in JSON format with this exact structure:
 }
 
 IMPORTANT:
+- The "language" field MUST be set to the ISO 639-1 code of the language you write in ("id" for Indonesian, "en" for English).
 - The "headline" must read like a real news headline but MUST reflect the actual news content.
 - The "articleContent" must START with what the news actually says before discussing market impact.
 - NEVER fabricate information not present in the source articles.
@@ -322,8 +325,13 @@ IMPORTANT:
           }))
       : [];
     
+    const validLanguages = ["en", "id", "zh", "ja", "ko", "es", "fr", "de", "ar", "pt", "ru"];
+    const language = typeof prediction.language === "string" && validLanguages.includes(prediction.language)
+      ? prediction.language : "en";
+
     return {
       headline: typeof prediction.headline === "string" ? prediction.headline : undefined,
+      language,
       overallSentiment: sentiment,
       confidence: Math.min(100, Math.max(0, Number(prediction.confidence) || 50)),
       summary: typeof prediction.summary === "string" ? prediction.summary : "Market conditions remain mixed",
@@ -437,6 +445,7 @@ async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"],
       newsCount: newsCount,
       analyzedAt: new Date(),
       analysisType: "regular",
+      language: prediction.language || "en",
       generatedArticle: generatedArticle,
       imageUrl: imageResolution.imageUrl,
     };
@@ -706,6 +715,7 @@ Focus on these trading instruments: ${supportedSymbols.join(", ")}
 
 Respond in JSON format with this exact structure:
 {
+  "language": "id" or "en" (ISO 639-1 code of the language you are writing in, based on source articles),
   "headline": "A headline reflecting the ACTUAL main story from the articles (not generic market title)",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
@@ -721,6 +731,7 @@ Respond in JSON format with this exact structure:
 }
 
 IMPORTANT:
+- The "language" field MUST be set to the ISO 639-1 code of the language you write in ("id" for Indonesian, "en" for English).
 - The "headline" MUST reflect the actual news, not a generic market title.
 - The "articleContent" MUST start with what the news actually says before discussing market impact.
 - NEVER fabricate information not present in the source articles.
@@ -763,8 +774,13 @@ Write your analysis now. Remember: accurately summarize the news FIRST, then dis
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
+    const hourlyValidLanguages = ["en", "id", "zh", "ja", "ko", "es", "fr", "de", "ar", "pt", "ru"];
+    const hourlyLanguage = typeof parsed.language === "string" && hourlyValidLanguages.includes(parsed.language)
+      ? parsed.language : "en";
+
     const prediction: NewsAnalysis["marketPrediction"] = {
       headline: typeof parsed.headline === "string" ? parsed.headline : undefined,
+      language: hourlyLanguage,
       overallSentiment: parsed.overallSentiment || "NEUTRAL",
       confidence: Math.min(100, Math.max(0, parsed.confidence || 50)),
       summary: parsed.summary || "Analysis completed",
@@ -805,10 +821,11 @@ Write your analysis now. Remember: accurately summarize the news FIRST, then dis
         lastPredictionSentiments: historicalPredictions.slice(0, 5).map(p => p.overallSentiment)
       }),
       analysisType: "hourly",
+      language: prediction.language || "en",
       generatedArticle: generatedArticle,
       imageUrl: imageResolution.imageUrl,
     };
-    
+
     await storage.saveNewsAnalysisSnapshot(snapshot);
     
     // Keep last 336 snapshots (14 days of hourly data)
