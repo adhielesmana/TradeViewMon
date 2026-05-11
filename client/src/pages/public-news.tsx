@@ -706,10 +706,10 @@ export default function PublicNewsPage() {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-6">
-        <div className="grid gap-6 lg:grid-cols-3">
+      <main className="container mx-auto px-4 py-6 flex flex-col gap-6 lg:gap-8">
+        <div className="contents lg:grid lg:grid-cols-3 lg:gap-6">
           {/* Featured Story - Left Column */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 order-1 lg:order-none">
             {/* Show URL article as headline when present */}
             {urlArticleId && selectedArticle ? (
               <article data-testid="featured-article">
@@ -928,7 +928,7 @@ export default function PublicNewsPage() {
           </div>
 
           {/* Right Sidebar - Login + Trends */}
-          <div className="space-y-4">
+          <div className="space-y-4 order-3 lg:order-none">
             {/* Login Card - only show if not logged in */}
             {!isLoggedIn && (
               <Card className="border-primary/20" data-testid="card-login">
@@ -1061,7 +1061,7 @@ export default function PublicNewsPage() {
         </div>
 
         {/* Market Overview Section */}
-        <section className="mt-8">
+        <section className="order-4 lg:order-none">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-bold">Market Overview</h2>
             <Link href="/login">
@@ -1101,7 +1101,7 @@ export default function PublicNewsPage() {
         </section>
 
         {/* Past Articles Section with Pagination */}
-        <section className="mt-8">
+        <section className="order-2 lg:order-none">
           <h2 className="mb-4 text-xl font-bold">Past Market Analysis</h2>
           
           {isLoadingHistory ? (
