@@ -241,6 +241,13 @@ CRITICAL RULES:
 - The "headline" must capture the MAIN STORY from the articles, not a generic market title.
 - The "articleContent" must be a 3-4 paragraph news-style article that summarizes the ACTUAL news, then explains its potential market implications. Start with what the news says, THEN discuss market impact.
 
+LANGUAGE RULE (MANDATORY):
+- You MUST write ALL text fields (headline, summary, articleContent, keyFactors, tradingRecommendation, and reason in affectedSymbols) in the SAME LANGUAGE as the source articles.
+- If the source articles are in Indonesian, write EVERYTHING in Indonesian.
+- If the source articles are in English, write EVERYTHING in English.
+- If there is a mix of languages, use the language of the MAJORITY of articles.
+- ONLY the JSON field names and enum values (BULLISH/BEARISH/NEUTRAL, POSITIVE/NEGATIVE, LOW/MEDIUM/HIGH) stay in English.
+
 Respond in JSON format with this exact structure:
 {
   "headline": "A headline reflecting the ACTUAL main story from the articles",
@@ -257,10 +264,10 @@ Respond in JSON format with this exact structure:
 }
 
 IMPORTANT:
-- The "headline" must read like a real news headline (Reuters/Bloomberg style) but MUST reflect the actual news content.
+- The "headline" must read like a real news headline but MUST reflect the actual news content.
 - The "articleContent" must START with what the news actually says before discussing market impact.
 - NEVER fabricate information not present in the source articles.
-- If articles are in a non-English language, translate the meaning faithfully.`,
+- NEVER translate to a different language - write in the SAME language as the source articles.`,
         },
         {
           role: "user",
@@ -680,8 +687,15 @@ Your PRIMARY job is to ACCURATELY SUMMARIZE the provided news articles and then 
 CRITICAL RULES - YOU MUST FOLLOW THESE:
 1. Your summary, headline, and articleContent MUST faithfully reflect what the source articles ACTUALLY say. DO NOT change the meaning, invent new narratives, or write about topics not in the articles.
 2. If articles discuss geopolitics (wars, diplomacy, sanctions), your output MUST cover those geopolitical topics - do NOT reduce them to generic market commentary.
-3. If articles are in a non-English language, translate and summarize the meaning faithfully.
-4. The "articleContent" is the MOST IMPORTANT field - it must be a proper news article that FIRST summarizes the actual news, THEN discusses market implications.
+3. The "articleContent" is the MOST IMPORTANT field - it must be a proper news article that FIRST summarizes the actual news, THEN discusses market implications.
+
+LANGUAGE RULE (MANDATORY):
+- You MUST write ALL text fields (headline, summary, articleContent, keyFactors, tradingRecommendation, historicalTrendNote, and reason in affectedSymbols) in the SAME LANGUAGE as the source articles.
+- If the source articles are in Indonesian, write EVERYTHING in Indonesian.
+- If the source articles are in English, write EVERYTHING in English.
+- If there is a mix of languages, use the language of the MAJORITY of articles.
+- ONLY the JSON field names and enum values (BULLISH/BEARISH/NEUTRAL, POSITIVE/NEGATIVE, LOW/MEDIUM/HIGH) stay in English.
+- NEVER translate to a different language - match the source language exactly.
 
 ANALYSIS APPROACH:
 1. READ each article thoroughly and SUMMARIZE what it actually says
