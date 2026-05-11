@@ -639,6 +639,7 @@ export const newsAnalysisSnapshots = pgTable("news_analysis_snapshots", {
   sourceArticles: text("source_articles"), // JSON array of article IDs analyzed
   historicalContext: text("historical_context"), // JSON summary of last 7 days predictions used
   analysisType: varchar("analysis_type", { length: 50 }).default("regular"), // 'hourly' or 'regular'
+  language: varchar("language", { length: 10 }).default("en"), // 'en', 'id', etc. - detected from source articles
   generatedArticle: text("generated_article"), // Full generated article text for history display
   imageUrl: text("image_url"), // Featured image URL from source articles
 });
