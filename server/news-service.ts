@@ -27,10 +27,11 @@ export interface NewsAnalysis {
   newsCount: number;
   news: NewsItem[];
   marketPrediction: {
-    headline?: string; // Natural news-style headline for display
+    headline?: string;
     overallSentiment: "BULLISH" | "BEARISH" | "NEUTRAL";
     confidence: number;
     summary: string;
+    articleContent?: string;
     keyFactors: string[];
     affectedSymbols: {
       symbol: string;
@@ -231,16 +232,22 @@ export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis[
       messages: [
         {
           role: "system",
-          content: `You are a professional financial analyst specializing in market analysis.
-Analyze the provided news headlines and content to generate market predictions.
-Focus on how these news items might affect the following trading instruments: ${supportedSymbols.join(", ")}.
+          content: `You are a professional financial journalist and market analyst.
+Your PRIMARY job is to ACCURATELY SUMMARIZE the provided news articles and then assess their market impact on these instruments: ${supportedSymbols.join(", ")}.
+
+CRITICAL RULES:
+- Your summary and article MUST faithfully reflect what the source news articles ACTUALLY say. DO NOT change the meaning, invent new narratives, or write about topics not covered in the articles.
+- If an article is about geopolitics (e.g. US-Iran tensions, China strategy), your summary MUST be about that topic - do NOT turn it into a generic "market outlook" piece.
+- The "headline" must capture the MAIN STORY from the articles, not a generic market title.
+- The "articleContent" must be a 3-4 paragraph news-style article that summarizes the ACTUAL news, then explains its potential market implications. Start with what the news says, THEN discuss market impact.
 
 Respond in JSON format with this exact structure:
 {
-  "headline": "A natural news-style headline (like a real newspaper) highlighting the key market story from the articles - NOT 'Market Outlook' or 'AI Analysis' style",
+  "headline": "A headline reflecting the ACTUAL main story from the articles",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
-  "summary": "Brief 2-3 sentence market outlook based on the news",
+  "summary": "Brief 2-3 sentence summary of what the news articles ACTUALLY report",
+  "articleContent": "A 3-4 paragraph article. Paragraph 1-2: Accurately summarize the key news stories. Paragraph 3-4: Explain the potential market implications for traders. Separate paragraphs with double newlines.",
   "keyFactors": ["Factor 1", "Factor 2", "Factor 3"],
   "affectedSymbols": [
     {"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Brief reason"}
@@ -249,19 +256,19 @@ Respond in JSON format with this exact structure:
   "riskLevel": "LOW" | "MEDIUM" | "HIGH"
 }
 
-IMPORTANT: The "headline" must read like a real news headline from Reuters, Bloomberg, or WSJ. Examples:
-- "Gold Surges as Fed Signals Rate Pause"
-- "Asian Markets Rally on Strong China Data"
-- "Oil Prices Slip Amid OPEC Supply Concerns"
-Do NOT use generic titles like "Market Outlook" or "Trading Analysis".`,
+IMPORTANT:
+- The "headline" must read like a real news headline (Reuters/Bloomberg style) but MUST reflect the actual news content.
+- The "articleContent" must START with what the news actually says before discussing market impact.
+- NEVER fabricate information not present in the source articles.
+- If articles are in a non-English language, translate the meaning faithfully.`,
         },
         {
           role: "user",
-          content: `Analyze these recent financial news items and provide market predictions:\n\n${newsContext}`,
+          content: `Summarize and analyze these recent financial news items. Stay faithful to the original content:\n\n${newsContext}`,
         },
       ],
       temperature: 0.3,
-      maxTokens: 1000,
+      maxTokens: 2000,
       jsonMode: true,
     });
 
@@ -313,12 +320,13 @@ Do NOT use generic titles like "Market Outlook" or "Trading Analysis".`,
       overallSentiment: sentiment,
       confidence: Math.min(100, Math.max(0, Number(prediction.confidence) || 50)),
       summary: typeof prediction.summary === "string" ? prediction.summary : "Market conditions remain mixed",
-      keyFactors: Array.isArray(prediction.keyFactors) 
-        ? prediction.keyFactors.filter((f: any) => typeof f === "string").slice(0, 10) 
+      articleContent: typeof prediction.articleContent === "string" ? prediction.articleContent : undefined,
+      keyFactors: Array.isArray(prediction.keyFactors)
+        ? prediction.keyFactors.filter((f: any) => typeof f === "string").slice(0, 10)
         : [],
       affectedSymbols,
-      tradingRecommendation: typeof prediction.tradingRecommendation === "string" 
-        ? prediction.tradingRecommendation 
+      tradingRecommendation: typeof prediction.tradingRecommendation === "string"
+        ? prediction.tradingRecommendation
         : "Monitor market conditions before trading",
       riskLevel,
     };
@@ -404,7 +412,7 @@ async function saveAnalysisToCache(prediction: NewsAnalysis["marketPrediction"],
   if (!prediction) return;
   
   try {
-    const generatedArticle = generateArticleText(prediction, newsCount, "regular");
+    const generatedArticle = prediction.articleContent || generateArticleText(prediction, newsCount, "regular");
     const imageResolution = await resolveRelevantImage({
       headline: prediction.headline || prediction.summary.slice(0, 50),
       summary: prediction.summary,
@@ -665,59 +673,63 @@ ${article.content || "No content available"}
       messages: [
         {
           role: "system",
-          content: `You are an expert financial analyst performing a comprehensive HOURLY market analysis.
+          content: `You are an expert financial journalist and market analyst performing a comprehensive HOURLY analysis.
 
-Your task is to analyze recent news articles in depth and combine this with historical AI predictions to generate an accurate market outlook.
+Your PRIMARY job is to ACCURATELY SUMMARIZE the provided news articles and then assess their market impact.
+
+CRITICAL RULES - YOU MUST FOLLOW THESE:
+1. Your summary, headline, and articleContent MUST faithfully reflect what the source articles ACTUALLY say. DO NOT change the meaning, invent new narratives, or write about topics not in the articles.
+2. If articles discuss geopolitics (wars, diplomacy, sanctions), your output MUST cover those geopolitical topics - do NOT reduce them to generic market commentary.
+3. If articles are in a non-English language, translate and summarize the meaning faithfully.
+4. The "articleContent" is the MOST IMPORTANT field - it must be a proper news article that FIRST summarizes the actual news, THEN discusses market implications.
 
 ANALYSIS APPROACH:
-1. READ AND ANALYZE each article thoroughly - extract key financial implications, market sentiment drivers, and trading signals
-2. CORRELATE with historical predictions - identify trends, patterns, and whether recent predictions were accurate
-3. SYNTHESIZE a comprehensive market prediction
+1. READ each article thoroughly and SUMMARIZE what it actually says
+2. IDENTIFY market implications based on the actual news content
+3. CORRELATE with historical predictions for context
 
 Focus on these trading instruments: ${supportedSymbols.join(", ")}
 
 Respond in JSON format with this exact structure:
 {
-  "headline": "A natural news-style headline highlighting the key market story - like Reuters, Bloomberg, or WSJ",
+  "headline": "A headline reflecting the ACTUAL main story from the articles (not generic market title)",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
-  "summary": "Detailed 3-5 sentence market outlook based on FULL article analysis and historical context",
-  "keyFactors": ["Factor 1 with specific detail from articles", "Factor 2", "Factor 3", "Factor 4"],
+  "summary": "3-5 sentence summary of what the news articles ACTUALLY report and their market implications",
+  "articleContent": "A 3-5 paragraph news-style article. Paragraphs 1-2: Accurately summarize the key news stories and what they report. Paragraphs 3-4: Explain market implications for traders. Paragraph 5: Trading outlook. Separate paragraphs with double newlines (\\n\\n).",
+  "keyFactors": ["Specific factor from articles", "Factor 2", "Factor 3", "Factor 4"],
   "affectedSymbols": [
     {"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Specific reason from article analysis"}
   ],
   "tradingRecommendation": "Detailed actionable recommendation with risk context",
   "riskLevel": "LOW" | "MEDIUM" | "HIGH",
-  "historicalTrendNote": "Brief note on how current analysis aligns with or differs from recent 7-day predictions"
+  "historicalTrendNote": "Brief note on how current analysis aligns with or differs from recent predictions"
 }
 
-IMPORTANT: The "headline" must read like a real news headline from Reuters, Bloomberg, or WSJ. Examples:
-- "Gold Surges as Fed Signals Rate Pause"
-- "Asian Markets Rally on Strong China Data"
-- "Oil Prices Slip Amid OPEC Supply Concerns"
-Do NOT use generic titles like "Market Outlook" or "Trading Analysis".
-
-BE CONSERVATIVE with confidence scores - markets are uncertain.
-If articles lack clear trading signals, default to NEUTRAL with appropriate explanation.`
+IMPORTANT:
+- The "headline" MUST reflect the actual news, not a generic market title.
+- The "articleContent" MUST start with what the news actually says before discussing market impact.
+- NEVER fabricate information not present in the source articles.
+- BE CONSERVATIVE with confidence scores - markets are uncertain.`
         },
         {
           role: "user",
-          content: `Perform comprehensive hourly analysis based on:
+          content: `Summarize and analyze these news articles. Stay faithful to their actual content:
 
 === RECENT NEWS ARTICLES (Last 1 Hour) ===
 ${articleContext}
 
-=== HISTORICAL AI PREDICTIONS (Last 14 Days) ===
+=== HISTORICAL AI PREDICTIONS (Last 14 Days, for context only) ===
 ${historicalContext}
 
-Generate your market prediction now.`
+Write your analysis now. Remember: accurately summarize the news FIRST, then discuss market impact.`
         }
       ],
       temperature: 0.3,
-      maxTokens: 1500,
+      maxTokens: 2000,
       jsonMode: true,
     });
-    
+
     const content = response.content;
     if (!content) {
       throw new Error("Empty response from Ollama");
@@ -735,21 +747,22 @@ Generate your market prediction now.`
         error: "Invalid AI response format"
       };
     }
-    
+
     const parsed = JSON.parse(jsonMatch[0]);
     const prediction: NewsAnalysis["marketPrediction"] = {
       headline: typeof parsed.headline === "string" ? parsed.headline : undefined,
       overallSentiment: parsed.overallSentiment || "NEUTRAL",
       confidence: Math.min(100, Math.max(0, parsed.confidence || 50)),
       summary: parsed.summary || "Analysis completed",
+      articleContent: typeof parsed.articleContent === "string" ? parsed.articleContent : undefined,
       keyFactors: parsed.keyFactors || [],
       affectedSymbols: parsed.affectedSymbols || [],
       tradingRecommendation: parsed.tradingRecommendation || "Monitor market conditions",
       riskLevel: parsed.riskLevel || "MEDIUM",
     };
-    
-    // Generate article text for history display
-    const generatedArticle = generateArticleText(prediction, recentArticles.length, "hourly");
+
+    // Use AI-generated article content, fall back to template if not available
+    const generatedArticle = prediction.articleContent || generateArticleText(prediction, recentArticles.length, "hourly");
     
     // Pick the most relevant stored image from the source articles if available.
     const rssImageUrl = recentArticles.find(a => a.imageUrl)?.imageUrl;
