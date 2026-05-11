@@ -43,7 +43,7 @@ services:
       SESSION_SECRET: "${SESSION_SECRET}"
       SESSION_COOKIE_DOMAIN: "${SESSION_COOKIE_DOMAIN:-}"
       FINNHUB_API_KEY: "${FINNHUB_API_KEY:-}"
-      OLLAMA_URL: "${OLLAMA_URL:-http://ollama:11434}"
+      OLLAMA_URL: "${OLLAMA_URL:-http://host.docker.internal:11434}"
       OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen2.5:0.5b}"
       ML_SIDECAR_URL: "http://ml-sidecar:8001"
       USE_HTTPS: "${USE_HTTPS:-false}"
@@ -67,30 +67,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: trady-ollama
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
-    networks:
-      - trady-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     logging:
       driver: "json-file"
       options:
@@ -126,5 +102,4 @@ networks:
 
 volumes:
   postgres_data:
-  ollama_data:
   uploads_data:
