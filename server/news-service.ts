@@ -278,7 +278,7 @@ IMPORTANT:
         },
       ],
       temperature: 0.3,
-      maxTokens: 2000,
+      maxTokens: 400,
       jsonMode: true,
     });
 
@@ -679,79 +679,48 @@ export async function runHourlyAiAnalysis(): Promise<HourlyAnalysisResult> {
       ? limitedArticles.map((article, i) => `${i + 1}. ${article.title}`).join("\n")
       : "No new articles in the last hour.";
 
-    // Skip historical context to save tokens
-    const lastSentiment = historicalPredictions.length > 0
-      ? historicalPredictions[0].overallSentiment
-      : "NEUTRAL";
+    // Build compact historical context from recent predictions
+    const historicalTrend = historicalPredictions.length > 0
+      ? `Last sentiment: ${historicalPredictions[0].overallSentiment} (${historicalPredictions.length} recent predictions available)`
+      : "No recent historical predictions available for context.";
 
     // Generate AI analysis (optimized for low-resource Ollama inference)
     const response = await chatCompletion({
       messages: [
         {
           role: "system",
-          content: `You are an expert financial journalist and market analyst performing a comprehensive HOURLY analysis.
+          content: `You are a concise financial journalist analyzing hourly news. Summarize what the articles actually say, then assess market impact.
 
-Your PRIMARY job is to ACCURATELY SUMMARIZE the provided news articles and then assess their market impact.
+CRITICAL: Your summary MUST faithfully reflect the source articles. Do not invent narratives.
 
-CRITICAL RULES - YOU MUST FOLLOW THESE:
-1. Your summary, headline, and articleContent MUST faithfully reflect what the source articles ACTUALLY say. DO NOT change the meaning, invent new narratives, or write about topics not in the articles.
-2. If articles discuss geopolitics (wars, diplomacy, sanctions), your output MUST cover those geopolitical topics - do NOT reduce them to generic market commentary.
-3. The "articleContent" is the MOST IMPORTANT field - it must be a proper news article that FIRST summarizes the actual news, THEN discusses market implications.
+LANGUAGE: Write in the same language as the articles.
 
-LANGUAGE RULE (MANDATORY):
-- You MUST write ALL text fields (headline, summary, articleContent, keyFactors, tradingRecommendation, historicalTrendNote, and reason in affectedSymbols) in the SAME LANGUAGE as the source articles.
-- If the source articles are in Indonesian, write EVERYTHING in Indonesian.
-- If the source articles are in English, write EVERYTHING in English.
-- If there is a mix of languages, use the language of the MAJORITY of articles.
-- ONLY the JSON field names and enum values (BULLISH/BEARISH/NEUTRAL, POSITIVE/NEGATIVE, LOW/MEDIUM/HIGH) stay in English.
-- NEVER translate to a different language - match the source language exactly.
+Focus on: ${supportedSymbols.join(", ")}
 
-ANALYSIS APPROACH:
-1. READ each article thoroughly and SUMMARIZE what it actually says
-2. IDENTIFY market implications based on the actual news content
-3. CORRELATE with historical predictions for context
-
-Focus on these trading instruments: ${supportedSymbols.join(", ")}
-
-Respond in JSON format with this exact structure:
+Respond in JSON:
 {
-  "language": "id" or "en" (ISO 639-1 code of the language you are writing in, based on source articles),
-  "headline": "A headline reflecting the ACTUAL main story from the articles (not generic market title)",
+  "language": "id" or "en",
+  "headline": "Actual main story headline",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
-  "summary": "3-5 sentence summary of what the news articles ACTUALLY report and their market implications",
-  "articleContent": "A 3-5 paragraph news-style article. Paragraphs 1-2: Accurately summarize the key news stories and what they report. Paragraphs 3-4: Explain market implications for traders. Paragraph 5: Trading outlook. Separate paragraphs with double newlines (\\n\\n).",
-  "keyFactors": ["Specific factor from articles", "Factor 2", "Factor 3", "Factor 4"],
-  "affectedSymbols": [
-    {"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Specific reason from article analysis"}
-  ],
-  "tradingRecommendation": "Detailed actionable recommendation with risk context",
-  "riskLevel": "LOW" | "MEDIUM" | "HIGH",
-  "historicalTrendNote": "Brief note on how current analysis aligns with or differs from recent predictions"
-}
-
-IMPORTANT:
-- The "language" field MUST be set to the ISO 639-1 code of the language you write in ("id" for Indonesian, "en" for English).
-- The "headline" MUST reflect the actual news, not a generic market title.
-- The "articleContent" MUST start with what the news actually says before discussing market impact.
-- NEVER fabricate information not present in the source articles.
-- BE CONSERVATIVE with confidence scores - markets are uncertain.`
+  "summary": "2-3 sentence summary",
+  "keyFactors": ["Factor 1", "Factor 2"],
+  "affectedSymbols": [{"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Reason"}],
+  "tradingRecommendation": "Brief recommendation",
+  "riskLevel": "LOW" | "MEDIUM" | "HIGH"
+}`
         },
         {
           role: "user",
-          content: `Summarize and analyze these news articles. Stay faithful to their actual content:
+          content: `Summarize these articles faithfully:
 
-=== RECENT NEWS ARTICLES (Last 1 Hour) ===
 ${articleContext}
 
-=== HISTORICAL AI PREDICTIONS (Last 14 Days, for context only) ===
-${historicalContext}
-
-Write your analysis now. Remember: accurately summarize the news FIRST, then discuss market impact.`
+${historicalTrend}`
         }
       ],
       temperature: 0.3,
-      maxTokens: 2000,
+      maxTokens: 400,
       jsonMode: true,
     });
 
