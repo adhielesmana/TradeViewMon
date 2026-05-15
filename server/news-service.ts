@@ -233,7 +233,7 @@ export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis[
       messages: [
         {
           role: "system",
-          content: `Summarize the news as facts. Example: "Gold rose 2% as the dollar weakened. Oil fell 1%."
+          content: `Summarize the news as facts. Write a solid paragraph covering what happened and why it matters.
 
 - summary field: start with a fact, not "The article discusses"
 - Write in the language of the source articles
@@ -245,7 +245,7 @@ JSON:
   "headline": "Short headline",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
-  "summary": "2-3 sentence summary starting with a fact",
+  "summary": "Detailed 4-5 sentence paragraph covering the key stories and market context",
   "articleContent": "3-4 paragraph article. Paragraphs 1-2: Summary. Paragraphs 3-4: Market impact.",
   "keyFactors": ["Factor 1", "Factor 2"],
   "affectedSymbols": [{"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Why"}],
@@ -675,7 +675,7 @@ export async function runHourlyAiAnalysis(): Promise<HourlyAnalysisResult> {
       messages: [
         {
           role: "system",
-          content: `Summarize the news as facts. Example summary: "Gold rose 2% as the dollar weakened. Oil fell 1%."
+          content: `Summarize the news as facts. Write a solid paragraph covering what happened and why it matters.
 
 Rules:
 - summary field: start with a fact, not "The article discusses" or "The headline"
@@ -688,7 +688,7 @@ JSON:
   "headline": "Short headline",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
-  "summary": "2-3 sentence summary starting with a fact",
+  "summary": "Detailed 4-5 sentence paragraph covering the key stories and market context",
   "keyFactors": ["Factor 1", "Factor 2"],
   "affectedSymbols": [{"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Why"}],
   "tradingRecommendation": "Brief recommendation",
