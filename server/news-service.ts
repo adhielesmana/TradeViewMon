@@ -233,13 +233,14 @@ export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis[
       messages: [
         {
           role: "system",
-          content: `Summarize the news as facts. Write a solid paragraph covering what happened and why it matters.
+           content: `Summarize the news as facts. Write a solid paragraph covering what happened and why it matters.
 
-- summary field: start with a fact, not "The article discusses"
-- Write in the language of the source articles
-- Focus on: ${supportedSymbols.join(", ")}
+ - summary field: start with a fact, not "The article discusses"
+ - Write in the language of the source articles
+ - Focus on: ${supportedSymbols.join(", ")}
+ - Reference candlestick patterns in trading recommendations when relevant (Hammer, Engulfing, Morning/Evening Star for reversals; Marubozu for momentum)
 
-JSON:
+ JSON:
 {
   "language": "id" or "en",
   "headline": "Short headline",
@@ -688,14 +689,15 @@ export async function runHourlyAiAnalysis(): Promise<HourlyAnalysisResult> {
       messages: [
         {
           role: "system",
-          content: `Summarize the news as facts. Write a solid paragraph covering what happened and why it matters.
+           content: `Summarize the news as facts. Write a solid paragraph covering what happened and why it matters.
 
-Rules:
-- summary field: start with a fact, not "The article discusses" or "The headline"
-- Match the language of the source articles
-- Focus on: ${supportedSymbols.join(", ")}
+ Rules:
+ - summary field: start with a fact, not "The article discusses" or "The headline"
+ - Match the language of the source articles
+ - Focus on: ${supportedSymbols.join(", ")}
+ - Reference candlestick patterns in trading recommendations when relevant (Hammer, Engulfing, Morning/Evening Star for reversals; Marubozu for momentum)
 
-JSON:
+ JSON:
 {
   "language": "id" or "en",
   "headline": "Short headline",
