@@ -1,12 +1,6 @@
-/**
- * Ollama Local AI Client
- *
- * Wraps Ollama's native REST API without npm dependencies.
- * Ollama exposes an OpenAI-compatible chat completion endpoint at /api/chat
- */
-
 import { storage } from "./storage";
-import { decrypt } from "./encryption";
+
+export type AiProvider = "ollama" | "groq" | "openai-compat";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -27,201 +21,277 @@ export interface ChatCompletionResult {
   tokensUsed?: number;
 }
 
-interface OllamaConfig {
+interface AiConfig {
+  provider: AiProvider;
   url: string;
   model: string;
+  apiKey: string | null;
   timeoutMs: number;
 }
 
-// Cache for Ollama config
-let cachedConfig: OllamaConfig | null = null;
+const PROVIDER_DEFAULTS: Record<AiProvider, { url: string; model: string }> = {
+  ollama: { url: "http://localhost:11434", model: "qwen2.5:3b" },
+  groq: { url: "https://api.groq.com/openai/v1", model: "llama-3.1-8b-instant" },
+  "openai-compat": { url: "https://api.openai.com/v1", model: "gpt-4o-mini" },
+};
+
+const DEFAULT_TIMEOUT_MS = 30000;
+const MAX_RETRIES = 2;
+const CONFIG_CACHE_TTL = 5 * 60 * 1000;
+
+let cachedConfig: AiConfig | null = null;
 let cachedConfigTime = 0;
-const CONFIG_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-/**
- * Get Ollama configuration from environment variables or database settings
- */
-async function getOllamaConfig(): Promise<OllamaConfig> {
+export async function getAiConfig(): Promise<AiConfig> {
   const now = Date.now();
-
-  // Return cached config if still valid
   if (cachedConfig && now - cachedConfigTime < CONFIG_CACHE_TTL) {
     return cachedConfig;
   }
 
-  // Priority 1: Environment variables (best for production)
-  const envUrl = process.env.OLLAMA_URL || "http://localhost:11434";
-  const envModel = process.env.OLLAMA_MODEL || "qwen2.5:0.5b";
-  const envTimeout = parseInt(process.env.OLLAMA_TIMEOUT_MS || "180000", 10);
+  const provider = (
+    process.env.AI_PROVIDER
+    || (await storage.getSetting("AI_PROVIDER"))
+    || "ollama"
+  ) as AiProvider;
 
-  // Priority 2: Check database for custom settings
-  try {
-    const dbUrl = await storage.getSetting("OLLAMA_URL");
-    const dbModel = await storage.getSetting("OLLAMA_MODEL");
+  const defaults = PROVIDER_DEFAULTS[provider] || PROVIDER_DEFAULTS.ollama;
 
-    if (dbUrl || dbModel) {
-      cachedConfig = {
-        url: dbUrl || envUrl,
-        model: dbModel || envModel,
-        timeoutMs: envTimeout,
-      };
-      cachedConfigTime = now;
-      return cachedConfig;
-    }
-  } catch (e) {
-    console.error("[Ollama Client] Failed to retrieve config from database:", e);
-  }
+  const url = (
+    process.env.AI_API_URL
+    || (await storage.getSetting("AI_API_URL"))
+    || (provider === "ollama" ? (process.env.OLLAMA_URL || defaults.url) : defaults.url)
+  ).replace(/\/+$/, "");
 
-  // Use environment defaults
-  cachedConfig = {
-    url: envUrl,
-    model: envModel,
-    timeoutMs: envTimeout,
-  };
+  const model =
+    process.env.AI_MODEL
+    || (await storage.getSetting("AI_MODEL"))
+    || (provider === "ollama" ? (process.env.OLLAMA_MODEL || defaults.model) : defaults.model);
+
+  const apiKey =
+    process.env.AI_API_KEY
+    || (await storage.getSetting("AI_API_KEY"))
+    || (provider === "groq" ? process.env.GROQ_API_KEY : null)
+    || null;
+
+  const timeoutMs = parseInt(process.env.AI_TIMEOUT_MS || "", 10)
+    || (provider === "ollama" ? 180000 : DEFAULT_TIMEOUT_MS);
+
+  cachedConfig = { provider, url, model, apiKey, timeoutMs };
   cachedConfigTime = now;
-
   return cachedConfig;
 }
 
-/**
- * Check if Ollama is available and accessible
- */
-export async function isOllamaAvailable(): Promise<boolean> {
-  try {
-    const config = await getOllamaConfig();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
+// Legacy compat
+export async function getOllamaConfig() {
+  const config = await getAiConfig();
+  return { url: config.url, model: config.model, timeoutMs: config.timeoutMs };
+}
 
-    try {
-      const response = await fetch(`${config.url}/api/tags`, {
-        method: "GET",
+export async function isOllamaAvailable(): Promise<boolean> {
+  return isAiAvailable();
+}
+
+export async function isAiAvailable(): Promise<boolean> {
+  try {
+    const config = await getAiConfig();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+
+    if (config.provider === "ollama") {
+      const res = await fetch(`${config.url}/api/tags`, { signal: controller.signal });
+      clearTimeout(timer);
+      return res.ok;
+    } else {
+      const headers: Record<string, string> = {};
+      if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`;
+      const res = await fetch(`${config.url}/models`, {
+        headers,
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
-
-      return response.ok;
-    } catch (e) {
-      clearTimeout(timeoutId);
-      return false;
+      clearTimeout(timer);
+      return res.ok;
     }
-  } catch (e) {
+  } catch {
     return false;
   }
 }
 
-/**
- * List available Ollama models
- */
 export async function listModels(): Promise<string[]> {
   try {
-    const config = await getOllamaConfig();
+    const config = await getAiConfig();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), 5000);
 
-    try {
-      const response = await fetch(`${config.url}/api/tags`, {
-        method: "GET",
+    if (config.provider === "ollama") {
+      const res = await fetch(`${config.url}/api/tags`, { signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) return [];
+      const data = (await res.json()) as { models?: Array<{ name: string }> };
+      return (data.models || []).map((m) => m.name);
+    } else {
+      const headers: Record<string, string> = {};
+      if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`;
+      const res = await fetch(`${config.url}/models`, {
+        headers,
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Failed to list models: ${response.status}`);
-      }
-
-      const data = await response.json() as { models?: Array<{ name: string }> };
-      return (data.models || []).map(m => m.name);
-    } catch (e) {
-      clearTimeout(timeoutId);
-      throw e;
+      clearTimeout(timer);
+      if (!res.ok) return [];
+      const data = (await res.json()) as { data?: Array<{ id: string }> };
+      return (data.data || []).map((m) => m.id);
     }
-  } catch (e) {
-    console.error("[Ollama Client] Failed to list models:", e);
+  } catch {
     return [];
   }
 }
 
-/**
- * Chat completion with retry logic and exponential backoff
- */
 export async function chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult> {
-  const config = await getOllamaConfig();
+  const config = await getAiConfig();
   const model = options.model || config.model;
-  const maxRetries = 0;
+
   let lastError: Error | null = null;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 4000);
+      await new Promise((r) => setTimeout(r, delay));
+      console.log(`[LocalAI] Retry attempt ${attempt}/${MAX_RETRIES} for ${config.provider}/${model}`);
+    }
+
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs);
+      const timer = setTimeout(() => controller.abort(), config.timeoutMs);
 
-      const requestBody: Record<string, unknown> = {
-        model,
-        messages: options.messages,
-        stream: false,
-        keep_alive: -1,
-        options: {
-          temperature: options.temperature ?? 0.7,
-          num_ctx: 1024,
-          num_predict: options.maxTokens || 400,
-          num_thread: parseInt(process.env.OLLAMA_NUM_THREADS || "0", 10) || undefined,
-        },
-      };
+      let result: ChatCompletionResult;
 
-      // Add JSON mode if requested (Ollama supports this)
-      if (options.jsonMode) {
-        requestBody.format = "json";
+      if (config.provider === "ollama") {
+        result = await callOllama(config, model, options, controller.signal);
+      } else {
+        result = await callOpenAICompat(config, model, options, controller.signal);
       }
 
-      const response = await fetch(`${config.url}/api/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json() as { message?: { content: string }; model?: string };
-      const content = data.message?.content || "";
-
-      return {
-        content,
-        model: data.model || model,
-        tokensUsed: undefined, // Ollama doesn't provide token counts in API response
-      };
-    } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e));
-
-      if (attempt < maxRetries) {
-        // Exponential backoff: 500ms, 1000ms, etc.
-        const backoffMs = 500 * Math.pow(2, attempt);
-        console.warn(
-          `[Ollama Client] Attempt ${attempt + 1} failed, retrying in ${backoffMs}ms:`,
-          lastError.message
-        );
-        await new Promise(resolve => setTimeout(resolve, backoffMs));
+      clearTimeout(timer);
+      return result;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (lastError.name === "AbortError") {
+        lastError = new Error(`AI request timed out after ${config.timeoutMs}ms (${config.provider})`);
       }
     }
   }
 
-  throw new Error(
-    `[Ollama Client] Failed after ${maxRetries + 1} attempts: ${lastError?.message || "Unknown error"}`
-  );
+  throw lastError || new Error("AI request failed");
+}
+
+// --- Ollama native API ---
+async function callOllama(
+  config: AiConfig,
+  model: string,
+  options: ChatCompletionOptions,
+  signal: AbortSignal,
+): Promise<ChatCompletionResult> {
+  const body: Record<string, unknown> = {
+    model,
+    messages: options.messages,
+    stream: false,
+    options: {
+      num_ctx: 4096,
+    } as Record<string, unknown>,
+  };
+
+  if (options.temperature !== undefined) {
+    (body.options as Record<string, unknown>).temperature = options.temperature;
+  }
+  if (options.maxTokens !== undefined) {
+    (body.options as Record<string, unknown>).num_predict = options.maxTokens;
+  }
+  if (options.jsonMode) {
+    body.format = "json";
+  }
+
+  const res = await fetch(`${config.url}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "unknown error");
+    throw new Error(`Ollama returned ${res.status}: ${errorText}`);
+  }
+
+  const data = (await res.json()) as {
+    message?: { content?: string };
+    model?: string;
+    eval_count?: number;
+    prompt_eval_count?: number;
+  };
+
+  return {
+    content: data.message?.content || "{}",
+    model: data.model || model,
+    tokensUsed: (data.eval_count || 0) + (data.prompt_eval_count || 0),
+  };
+}
+
+// --- OpenAI-compatible API (Groq, DeepSeek, OpenRouter, etc.) ---
+async function callOpenAICompat(
+  config: AiConfig,
+  model: string,
+  options: ChatCompletionOptions,
+  signal: AbortSignal,
+): Promise<ChatCompletionResult> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (config.apiKey) {
+    headers["Authorization"] = `Bearer ${config.apiKey}`;
+  }
+
+  const body: Record<string, unknown> = {
+    model,
+    messages: options.messages,
+    stream: false,
+  };
+
+  if (options.temperature !== undefined) body.temperature = options.temperature;
+  if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+  if (options.jsonMode) body.response_format = { type: "json_object" };
+
+  const res = await fetch(`${config.url}/chat/completions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "unknown error");
+    throw new Error(`${config.provider} returned ${res.status}: ${errorText}`);
+  }
+
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+    model?: string;
+    usage?: { total_tokens?: number };
+  };
+
+  return {
+    content: data.choices?.[0]?.message?.content || "{}",
+    model: data.model || model,
+    tokensUsed: data.usage?.total_tokens || 0,
+  };
 }
 
 /**
- * Pre-warm the model so it stays loaded in RAM (avoids cold-start penalty on first real request)
+ * Pre-warm the Ollama model so it stays loaded in RAM (avoids cold-start penalty on first real request)
  */
 async function warmupModel(): Promise<void> {
   try {
-    const config = await getOllamaConfig();
+    const config = await getAiConfig();
+    if (config.provider !== "ollama") return;
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -240,36 +310,34 @@ async function warmupModel(): Promise<void> {
     clearTimeout(timeoutId);
     console.log(`[Ollama Client] Model ${config.model} pre-warmed and loaded in RAM`);
   } catch (e) {
-    // Non-fatal — model will load on first real request
     console.warn("[Ollama Client] Warmup skipped:", (e as Error).message);
   }
 }
 
 /**
- * Initialize Ollama on startup (log configuration and pre-warm model)
+ * Initialize AI client on startup (log configuration and pre-warm Ollama model)
  */
 async function initializeOllama() {
   try {
-    const config = await getOllamaConfig();
-    const available = await isOllamaAvailable();
+    const config = await getAiConfig();
+    const available = await isAiAvailable();
 
     if (available) {
-      console.log(`[Ollama Client] Initialized and connected - URL: ${config.url}, Model: ${config.model}`);
-      // Pre-warm model in background (don't block startup)
-      warmupModel().catch(() => {});
+      console.log(`[AI Client] Initialized and connected - Provider: ${config.provider}, URL: ${config.url}, Model: ${config.model}`);
+      if (config.provider === "ollama") {
+        warmupModel().catch(() => {});
+      }
     } else {
       console.warn(
-        `[Ollama Client] Configured but not available - URL: ${config.url}. Will gracefully fall back to technical analysis.`
+        `[AI Client] Configured but not available - Provider: ${config.provider}, URL: ${config.url}. Will gracefully fall back to technical analysis.`
       );
     }
   } catch (e) {
-    console.warn("[Ollama Client] Failed to initialize:", e);
+    console.warn("[AI Client] Failed to initialize:", e);
   }
 }
 
 // Initialize on import
 initializeOllama().catch(e => {
-  console.error("[Ollama Client] Startup error:", e);
+  console.error("[AI Client] Startup error:", e);
 });
-
-export { getOllamaConfig };

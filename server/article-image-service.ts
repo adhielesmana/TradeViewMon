@@ -133,7 +133,20 @@ function buildKeywordsText(signature: string): string {
 export function isManagedImageUrl(imageUrl?: string | null): boolean {
   if (!imageUrl) return false;
   // Check for server-managed image paths: /objects/, /uploads/, or static assets like /trady-logo.jpg
-  return imageUrl.startsWith("/objects/") || imageUrl.startsWith("/uploads/") || imageUrl.startsWith("/") && !imageUrl.includes("://");
+  return imageUrl.startsWith("/objects/") || imageUrl.startsWith("/uploads/") || (imageUrl.startsWith("/") && !imageUrl.includes("://"));
+}
+
+/** Check if a managed image file actually exists on disk */
+async function managedImageExists(imageUrl: string): Promise<boolean> {
+  if (!isManagedImageUrl(imageUrl)) return false;
+  try {
+    // /uploads/article-images/xxx.jpg -> <cwd>/uploads/article-images/xxx.jpg
+    const filePath = path.join(process.cwd(), imageUrl);
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function mimeTypeToExtension(mimeType: string): string {
@@ -268,10 +281,24 @@ export async function resolveRelevantImage(input: ResolveArticleImageInput): Pro
   let sourceUrl: string | null = input.sourceImageUrl || null;
 
   if (input.sourceImageUrl && !input.forceRefresh) {
-    if (isManagedImageUrl(input.sourceImageUrl)) {
+    if (isManagedImageUrl(input.sourceImageUrl) && await managedImageExists(input.sourceImageUrl)) {
       imageUrl = input.sourceImageUrl;
       storagePath = input.sourceImageUrl;
       sourceType = "cache";
+    } else if (isManagedImageUrl(input.sourceImageUrl)) {
+      // Managed URL but file missing (e.g. after container recreate) — try cache source_url
+      const cachedEntry = cached || await storage.getArticleImageCacheByKey(cacheKey);
+      if (cachedEntry?.sourceUrl && !isManagedImageUrl(cachedEntry.sourceUrl)) {
+        try {
+          const downloaded = await downloadRemoteImage(cachedEntry.sourceUrl);
+          const stored = await storeImageBuffer(downloaded.buffer, downloaded.contentType);
+          imageUrl = stored.imageUrl;
+          storagePath = stored.storagePath;
+          sourceType = "rss";
+        } catch (error) {
+          console.warn("[ArticleImageService] Failed to re-download from cached source URL:", error);
+        }
+      }
     } else {
       try {
         const downloaded = await downloadRemoteImage(input.sourceImageUrl);
@@ -280,17 +307,17 @@ export async function resolveRelevantImage(input: ResolveArticleImageInput): Pro
         storagePath = stored.storagePath;
         sourceType = inferSourceType(input.sourceImageUrl);
       } catch (error) {
-        console.warn("[ArticleImageService] Failed to store source image, trying AI fallback:", error);
+        console.warn("[ArticleImageService] Failed to store source image:", error);
       }
     }
   }
 
   if (!imageUrl && input.sourceImageUrl) {
-    if (isManagedImageUrl(input.sourceImageUrl)) {
+    if (isManagedImageUrl(input.sourceImageUrl) && await managedImageExists(input.sourceImageUrl)) {
       imageUrl = input.sourceImageUrl;
       storagePath = input.sourceImageUrl;
       sourceType = "cache";
-    } else {
+    } else if (!isManagedImageUrl(input.sourceImageUrl)) {
       try {
         const downloaded = await downloadRemoteImage(input.sourceImageUrl);
         const stored = await storeImageBuffer(downloaded.buffer, downloaded.contentType);
@@ -303,6 +330,19 @@ export async function resolveRelevantImage(input: ResolveArticleImageInput): Pro
     }
   }
 
+  // Last resort: search cache for a related topic image instead of falling back to logo
+  if (!imageUrl) {
+    const topicTokens = extractTopicTokens(headline, summary);
+    const related = await storage.findRelatedArticleImage(topicTokens);
+    if (related && related.imageUrl && isManagedImageUrl(related.imageUrl) && await managedImageExists(related.imageUrl)) {
+      imageUrl = related.imageUrl;
+      storagePath = related.storagePath || related.imageUrl;
+      sourceType = "cache";
+      console.log(`[ArticleImageService] Using related topic image: ${related.keywords} -> ${imageUrl}`);
+    }
+  }
+
+  // Absolute last fallback — use the logo only if nothing else works
   if (!imageUrl) {
     imageUrl = "/trady-logo.jpg";
     storagePath = null;

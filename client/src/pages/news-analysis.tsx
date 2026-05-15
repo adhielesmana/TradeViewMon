@@ -323,7 +323,7 @@ export default function NewsAnalysisPage() {
               </div>
             </div>
             <CardDescription>
-              OpenAI analysis of {pagination?.total || analysis?.newsCount || 0} news articles (last 7 days)
+              AI analysis of {pagination?.total || analysis?.newsCount || 0} news articles (last 7 days)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -453,7 +453,7 @@ export default function NewsAnalysisPage() {
               <div className="text-center py-8 text-muted-foreground">
                 <Brain className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p className="text-sm">
-                  AI analysis not available. Make sure OpenAI is configured in Settings.
+                  AI analysis not available. Make sure Ollama is running and configured in Settings.
                 </p>
               </div>
             )}

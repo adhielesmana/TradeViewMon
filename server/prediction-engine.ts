@@ -1,5 +1,6 @@
 import { linearRegression, linearRegressionLine } from "simple-statistics";
 import type { MarketData } from "@shared/schema";
+import { detectAllCandlestickPatterns } from "./unified-signal-generator";
 
 export interface FactorSignal {
   name: string;
@@ -558,6 +559,37 @@ export class PredictionEngine {
           value: volume.ratio,
           description: `Volume at ${(volume.ratio * 100).toFixed(0)}% of average`,
         });
+      }
+    }
+    
+    // Candlestick pattern factor
+    if (data.length >= 3) {
+      const { patterns } = detectAllCandlestickPatterns(data);
+      if (patterns.length > 0) {
+        const latest = patterns[patterns.length - 1];
+        const weight = Math.min(latest.strength * 3, 20);
+        if (latest.type === "bullish") {
+          factors.push({
+            name: "Candlestick Patterns",
+            signal: "BULLISH",
+            weight,
+            description: `${latest.name}: ${latest.description}`,
+          });
+        } else if (latest.type === "bearish") {
+          factors.push({
+            name: "Candlestick Patterns",
+            signal: "BEARISH",
+            weight,
+            description: `${latest.name}: ${latest.description}`,
+          });
+        } else {
+          factors.push({
+            name: "Candlestick Patterns",
+            signal: "NEUTRAL",
+            weight: 5,
+            description: `${latest.name}: ${latest.description}`,
+          });
+        }
       }
     }
     

@@ -1,4 +1,5 @@
 import type { MarketData } from "@shared/schema";
+import { getPatternById, type CandlestickPattern as SkillPattern } from "./skills/candlestick-patterns";
 
 export interface PrecisionTradePlan {
   entryPrice: number;
@@ -60,6 +61,10 @@ export interface CandlestickPattern {
   description: string;
   candleIndex?: number;
   timestamp?: string;
+  skillRef?: string;
+  reliability?: string;
+  confirmation?: string;
+  psychology?: string;
 }
 
 const WEIGHTS = {
@@ -407,6 +412,43 @@ function detectTrend(candles: MarketData[], lookback: number = 10): "uptrend" | 
   return "sideways";
 }
 
+const PATTERN_NAME_TO_SKILL_ID: Record<string, string> = {
+  "Hammer": "hammer",
+  "Hanging Man": "hanging_man",
+  "Shooting Star": "shooting_star",
+  "Inverted Hammer": "inverted_hammer",
+  "Dragonfly Doji": "dragonfly_doji",
+  "Gravestone Doji": "gravestone_doji",
+  "Doji": "doji",
+  "Bullish Engulfing": "bullish_engulfing",
+  "Bearish Engulfing": "bearish_engulfing",
+  "Bullish Marubozu": "marubozu_bullish",
+  "Bearish Marubozu": "marubozu_bearish",
+  "Evening Star": "evening_star",
+  "Morning Star": "morning_star",
+  "Three White Soldiers": "three_white_soldiers",
+  "Three Black Crows": "three_black_crows",
+};
+
+function enrichPatternWithSkill(
+  base: Omit<CandlestickPattern, "skillRef" | "reliability" | "confirmation" | "psychology">
+): CandlestickPattern {
+  const skillId = PATTERN_NAME_TO_SKILL_ID[base.name];
+  if (!skillId) return base as CandlestickPattern;
+
+  const skill = getPatternById(skillId);
+  if (!skill) return base as CandlestickPattern;
+
+  return {
+    ...base,
+    skillRef: skill.id,
+    reliability: skill.reliability,
+    confirmation: skill.confirmation,
+    psychology: skill.psychology,
+    description: `${base.description} ${skill.description} Confirmation: ${skill.confirmation}`,
+  };
+}
+
 function detectCandlestickPatterns(candles: MarketData[], maxAgeMinutes: number = 5): CandlestickPattern[] {
   if (candles.length < 3) return [];
   
@@ -655,6 +697,7 @@ function detectCandlestickPatterns(candles: MarketData[], maxAgeMinutes: number 
   }, new Map<string, CandlestickPattern>());
   
   return Array.from(uniquePatterns.values())
+    .map(p => enrichPatternWithSkill(p))
     .sort((a, b) => (b.candleIndex || 0) - (a.candleIndex || 0))
     .slice(0, 10);
 }

@@ -58,7 +58,7 @@ interface Diagnostics {
   apis: {
     goldApi: ApiConfig;
     finnhub: ApiConfig;
-    openai: ApiConfig;
+    ollama: ApiConfig;
     pexels: ApiConfig;
   };
   priceUpdates: PriceUpdate[];
@@ -382,15 +382,15 @@ export default function SystemStatusPage() {
               <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
                 <Brain className="h-5 w-5 text-muted-foreground" />
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium">OpenAI</span>
-                  <span className="text-xs text-muted-foreground">{diagnostics.apis.openai.description}</span>
-                  {diagnostics.apis.openai.configured ? (
+                  <span className="text-sm font-medium">Ollama (Local AI)</span>
+                  <span className="text-xs text-muted-foreground">{diagnostics.apis.ollama.description}</span>
+                  {diagnostics.apis.ollama.configured ? (
                     <Badge variant="outline" className="mt-1 w-fit text-profit border-profit/50">
-                      <CheckCircle className="mr-1 h-3 w-3" />Configured
+                      <CheckCircle className="mr-1 h-3 w-3" />Connected
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="mt-1 w-fit text-yellow-600 border-yellow-500/50">
-                      <AlertTriangle className="mr-1 h-3 w-3" />Not Set
+                      <AlertTriangle className="mr-1 h-3 w-3" />Not Running
                     </Badge>
                   )}
                 </div>

@@ -82,22 +82,16 @@ The session cookie domain is set automatically so a login on `maxline.id` carrie
 | `SESSION_SECRET` | Yes | Session encryption (auto-generated) |
 | `FINNHUB_API_KEY` | No | Real-time stock data for GDX, SPX, etc. |
 
-### OpenAI API Key Configuration
+### Ollama (Local AI)
 
-The OpenAI API key for AI-enhanced auto-trading is configured via the **Settings page** in the application UI, not through environment variables. 
+AI-enhanced trading and news analysis is powered by Ollama, a local AI runtime installed on the host.
 
-After deployment:
-1. Log in as superadmin
-2. Go to Settings page
-3. Enter your OpenAI API key
-4. The key is encrypted and stored securely in the database
-
-This approach means:
-- No need to edit `.env` files for OpenAI
-- Key persists in the database across deployments
-- Can be updated anytime through the UI
-
-Get your OpenAI key at: https://platform.openai.com/api-keys
+- Install: `curl -fsSL https://ollama.com/install.sh | sh`
+- Pull model: `ollama pull qwen2.5:3b`
+- Default model: `qwen2.5:3b` (~4.5GB)
+- No API keys or external costs required
+- Configure model and URL via the Settings page in the app UI
+- Docker containers reach Ollama via `http://host.docker.internal:11434`
 
 ## Database Schema
 

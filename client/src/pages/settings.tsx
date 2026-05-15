@@ -27,9 +27,18 @@ interface ApiKeyStatus {
   isEditable?: boolean;
 }
 
+interface OllamaStatus {
+  provider?: string;
+  url: string;
+  model: string;
+  apiKey?: string | null;
+  connected: boolean;
+  availableModels: string[];
+}
+
 interface SettingsData {
   finnhubApiKey: ApiKeyStatus;
-  openaiApiKey: ApiKeyStatus;
+  ollama: OllamaStatus;
   rssFeedUrl: string;
 }
 
@@ -92,8 +101,10 @@ export default function SettingsPage() {
   
   const [finnhubKey, setFinnhubKey] = useState("");
   const [showFinnhubKey, setShowFinnhubKey] = useState(false);
-  const [openaiKey, setOpenaiKey] = useState("");
-  const [showOpenaiKey, setShowOpenaiKey] = useState(false);
+  const [aiProvider, setAiProvider] = useState("ollama");
+  const [ollamaUrl, setOllamaUrl] = useState("");
+  const [ollamaModel, setOllamaModel] = useState("");
+  const [aiApiKey, setAiApiKey] = useState("");
   const [ensembleSettingsDraft, setEnsembleSettingsDraft] = useState<EnsembleSettings>({
     trustThreshold: 68,
     consensusThreshold: 60,
@@ -306,32 +317,35 @@ export default function SettingsPage() {
     },
   });
 
-  const updateOpenaiKeyMutation = useMutation({
-    mutationFn: async (newApiKey: string) => {
-      const response = await apiRequest("POST", "/api/settings/openai-key", { apiKey: newApiKey });
+  const saveOllamaSettingsMutation = useMutation({
+    mutationFn: async (payload: { provider?: string; url?: string; model?: string; apiKey?: string }) => {
+      const response = await apiRequest("POST", "/api/settings/ollama", payload);
       return response.json() as Promise<{ success: boolean; message: string }>;
     },
     onSuccess: (data) => {
       toast({ title: "Success", description: data.message });
-      setOpenaiKey("");
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message || "Failed to update API key", variant: "destructive" });
+      toast({ title: "Error", description: error.message || "Failed to save Ollama settings", variant: "destructive" });
     },
   });
 
-  const deleteOpenaiKeyMutation = useMutation({
+  const testOllamaMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("DELETE", "/api/settings/openai-key");
-      return response.json() as Promise<{ success: boolean; message: string }>;
+      const response = await apiRequest("POST", "/api/settings/ollama/test");
+      return response.json() as Promise<{ connected: boolean; models: string[]; latency: number }>;
     },
     onSuccess: (data) => {
-      toast({ title: "Success", description: data.message });
+      if (data.connected) {
+        toast({ title: "Connected", description: `Ollama is running (${data.latency}ms). ${data.models.length} model(s) available.` });
+      } else {
+        toast({ title: "Not Connected", description: "Could not reach Ollama. Make sure it is running.", variant: "destructive" });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message || "Failed to remove API key", variant: "destructive" });
+      toast({ title: "Error", description: error.message || "Failed to test Ollama connection", variant: "destructive" });
     },
   });
 
@@ -728,66 +742,123 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* OpenAI API Key Card */}
+        {/* AI Provider Card */}
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
               <Bot className="h-5 w-5 text-blue-500" />
-              <CardTitle>OpenAI API Key</CardTitle>
+              <CardTitle>AI Provider</CardTitle>
             </div>
             <CardDescription>
-              Required for AI-enhanced auto-trading and news analysis. Get an API key from{" "}
-              <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" data-testid="link-openai">
-                platform.openai.com
-              </a>
+              AI for trading analysis and news sentiment. Choose Ollama (local, free) or a cloud provider (Groq free tier, DeepSeek, etc).
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Status:</span>
-              {settings?.openaiApiKey?.isConfigured ? (
-                settings?.openaiApiKey?.source === "database" ? (
-                  <Badge variant="default" className="gap-1 bg-green-600"><CheckCircle className="h-3 w-3" />Saved to Database</Badge>
-                ) : (
-                  <Badge variant="default" className="gap-1 bg-yellow-600"><AlertCircle className="h-3 w-3" />Environment Only</Badge>
-                )
+              {settings?.ollama?.connected ? (
+                <Badge variant="default" className="gap-1 bg-green-600"><CheckCircle className="h-3 w-3" />Connected ({settings?.ollama?.provider || "ollama"})</Badge>
               ) : (
-                <Badge variant="secondary" className="gap-1"><AlertCircle className="h-3 w-3" />Not Configured</Badge>
+                <Badge variant="secondary" className="gap-1"><AlertCircle className="h-3 w-3" />Not Connected</Badge>
               )}
             </div>
-            {settings?.openaiApiKey?.isConfigured && settings?.openaiApiKey?.source === "environment" && (
-              <p className="text-sm text-muted-foreground">
-                Key detected from environment. For production deployment, save your own key below.
-              </p>
-            )}
             <Separator />
             <div className="space-y-2">
-              <Label htmlFor="openai-key">{settings?.openaiApiKey?.isConfigured ? "Update API Key" : "Enter API Key"}</Label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    id="openai-key"
-                    type={showOpenaiKey ? "text" : "password"}
-                    placeholder="Enter your OpenAI API key"
-                    value={openaiKey}
-                    onChange={(e) => setOpenaiKey(e.target.value)}
-                    data-testid="input-openai-key"
-                  />
-                  <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2" onClick={() => setShowOpenaiKey(!showOpenaiKey)}>
-                    {showOpenaiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-                <Button onClick={() => updateOpenaiKeyMutation.mutate(openaiKey)} disabled={!openaiKey.trim() || updateOpenaiKeyMutation.isPending} data-testid="button-save-openai-key">
-                  {updateOpenaiKeyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
-                </Button>
-              </div>
+              <Label htmlFor="ai-provider">Provider</Label>
+              <select
+                id="ai-provider"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={aiProvider || settings?.ollama?.provider || "ollama"}
+                onChange={(e) => setAiProvider(e.target.value)}
+              >
+                <option value="ollama">Ollama (Local - needs fast CPU with AVX)</option>
+                <option value="groq">Groq (Cloud - free tier, very fast)</option>
+                <option value="openai-compat">OpenAI-Compatible (DeepSeek, Together, etc)</option>
+              </select>
             </div>
-            {settings?.openaiApiKey?.isConfigured && settings?.openaiApiKey?.source === "database" && (
-              <Button variant="outline" onClick={() => deleteOpenaiKeyMutation.mutate()} disabled={deleteOpenaiKeyMutation.isPending} data-testid="button-clear-openai-key">
-                {deleteOpenaiKeyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Clear API Key
-              </Button>
+            <div className="space-y-2">
+              <Label htmlFor="ollama-url">API URL</Label>
+              <Input
+                id="ollama-url"
+                type="text"
+                placeholder={
+                  (aiProvider || settings?.ollama?.provider) === "groq"
+                    ? "https://api.groq.com/openai/v1"
+                    : (aiProvider || settings?.ollama?.provider) === "openai-compat"
+                    ? "https://api.deepseek.com/v1"
+                    : settings?.ollama?.url || "http://localhost:11434"
+                }
+                value={ollamaUrl}
+                onChange={(e) => setOllamaUrl(e.target.value)}
+              />
+            </div>
+            {(aiProvider || settings?.ollama?.provider) !== "ollama" && (
+              <div className="space-y-2">
+                <Label htmlFor="ai-api-key">API Key</Label>
+                <Input
+                  id="ai-api-key"
+                  type="password"
+                  placeholder={settings?.ollama?.apiKey || "Enter API key"}
+                  value={aiApiKey}
+                  onChange={(e) => setAiApiKey(e.target.value)}
+                />
+              </div>
             )}
+            <div className="space-y-2">
+              <Label htmlFor="ollama-model">Model</Label>
+              <select
+                id="ollama-model"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={ollamaModel || settings?.ollama?.model || ""}
+                onChange={(e) => setOllamaModel(e.target.value)}
+              >
+                {settings?.ollama?.availableModels && settings.ollama.availableModels.length > 0 ? (
+                  settings.ollama.availableModels.map((m: string) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))
+                ) : (aiProvider || settings?.ollama?.provider) === "groq" ? (
+                  <>
+                    <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (fast, free)</option>
+                    <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (smart, free)</option>
+                    <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (balanced)</option>
+                  </>
+                ) : (aiProvider || settings?.ollama?.provider) === "openai-compat" ? (
+                  <>
+                    <option value="deepseek-chat">deepseek-chat (very cheap)</option>
+                    <option value="gpt-4o-mini">gpt-4o-mini</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="qwen2.5:3b">qwen2.5:3b</option>
+                    <option value="qwen2.5:7b">qwen2.5:7b</option>
+                    <option value="phi3.5:latest">phi3.5:latest</option>
+                  </>
+                )}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => saveOllamaSettingsMutation.mutate({
+                  provider: aiProvider || undefined,
+                  url: ollamaUrl || undefined,
+                  model: ollamaModel || undefined,
+                  apiKey: aiApiKey || undefined,
+                })}
+                disabled={saveOllamaSettingsMutation.isPending}
+                data-testid="button-save-ollama"
+              >
+                {saveOllamaSettingsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => testOllamaMutation.mutate()}
+                disabled={testOllamaMutation.isPending}
+                data-testid="button-test-ollama"
+              >
+                {testOllamaMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Test Connection
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
