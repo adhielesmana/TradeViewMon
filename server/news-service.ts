@@ -233,44 +233,26 @@ export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis[
       messages: [
         {
           role: "system",
-          content: `You are a professional financial journalist and market analyst.
-Your PRIMARY job is to ACCURATELY SUMMARIZE the provided news articles and then assess their market impact on these instruments: ${supportedSymbols.join(", ")}.
+          content: `You are a professional financial journalist writing a direct news summary. State facts plainly — do NOT use phrases like "the article discusses" or similar meta commentary. Just report what happened and why.
 
-CRITICAL RULES:
-- Your summary and article MUST faithfully reflect what the source news articles ACTUALLY say. DO NOT change the meaning, invent new narratives, or write about topics not covered in the articles.
-- If an article is about geopolitics (e.g. US-Iran tensions, China strategy), your summary MUST be about that topic - do NOT turn it into a generic "market outlook" piece.
-- The "headline" must capture the MAIN STORY from the articles, not a generic market title.
-- The "articleContent" must be a 3-4 paragraph news-style article that summarizes the ACTUAL news, then explains its potential market implications. Start with what the news says, THEN discuss market impact.
+Focus on these instruments: ${supportedSymbols.join(", ")}
+Write in the same language as the source articles.
 
-LANGUAGE RULE (MANDATORY):
-- You MUST write ALL text fields (headline, summary, articleContent, keyFactors, tradingRecommendation, and reason in affectedSymbols) in the SAME LANGUAGE as the source articles.
-- If the source articles are in Indonesian, write EVERYTHING in Indonesian.
-- If the source articles are in English, write EVERYTHING in English.
-- If there is a mix of languages, use the language of the MAJORITY of articles.
-- ONLY the JSON field names and enum values (BULLISH/BEARISH/NEUTRAL, POSITIVE/NEGATIVE, LOW/MEDIUM/HIGH) stay in English.
-
-Respond in JSON format with this exact structure:
+Respond in JSON:
 {
-  "language": "id" or "en" (ISO 639-1 code of the language you are writing in, based on source articles),
-  "headline": "A headline reflecting the ACTUAL main story from the articles",
+  "language": "id" or "en",
+  "headline": "Short headline capturing the main story",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
-  "summary": "Brief 2-3 sentence summary of what the news articles ACTUALLY report",
-  "articleContent": "A 3-4 paragraph article. Paragraph 1-2: Accurately summarize the key news stories. Paragraph 3-4: Explain the potential market implications for traders. Separate paragraphs with double newlines.",
+  "summary": "Direct 2-3 sentence summary — no meta commentary",
+  "articleContent": "3-4 paragraph article. Paragraphs 1-2: Summarize the actual news. Paragraphs 3-4: Market implications.",
   "keyFactors": ["Factor 1", "Factor 2", "Factor 3"],
-  "affectedSymbols": [
-    {"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Brief reason"}
-  ],
-  "tradingRecommendation": "Brief actionable recommendation",
+  "affectedSymbols": [{"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Why"}],
+  "tradingRecommendation": "Actionable recommendation",
   "riskLevel": "LOW" | "MEDIUM" | "HIGH"
 }
 
-IMPORTANT:
-- The "language" field MUST be set to the ISO 639-1 code of the language you write in ("id" for Indonesian, "en" for English).
-- The "headline" must read like a real news headline but MUST reflect the actual news content.
-- The "articleContent" must START with what the news actually says before discussing market impact.
-- NEVER fabricate information not present in the source articles.
-- NEVER translate to a different language - write in the SAME language as the source articles.`,
+IMPORTANT: Do NOT start any text with "The article discusses" or "The headline" — write directly.`,
         },
         {
           role: "user",
@@ -689,21 +671,19 @@ export async function runHourlyAiAnalysis(): Promise<HourlyAnalysisResult> {
       messages: [
         {
           role: "system",
-          content: `You are a concise financial journalist analyzing hourly news. Summarize what the articles actually say, then assess market impact.
+          content: `You are a financial journalist. Write a direct news summary of the articles — do NOT use phrases like "the article discusses" or "the headline suggests". Just state the facts.
 
-CRITICAL: Your summary MUST faithfully reflect the source articles. Do not invent narratives.
-
-LANGUAGE: Write in the same language as the articles.
-
-Focus on: ${supportedSymbols.join(", ")}
+- Write 2-3 sentences stating what happened and why it matters
+- Match the language of the source articles
+- Focus on: ${supportedSymbols.join(", ")}
 
 Respond in JSON:
 {
   "language": "id" or "en",
-  "headline": "Actual main story headline",
+  "headline": "Short news headline reflecting the main story",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
-  "summary": "2-3 sentence summary",
+  "summary": "Direct 2-3 sentence news summary — no meta commentary",
   "keyFactors": ["Factor 1", "Factor 2"],
   "affectedSymbols": [{"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Reason"}],
   "tradingRecommendation": "Brief recommendation",
