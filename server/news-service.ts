@@ -233,26 +233,25 @@ export async function analyzeNewsWithAI(news: NewsItem[]): Promise<NewsAnalysis[
       messages: [
         {
           role: "system",
-          content: `You are a professional financial journalist writing a direct news summary. State facts plainly — do NOT use phrases like "the article discusses" or similar meta commentary. Just report what happened and why.
+          content: `Summarize the news as facts. Example: "Gold rose 2% as the dollar weakened. Oil fell 1%."
 
-Focus on these instruments: ${supportedSymbols.join(", ")}
-Write in the same language as the source articles.
+- summary field: start with a fact, not "The article discusses"
+- Write in the language of the source articles
+- Focus on: ${supportedSymbols.join(", ")}
 
-Respond in JSON:
+JSON:
 {
   "language": "id" or "en",
-  "headline": "Short headline capturing the main story",
+  "headline": "Short headline",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
-  "summary": "Direct 2-3 sentence summary — no meta commentary",
-  "articleContent": "3-4 paragraph article. Paragraphs 1-2: Summarize the actual news. Paragraphs 3-4: Market implications.",
-  "keyFactors": ["Factor 1", "Factor 2", "Factor 3"],
+  "summary": "2-3 sentence summary starting with a fact",
+  "articleContent": "3-4 paragraph article. Paragraphs 1-2: Summary. Paragraphs 3-4: Market impact.",
+  "keyFactors": ["Factor 1", "Factor 2"],
   "affectedSymbols": [{"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Why"}],
   "tradingRecommendation": "Actionable recommendation",
   "riskLevel": "LOW" | "MEDIUM" | "HIGH"
-}
-
-IMPORTANT: Do NOT start any text with "The article discusses" or "The headline" — write directly.`,
+}`,
         },
         {
           role: "user",
@@ -316,7 +315,7 @@ IMPORTANT: Do NOT start any text with "The article discusses" or "The headline" 
       language,
       overallSentiment: sentiment,
       confidence: Math.min(100, Math.max(0, Number(prediction.confidence) || 50)),
-      summary: typeof prediction.summary === "string" ? prediction.summary : "Market conditions remain mixed",
+      summary: typeof prediction.summary === "string" ? cleanSummary(prediction.summary) : "Market conditions remain mixed",
       articleContent: typeof prediction.articleContent === "string" ? prediction.articleContent : undefined,
       keyFactors: Array.isArray(prediction.keyFactors)
         ? prediction.keyFactors.filter((f: any) => typeof f === "string").slice(0, 10)
@@ -338,6 +337,11 @@ function getDefaultPrediction(): NewsAnalysis["marketPrediction"] {
   // Return null instead of fake content — callers should
   // fall back to the latest real snapshot from the database
   return null;
+}
+
+// Strip boilerplate like "The article discusses" from AI output
+function cleanSummary(text: string): string {
+  return text.replace(/^(the\s+article\s+discusses?\s+|the\s+headline\s+|the\s+article\s+suggests?\s+|this\s+article\s+discusses?\s+)/i, "");
 }
 
 function isRealPrediction(prediction: NewsAnalysis["marketPrediction"]): boolean {
@@ -671,21 +675,22 @@ export async function runHourlyAiAnalysis(): Promise<HourlyAnalysisResult> {
       messages: [
         {
           role: "system",
-          content: `You are a financial journalist. Write a direct news summary of the articles — do NOT use phrases like "the article discusses" or "the headline suggests". Just state the facts.
+          content: `Summarize the news as facts. Example summary: "Gold rose 2% as the dollar weakened. Oil fell 1%."
 
-- Write 2-3 sentences stating what happened and why it matters
+Rules:
+- summary field: start with a fact, not "The article discusses" or "The headline"
 - Match the language of the source articles
 - Focus on: ${supportedSymbols.join(", ")}
 
-Respond in JSON:
+JSON:
 {
   "language": "id" or "en",
-  "headline": "Short news headline reflecting the main story",
+  "headline": "Short headline",
   "overallSentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 0-100,
-  "summary": "Direct 2-3 sentence news summary — no meta commentary",
+  "summary": "2-3 sentence summary starting with a fact",
   "keyFactors": ["Factor 1", "Factor 2"],
-  "affectedSymbols": [{"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Reason"}],
+  "affectedSymbols": [{"symbol": "XAUUSD", "impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL", "reason": "Why"}],
   "tradingRecommendation": "Brief recommendation",
   "riskLevel": "LOW" | "MEDIUM" | "HIGH"
 }`
@@ -732,7 +737,7 @@ ${historicalTrend}`
       language: hourlyLanguage,
       overallSentiment: parsed.overallSentiment || "NEUTRAL",
       confidence: Math.min(100, Math.max(0, parsed.confidence || 50)),
-      summary: parsed.summary || "Analysis completed",
+      summary: cleanSummary(parsed.summary || "Analysis completed"),
       articleContent: typeof parsed.articleContent === "string" ? parsed.articleContent : undefined,
       keyFactors: parsed.keyFactors || [],
       affectedSymbols: parsed.affectedSymbols || [],
