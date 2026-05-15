@@ -259,7 +259,7 @@ JSON:
         },
       ],
       temperature: 0.3,
-      maxTokens: 400,
+      maxTokens: 800,
       jsonMode: true,
     });
 
@@ -339,9 +339,22 @@ function getDefaultPrediction(): NewsAnalysis["marketPrediction"] {
   return null;
 }
 
-// Strip boilerplate like "The article discusses" from AI output
+// Strip boilerplate like "The article discusses" from AI output, capitalize first letter,
+// and truncate at the last complete sentence to avoid mid-sentence cuts
 function cleanSummary(text: string): string {
-  return text.replace(/^(the\s+article\s+discusses?\s+|the\s+headline\s+|the\s+article\s+suggests?\s+|this\s+article\s+discusses?\s+)/i, "");
+  let cleaned = text.replace(/^(the\s+article\s+discusses?\s+|the\s+headline\s+|the\s+article\s+suggests?\s+|this\s+article\s+discusses?\s+)/i, "");
+  // Capitalize first letter
+  cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  // Truncate at last complete sentence (ends with . ! ? followed by space or end)
+  const lastSentenceEnd = Math.max(
+    cleaned.lastIndexOf(". "),
+    cleaned.lastIndexOf("! "),
+    cleaned.lastIndexOf("? ")
+  );
+  if (lastSentenceEnd > 10) {
+    cleaned = cleaned.slice(0, lastSentenceEnd + 1);
+  }
+  return cleaned.trim();
 }
 
 function isRealPrediction(prediction: NewsAnalysis["marketPrediction"]): boolean {
@@ -705,7 +718,7 @@ ${historicalTrend}`
         }
       ],
       temperature: 0.3,
-      maxTokens: 400,
+      maxTokens: 800,
       jsonMode: true,
     });
 
